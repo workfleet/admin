@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../../lib/supabaseClient';
@@ -15,11 +16,35 @@ const NAV_ITEMS = [
 export default function AdminLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [authorized, setAuthorized] = useState(false);
+
+  useEffect(() => {
+    checkAccess();
+  }, []);
+
+  const checkAccess = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { router.push('/'); return; }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', session.user.id)
+      .single();
+
+    if (profile?.role !== 'admin') {
+      router.push('/');
+      return;
+    }
+    setAuthorized(true);
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push('/');
   };
+
+  if (!authorized) return null;
 
   return (
     <div className="admin-shell">
