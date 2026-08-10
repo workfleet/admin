@@ -1,36 +1,48 @@
-# Workfleet — Starter App
+# Workfleet
 
-A working starter for a cleaning company CRM: cleaners check in to jobs, work through
-a to-do list, upload photos, and clients log in to see the record. Includes a basic
-admin rota page that assigns cleaners to jobs and automatically notifies them.
+A cleaning company CRM: cleaners check in to jobs, work through a to-do list,
+upload photos, and clients log in to see the record. Admins manage clients,
+properties, the rota, and staff onboarding (ID collection + contract signing)
+from the app itself.
 
 ## What's included
 
-- `supabase/schema.sql` — full database schema, roles, security rules, and the
-  trigger that creates a notification when a cleaner is assigned a shift.
-- `app/page.js` — login page, redirects by role (admin / cleaner / client).
-- `app/cleaner/page.js` — cleaner's list of assigned jobs + their notifications.
-- `app/cleaner/jobs/[id]/page.js` — check in/out, tick off tasks, upload photos.
+- `supabase/schema.sql` + `supabase/migrations/*.sql` — full database schema,
+  roles, security rules, and the trigger that creates a notification when a
+  cleaner is assigned a shift. Run `schema.sql` once, then every file in
+  `migrations/` in order. See `supabase/migrations/README.md`.
+- `app/page.js` — login/sign-up page, redirects by role (admin / cleaner / client).
+- `app/cleaner/page.js` + `app/cleaner/jobs/[id]/page.js` — cleaner's jobs,
+  check in/out, to-do list, photo upload.
 - `app/client/page.js` — read-only portal: job history, tasks completed, photos.
-- `app/admin/rota/page.js` — create jobs, assign a cleaner (this triggers the
-  notification automatically — no extra code needed).
+- `app/admin/*` — Dashboard, Rota (calendar + to-do list management), Clients
+  (profiles + properties), Cleaners (roster), Onboarding (invite links).
+- `app/onboard/[token]/page.js` + `app/api/onboarding/*` — public, unauthenticated
+  new-starter flow: personal details, ID upload, contract review & signature.
 
 ## 1. Set up Supabase (free)
 
 1. Go to https://supabase.com and create a new project.
 2. In your project, go to **SQL Editor → New query**, paste in the entire contents
-   of `supabase/schema.sql`, and run it. This creates all your tables, security
-   rules, and the auto-notification trigger.
-3. Go to **Project Settings → API**. Copy your **Project URL** and **anon public key**.
+   of `supabase/schema.sql`, and run it.
+3. Then run every file in `supabase/migrations/` **in filename order** the same way.
+4. Go to **Project Settings → API**. Copy your **Project URL**, **anon public key**,
+   and **service_role key** (the last one is secret — never expose it to the browser).
 
 ## 2. Configure the app
 
-1. Rename `.env.local.example` to `.env.local`.
-2. Paste in your Supabase URL and anon key from the step above.
+Create `.env.local` with:
+
+```
+NEXT_PUBLIC_SUPABASE_URL=your-project-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+```
+
+The last one has no `NEXT_PUBLIC_` prefix on purpose — it must only ever be
+read on the server (see `lib/supabaseAdmin.js`), never in a `'use client'` file.
 
 ## 3. Install and run locally
-
-You'll need Node.js installed (https://nodejs.org — get the LTS version).
 
 ```bash
 npm install
@@ -39,47 +51,63 @@ npm run dev
 
 Then open http://localhost:3000
 
-## 4. Create your first users
+## 4. Create your first admin
 
-The schema auto-creates every new sign-up as a `cleaner`. To make an admin or
-client account:
+Sign up in the app (any email/password — every new sign-up starts as a
+`cleaner`), then in Supabase go to **Table Editor → profiles**, find that
+user's row, and change `role` to `admin`.
 
-1. In Supabase, go to **Authentication → Users → Add user** and create a user
-   with an email/password.
-2. Go to **Table Editor → profiles**, find that user's row, and change `role` to
-   `admin` or `client`. If it's a client, also set `client_id` to match a row in
-   the `clients` table (create one first under **Table Editor → clients**).
+## 5. Add real data
 
-## 5. Add some test data
+Once logged in as admin, use the **Clients** page to add clients and
+properties, the **Rota** to schedule jobs and add to-do tasks, and
+**Onboarding** to generate invite links for new starters.
 
-In the Supabase Table Editor, manually add:
-- A row in `clients` (e.g. "Acme Offices")
-- A row in `properties` linked to that client (e.g. "12 High Street")
-- A row in `jobs` linking that property to a cleaner, with a `scheduled_at` time
-- A few rows in `tasks` linked to that job (e.g. "Vacuum reception", "Empty bins")
+## Staff onboarding — important before real use
 
-Then log in as the cleaner to check in and complete the job, or as the client to
-view the log.
+The contract text shown on `/onboard/[token]` is a **placeholder** — it is
+not a legally reviewed contract. Replace `CONTRACT_TEXT` in
+`app/onboard/[token]/page.js` with your actual employment contract (ACAS
+provides free reviewed templates, or use a solicitor) before sending real
+invite links.
+
+The onboarding flow collects sensitive personal data (date of birth, home
+address, National Insurance number, and an ID document photo). Before using
+this for real staff:
+
+- Decide and document a **data retention period** — how long you keep an
+  ex-employee's ID photo and NI number after they leave.
+- Show new starters what data is collected and why (a privacy notice) before
+  they submit — see the note in `app/onboard/[token]/page.js`.
+- If you want a legally certified right-to-work check rather than a manual
+  in-person check, only a
+  [GOV.UK-certified Identity Service Provider](https://www.gov.uk/government/publications/digital-identity-certification-for-right-to-work-right-to-rent-and-criminal-record-checks)
+  counts for the statutory excuse — general KYC tools (e.g. Stripe Identity)
+  do not.
+
+This project stores ID documents in a **private** Supabase Storage bucket
+(`staff-documents`), readable only by admins or the server's service-role
+key — never via a public URL.
 
 ## 6. What's next / not yet built
 
-This is a working MVP skeleton, not a finished product. Natural next steps:
-
-- **Email/push notifications**: right now, "notifications" are stored in the
-  database and shown in-app only. To actually alert cleaners (email, SMS, or
-  push), add a Supabase Edge Function that runs on the `notifications` table
-  insert and calls an email service (e.g. Resend) or Twilio for SMS.
-- **Admin: manage clients/properties/tasks from the UI** — right now these are
-  added directly in the Supabase table editor; you'll want simple admin forms
-  for these eventually.
-- **Photo compression** before upload, for cleaners on mobile data.
-- **Calendar-style rota view** instead of a flat list.
+- **Email/push/SMS notifications**: right now, "notifications" are stored in
+  the database and shown in-app only. To actually alert cleaners, add a
+  Supabase Edge Function on the `notifications` table insert that calls an
+  email service (e.g. Resend) or SMS provider.
+- **Real ID verification / e-signature integration**: the onboarding flow
+  self-hosts a simple "type your name to sign" signature and manual ID photo
+  upload. Swapping in a certified IDSP or a provider like Dropbox Sign/SignWell
+  is possible but needs their API keys and your own provider decision.
+- **Double-booking detection**, **photo compression before upload**, and
+  **cleaner deactivation** — see open items tracked separately.
+- **Invoicing** — client billing address exists in the schema, but there's no
+  invoice generation yet.
 - **Deploy**: push this to GitHub, then connect the repo at https://vercel.com
-  (free tier) and add the same environment variables there — it'll go live in
-  a couple of minutes.
+  (free tier) and add the same environment variables there (including the
+  service role key, server-side only) — it'll go live in a couple of minutes.
 
 ## Stack
 
 - **Next.js** (React) — the app you see and click through
-- **Supabase** — database, auth, file storage, and row-level security, all
-  managed for you
+- **Supabase** — database, auth, file storage, and row-level security
