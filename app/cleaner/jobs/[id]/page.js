@@ -49,9 +49,51 @@ export default function JobDetailPage() {
 
     setJob(jobData);
     setTasks(taskData || []);
-    setPhotos(photoData || []);
+    setPhotos(await withSignedUrls(photoData || []));
     setCheckin(checkinData);
   };
+
+  // photos.url stores the job-photos storage path (not a public URL) since
+  // the bucket is private — every photo needs a freshly signed URL to view.
+  const withSignedUrls = async (rows) =>
+    Promise.all(
+      rows.map(async (p) => {
+        const { data } = await supabase.storage.from('job-photos').createSignedUrl(p.url, 3600);
+        return { ...p, signedUrl: data?.signedUrl };
+      })
+    );
+
+  // Downscales + re-encodes as JPEG in the browser before upload, so
+  // cleaners on mobile data aren't sending full-resolution photos.
+  const compressImage = (file, maxDimension = 1600, quality = 0.75) =>
+    new Promise((resolve) => {
+      if (!file.type.startsWith('image/')) return resolve(file);
+      const img = new Image();
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > maxDimension || height > maxDimension) {
+            const scale = maxDimension / Math.max(width, height);
+            width = Math.round(width * scale);
+            height = Math.round(height * scale);
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+          canvas.toBlob(
+            (blob) => resolve(blob ? new File([blob], file.name, { type: 'image/jpeg' }) : file),
+            'image/jpeg',
+            quality
+          );
+        };
+        img.onerror = () => resolve(file);
+        img.src = e.target.result;
+      };
+      reader.onerror = () => resolve(file);
+      reader.readAsDataURL(file);
+    });
 
   const getLocation = () =>
     new Promise((resolve) => {
@@ -98,25 +140,25 @@ export default function JobDetailPage() {
   };
 
   const handlePhotoUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const rawFile = e.target.files[0];
+    if (!rawFile) return;
     setUploading(true);
 
-    const fileName = `${id}/${Date.now()}-${file.name}`;
+    const file = await compressImage(rawFile);
+    const fileName = `${id}/${Date.now()}-${rawFile.name.replace(/\.[^.]+$/, '.jpg')}`;
     const { error: uploadError } = await supabase.storage
       .from('job-photos')
-      .upload(fileName, file);
+      .upload(fileName, file, { contentType: 'image/jpeg' });
 
     if (!uploadError) {
-      const { data: urlData } = supabase.storage.from('job-photos').getPublicUrl(fileName);
-
       const { data: photoRow } = await supabase
         .from('photos')
-        .insert({ job_id: id, uploaded_by: userId, url: urlData.publicUrl })
+        .insert({ job_id: id, uploaded_by: userId, url: fileName })
         .select()
         .single();
 
-      setPhotos((prev) => [photoRow, ...prev]);
+      const [withUrl] = await withSignedUrls([photoRow]);
+      setPhotos((prev) => [withUrl, ...prev]);
     }
     setUploading(false);
   };
@@ -166,7 +208,7 @@ export default function JobDetailPage() {
         {uploading && <p style={{ fontSize: 13 }}>Uploading...</p>}
         <div className="photo-grid">
           {photos.map((p) => (
-            <img key={p.id} src={p.url} alt="job" />
+            <img key={p.id} src={p.signedUrl} alt="job" />
           ))}
         </div>
       </div>

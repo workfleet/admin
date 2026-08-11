@@ -41,8 +41,17 @@ export default function ClientPortal() {
       supabase.from('checkins').select('*').eq('job_id', jobId).maybeSingle(),
     ]);
 
+    // photos.url stores the job-photos storage path, not a public URL —
+    // the bucket is private, so each photo needs a freshly signed URL.
+    const photosWithUrls = await Promise.all(
+      (photoData || []).map(async (p) => {
+        const { data } = await supabase.storage.from('job-photos').createSignedUrl(p.url, 3600);
+        return { ...p, signedUrl: data?.signedUrl };
+      })
+    );
+
     setTasks(taskData || []);
-    setPhotos(photoData || []);
+    setPhotos(photosWithUrls);
     setCheckin(checkinData);
   };
 
@@ -81,7 +90,7 @@ export default function ClientPortal() {
               <h2 style={{ marginTop: 10 }}>Photos</h2>
               <div className="photo-grid">
                 {photos.map((p) => (
-                  <img key={p.id} src={p.url} alt="job" />
+                  <img key={p.id} src={p.signedUrl} alt="job" />
                 ))}
               </div>
             </div>
