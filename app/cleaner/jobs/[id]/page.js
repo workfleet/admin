@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { supabase } from '../../../../lib/supabaseClient';
+
+// Leaflet touches `window` at load time, so it can't run during SSR.
+const PropertyMap = dynamic(() => import('../../../components/PropertyMap'), { ssr: false });
 
 export default function JobDetailPage() {
   const { id } = useParams();
@@ -25,7 +29,7 @@ export default function JobDetailPage() {
 
     const { data: jobData } = await supabase
       .from('jobs')
-      .select('id, scheduled_at, status, properties(address, notes)')
+      .select('id, scheduled_at, status, properties(address, notes, lat, lng)')
       .eq('id', id)
       .single();
 
@@ -174,6 +178,12 @@ export default function JobDetailPage() {
       <h1>{job.properties?.address}</h1>
       <p style={{ color: '#6b7280' }}>{new Date(job.scheduled_at).toLocaleString()}</p>
       {job.properties?.notes && <p className="card">{job.properties.notes}</p>}
+
+      {job.properties?.lat != null && job.properties?.lng != null && (
+        <div className="card">
+          <PropertyMap lat={job.properties.lat} lng={job.properties.lng} address={job.properties.address} />
+        </div>
+      )}
 
       <div className="card">
         <h2>Check In / Out</h2>

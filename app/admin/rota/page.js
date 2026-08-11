@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
+import AddressAutocomplete from '../../components/AddressAutocomplete';
 
 const START_HOUR = 7;
 const END_HOUR = 19;
@@ -55,11 +56,14 @@ export default function AdminRota() {
   const [weekStart, setWeekStart] = useState(getMonday(new Date()));
   const [jobs, setJobs] = useState([]);
   const [cleaners, setCleaners] = useState([]);
+  const [clients, setClients] = useState([]);
   const [properties, setProperties] = useState([]);
   const [selectedJob, setSelectedJob] = useState(null);
 
   const [showForm, setShowForm] = useState(false);
-  const [propertyId, setPropertyId] = useState('');
+  const [clientId, setClientId] = useState('');
+  const [propertyAddress, setPropertyAddress] = useState('');
+  const [propertyCoords, setPropertyCoords] = useState(null);
   const [jobDate, setJobDate] = useState('');
   const [jobTime, setJobTime] = useState('');
   const [duration, setDuration] = useState(120);
@@ -127,10 +131,13 @@ export default function AdminRota() {
 
     const { data: cleanersData } = await supabase
       .from('profiles').select('id, full_name').eq('role', 'cleaner');
+    const { data: clientsData } = await supabase
+      .from('clients').select('id, name').order('name');
     const { data: propertiesData } = await supabase
-      .from('properties').select('id, address');
+      .from('properties').select('id, client_id, address, lat, lng');
 
     setCleaners(cleanersData || []);
+    setClients(clientsData || []);
     setProperties(propertiesData || []);
   };
 
@@ -188,7 +195,9 @@ export default function AdminRota() {
   };
 
   const resetForm = () => {
-    setPropertyId('');
+    setClientId('');
+    setPropertyAddress('');
+    setPropertyCoords(null);
     setJobDate('');
     setJobTime('');
     setDuration(120);
@@ -199,7 +208,7 @@ export default function AdminRota() {
 
   const createJob = async (e) => {
     e.preventDefault();
-    if (!propertyId || !jobDate || !jobTime) return;
+    if (!clientId || !propertyAddress.trim() || !jobDate || !jobTime) return;
 
     const scheduledAtDate = new Date(`${jobDate}T${jobTime}`);
     const scheduledAt = scheduledAtDate.toISOString();
@@ -214,10 +223,30 @@ export default function AdminRota() {
       }
     }
 
+    // Reuse the property if this exact address already exists for the
+    // client; otherwise create one on the fly from what was typed/picked.
+    let property = properties.find((p) => p.client_id === clientId && p.address === propertyAddress.trim());
+    if (!property) {
+      const { data: newProperty } = await supabase
+        .from('properties')
+        .insert({
+          client_id: clientId,
+          address: propertyAddress.trim(),
+          lat: propertyCoords?.lat ?? null,
+          lng: propertyCoords?.lng ?? null,
+        })
+        .select('id, client_id, address, lat, lng')
+        .single();
+
+      if (!newProperty) return;
+      property = newProperty;
+      setProperties((prev) => [...prev, newProperty]);
+    }
+
     const { data } = await supabase
       .from('jobs')
       .insert({
-        property_id: propertyId,
+        property_id: property.id,
         scheduled_at: scheduledAt,
         duration_minutes: duration,
         cleaner_id: formCleanerId || null,
@@ -277,13 +306,31 @@ export default function AdminRota() {
           <form onSubmit={createJob}>
             <div className="job-form-body">
               <div className="field">
-                <label className="field-label">Location</label>
-                <select value={propertyId} onChange={(e) => setPropertyId(e.target.value)} required>
-                  <option value="">Select a property</option>
-                  {properties.map((p) => (
-                    <option key={p.id} value={p.id}>{p.address}</option>
+                <label className="field-label">Client</label>
+                <select
+                  value={clientId}
+                  onChange={(e) => { setClientId(e.target.value); setPropertyAddress(''); setPropertyCoords(null); }}
+                  required
+                >
+                  <option value="">Select a client</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
+              </div>
+
+              <div className="field">
+                <label className="field-label">Address</label>
+                {clientId ? (
+                  <AddressAutocomplete
+                    value={propertyAddress}
+                    onChange={(text) => { setPropertyAddress(text); setPropertyCoords(null); }}
+                    onSelect={({ address, lat, lng }) => { setPropertyAddress(address); setPropertyCoords({ lat, lng }); }}
+                    placeholder="Start typing an address..."
+                  />
+                ) : (
+                  <input value="" disabled placeholder="Select a client first" />
+                )}
               </div>
 
               <div className="field-row">

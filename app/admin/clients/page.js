@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
+import AddressAutocomplete from '../../components/AddressAutocomplete';
 
 const EMPTY_PROFILE = { name: '', contact_name: '', email: '', phone: '', billing_address: '', notes: '' };
 
@@ -20,6 +21,7 @@ export default function AdminClients() {
 
   const [propertyFormFor, setPropertyFormFor] = useState(null);
   const [newAddress, setNewAddress] = useState('');
+  const [newAddressCoords, setNewAddressCoords] = useState(null);
   const [newNotes, setNewNotes] = useState('');
 
   useEffect(() => {
@@ -35,7 +37,7 @@ export default function AdminClients() {
       .select('id, name, contact_name, email, phone, billing_address, notes')
       .order('name');
     const { data: propertiesData } = await supabase
-      .from('properties').select('id, client_id, address, notes').order('address');
+      .from('properties').select('id, client_id, address, notes, lat, lng').order('address');
 
     setClients(clientsData || []);
     setProperties(propertiesData || []);
@@ -116,12 +118,19 @@ export default function AdminClients() {
 
     const { data } = await supabase
       .from('properties')
-      .insert({ client_id: clientId, address: newAddress.trim(), notes: newNotes.trim() || null })
-      .select('id, client_id, address, notes')
+      .insert({
+        client_id: clientId,
+        address: newAddress.trim(),
+        notes: newNotes.trim() || null,
+        lat: newAddressCoords?.lat ?? null,
+        lng: newAddressCoords?.lng ?? null,
+      })
+      .select('id, client_id, address, notes, lat, lng')
       .single();
 
     if (data) setProperties((prev) => [...prev, data]);
     setNewAddress('');
+    setNewAddressCoords(null);
     setNewNotes('');
     setPropertyFormFor(null);
   };
@@ -243,6 +252,7 @@ export default function AdminClients() {
                     onClick={() => {
                       setPropertyFormFor(isAddingProperty ? null : client.id);
                       setNewAddress('');
+                      setNewAddressCoords(null);
                       setNewNotes('');
                     }}
                   >
@@ -334,12 +344,11 @@ export default function AdminClients() {
               {isAddingProperty && (
                 <form onSubmit={(e) => addProperty(e, client.id)} style={{ marginTop: 10 }}>
                   <label>Address</label>
-                  <input
+                  <AddressAutocomplete
                     value={newAddress}
-                    onChange={(e) => setNewAddress(e.target.value)}
-                    placeholder="e.g. 12 High Street"
-                    required
-                    autoFocus
+                    onChange={(text) => { setNewAddress(text); setNewAddressCoords(null); }}
+                    onSelect={({ address, lat, lng }) => { setNewAddress(address); setNewAddressCoords({ lat, lng }); }}
+                    placeholder="Start typing an address..."
                   />
                   <label>Notes (optional)</label>
                   <input
