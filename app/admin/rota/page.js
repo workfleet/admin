@@ -1,16 +1,28 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
 
-const START_HOUR = 7;
-const END_HOUR = 19;
+// Full 24hr range with scroll (CrewConnect crews run early mornings through
+// overnight), defaulting the scroll position to business hours on load.
+const START_HOUR = 0;
+const END_HOUR = 24;
+const DEFAULT_SCROLL_HOUR = 7;
 const HOUR_HEIGHT = 48;
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const QUICK_DURATIONS = [30, 60, 90, 120, 180, 240];
+
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => h);
+const MINUTE_OPTIONS = [0, 15, 30, 45];
+
+function formatHour12(h) {
+  const period = h < 12 ? 'AM' : 'PM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12} ${period}`;
+}
 
 const DURATION_OPTIONS = Array.from({ length: 32 }, (_, i) => (i + 1) * 15).map((mins) => {
   const h = Math.floor(mins / 60);
@@ -65,13 +77,22 @@ export default function AdminRota() {
   const [propertyAddress, setPropertyAddress] = useState('');
   const [propertyCoords, setPropertyCoords] = useState(null);
   const [jobDate, setJobDate] = useState('');
-  const [jobTime, setJobTime] = useState('');
+  const [jobHour, setJobHour] = useState('');
+  const [jobMinute, setJobMinute] = useState('00');
   const [duration, setDuration] = useState(120);
   const [useCustomDuration, setUseCustomDuration] = useState(false);
   const [formCleanerId, setFormCleanerId] = useState('');
 
   const [jobTasks, setJobTasks] = useState([]);
   const [newTaskText, setNewTaskText] = useState('');
+
+  const calendarScrollRef = useRef(null);
+
+  useEffect(() => {
+    if (calendarScrollRef.current) {
+      calendarScrollRef.current.scrollTop = (DEFAULT_SCROLL_HOUR - START_HOUR) * HOUR_HEIGHT;
+    }
+  }, []);
 
   const weekDays = useMemo(
     () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
@@ -199,7 +220,8 @@ export default function AdminRota() {
     setPropertyAddress('');
     setPropertyCoords(null);
     setJobDate('');
-    setJobTime('');
+    setJobHour('');
+    setJobMinute('00');
     setDuration(120);
     setUseCustomDuration(false);
     setFormCleanerId('');
@@ -208,8 +230,9 @@ export default function AdminRota() {
 
   const createJob = async (e) => {
     e.preventDefault();
-    if (!clientId || !propertyAddress.trim() || !jobDate || !jobTime) return;
+    if (!clientId || !propertyAddress.trim() || !jobDate || !jobHour) return;
 
+    const jobTime = `${jobHour}:${jobMinute}`;
     const scheduledAtDate = new Date(`${jobDate}T${jobTime}`);
     const scheduledAt = scheduledAtDate.toISOString();
 
@@ -340,7 +363,28 @@ export default function AdminRota() {
                 </div>
                 <div className="field">
                   <label className="field-label">Time</label>
-                  <input type="time" value={jobTime} onChange={(e) => setJobTime(e.target.value)} required />
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <select
+                      value={jobHour}
+                      onChange={(e) => setJobHour(e.target.value)}
+                      required
+                      style={{ flex: 1.4, marginBottom: 0 }}
+                    >
+                      <option value="">Hour</option>
+                      {HOUR_OPTIONS.map((h) => (
+                        <option key={h} value={String(h).padStart(2, '0')}>{formatHour12(h)}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={jobMinute}
+                      onChange={(e) => setJobMinute(e.target.value)}
+                      style={{ flex: 1, marginBottom: 0 }}
+                    >
+                      {MINUTE_OPTIONS.map((m) => (
+                        <option key={m} value={String(m).padStart(2, '0')}>:{String(m).padStart(2, '0')}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -407,41 +451,43 @@ export default function AdminRota() {
           ))}
         </div>
 
-        <div className="calendar-body" style={{ height: (END_HOUR - START_HOUR) * HOUR_HEIGHT }}>
-          <div className="calendar-hour-col">
-            {hourSlots.map((h) => (
-              <div key={h} className="calendar-hour-label" style={{ height: HOUR_HEIGHT }}>
-                {h % 12 === 0 ? 12 : h % 12}{h < 12 ? 'am' : 'pm'}
+        <div className="calendar-scroll" ref={calendarScrollRef}>
+          <div className="calendar-body" style={{ height: (END_HOUR - START_HOUR) * HOUR_HEIGHT }}>
+            <div className="calendar-hour-col">
+              {hourSlots.map((h) => (
+                <div key={h} className="calendar-hour-label" style={{ height: HOUR_HEIGHT }}>
+                  {h % 12 === 0 ? 12 : h % 12}{h < 12 ? 'am' : 'pm'}
+                </div>
+              ))}
+            </div>
+
+            {weekDays.map((day, i) => (
+              <div key={i} className="calendar-day-col">
+                {hourSlots.map((h) => (
+                  <div key={h} className="calendar-hour-line" style={{ height: HOUR_HEIGHT }} />
+                ))}
+
+                {jobsForDay(day).map((job) => {
+                  const { top, height } = jobPosition(job);
+                  const isSelected = selectedJob?.id === job.id;
+                  return (
+                    <div
+                      key={job.id}
+                      className={`calendar-job ${job.status} ${isSelected ? 'selected' : ''}`}
+                      style={{ top, height: Math.max(height, 24) }}
+                      onClick={() => setSelectedJob(job)}
+                    >
+                      <div className="calendar-job-time">
+                        {new Date(job.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                        {' · '}{formatDuration(job.duration_minutes || 120)}
+                      </div>
+                      <div className="calendar-job-address">{job.properties?.address}</div>
+                    </div>
+                  );
+                })}
               </div>
             ))}
           </div>
-
-          {weekDays.map((day, i) => (
-            <div key={i} className="calendar-day-col">
-              {hourSlots.map((h) => (
-                <div key={h} className="calendar-hour-line" style={{ height: HOUR_HEIGHT }} />
-              ))}
-
-              {jobsForDay(day).map((job) => {
-                const { top, height } = jobPosition(job);
-                const isSelected = selectedJob?.id === job.id;
-                return (
-                  <div
-                    key={job.id}
-                    className={`calendar-job ${job.status} ${isSelected ? 'selected' : ''}`}
-                    style={{ top, height: Math.max(height, 24) }}
-                    onClick={() => setSelectedJob(job)}
-                  >
-                    <div className="calendar-job-time">
-                      {new Date(job.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                      {' · '}{formatDuration(job.duration_minutes || 120)}
-                    </div>
-                    <div className="calendar-job-address">{job.properties?.address}</div>
-                  </div>
-                );
-              })}
-            </div>
-          ))}
         </div>
       </div>
 

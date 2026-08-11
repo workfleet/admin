@@ -615,6 +615,11 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
   color: var(--ink);
 }
 
+.calendar-scroll {
+  max-height: 560px;
+  overflow-y: auto;
+}
+
 .calendar-body {
   display: grid;
   grid-template-columns: 56px repeat(7, 1fr);
@@ -699,9 +704,8 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
 @media (max-width: 720px) {
   .calendar-header, .calendar-body {
     grid-template-columns: 40px repeat(7, minmax(70px, 1fr));
-    overflow-x: auto;
   }
-  .calendar {
+  .calendar, .calendar-header, .calendar-scroll {
     overflow-x: auto;
   }
 }
