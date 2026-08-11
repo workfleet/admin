@@ -1,21 +1,24 @@
 * { box-sizing: border-box; }
 
 :root {
-  --brand-primary: #4338ca;
-  --brand-primary-dark: #3730a3;
-  --brand-accent: #6366f1;
-  --brand-accent-soft: #eef2ff;
-  --sidebar-bg: #111827;
-  --sidebar-text: #cbd5e1;
+  /* Matched to crewconnect.ltd's brand: teal accent, charcoal-navy dark,
+     Poppins, fully-rounded pill buttons. */
+  --brand-primary: #2fa5a9;
+  --brand-primary-dark: #23797c;
+  --brand-accent: #2fa5a9;
+  --brand-accent-soft: #e6f5f5;
+  --sidebar-bg: #1e2526;
+  --sidebar-text: #cbd5d6;
   --ink: #0f172a;
   --ink-soft: #334155;
   --muted: #64748b;
   --border: #e2e8f0;
-  --bg: #f8fafc;
+  --bg: #fafafa;
   --surface: #ffffff;
   --radius-sm: 10px;
   --radius-md: 14px;
   --radius-lg: 20px;
+  --radius-pill: 999px;
   --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
   --shadow-md: 0 12px 28px rgba(15, 23, 42, 0.10), 0 3px 8px rgba(15, 23, 42, 0.06);
   --hairline: rgba(15, 23, 42, 0.06);
@@ -23,8 +26,7 @@
 
 body {
   margin: 0;
-  background: radial-gradient(circle at top, #eef2ff 0%, #f8fafc 42%);
-  background-attachment: fixed;
+  background: var(--bg);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
 }
@@ -48,7 +50,7 @@ body {
   width: 52px;
   height: 52px;
   border-radius: 14px;
-  background: linear-gradient(135deg, var(--brand-accent), var(--brand-primary));
+  background: linear-gradient(135deg, #45c1c5, var(--brand-primary-dark));
   color: white;
   display: flex;
   align-items: center;
@@ -103,8 +105,8 @@ button {
   background: var(--brand-primary);
   color: white;
   border: none;
-  border-radius: var(--radius-sm);
-  padding: 11px 18px;
+  border-radius: var(--radius-pill);
+  padding: 11px 22px;
   font-size: 14.5px;
   font-weight: 600;
   cursor: pointer;
@@ -227,7 +229,7 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--brand-accent), var(--brand-primary));
+  background: linear-gradient(135deg, #45c1c5, var(--brand-primary-dark));
   color: white;
   display: flex;
   align-items: center;
@@ -367,25 +369,26 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
 .btn-primary {
   background: var(--brand-primary);
   color: white;
-  border: none;
-  border-radius: var(--radius-sm);
-  padding: 11px 18px;
+  border: 2px solid var(--brand-primary);
+  border-radius: var(--radius-pill);
+  padding: 10px 20px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .btn-primary:hover {
   background: var(--brand-primary-dark);
+  border-color: var(--brand-primary-dark);
 }
 
 .btn-secondary {
   background: white;
   color: var(--ink-soft);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-sm);
-  padding: 11px 18px;
+  border: 2px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  padding: 10px 20px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -637,7 +640,7 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
 }
 
 .calendar-day-col:nth-child(odd) {
-  background: rgba(99, 102, 241, 0.015);
+  background: rgba(47, 165, 169, 0.02);
 }
 
 .calendar-hour-line {
