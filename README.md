@@ -89,6 +89,23 @@ This project stores ID documents in a **private** Supabase Storage bucket
 (`staff-documents`), readable only by admins or the server's service-role
 key — never via a public URL.
 
+## Testing
+
+`scripts/rls-smoke-test.js` exercises the security invariants this project
+has actually broken before (RLS recursion, cross-role data isolation, the
+cleaner-deactivation gate, self privilege escalation). Run it after any RLS
+or schema change:
+
+```bash
+TEST_ADMIN_EMAIL=you@example.com TEST_ADMIN_PASSWORD=yourpassword \
+TEST_CLEANER_EMAIL=cleaner@example.com TEST_CLEANER_PASSWORD=theirpassword \
+npm run test:rls
+```
+
+Admin credentials are required; cleaner credentials are optional (those
+checks are skipped with a warning if omitted). It creates and cleans up its
+own throwaway fixture data, so it's safe to run against a real project.
+
 ## 6. What's next / not yet built
 
 - **Email/push/SMS notifications**: right now, "notifications" are stored in
