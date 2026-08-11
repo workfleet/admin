@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: '/admin/clients', label: 'Clients', icon: '🏢' },
   { href: '/admin/cleaners', label: 'Cleaners', icon: '🧹' },
   { href: '/admin/onboarding', label: 'Onboarding', icon: '📋' },
+  { href: '/admin/reports', label: 'Reports', icon: '📝' },
 ];
 
 export default function AdminLayout({ children }) {

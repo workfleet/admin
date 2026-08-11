@@ -73,12 +73,6 @@ export default function AdminRota() {
   const [jobTasks, setJobTasks] = useState([]);
   const [newTaskText, setNewTaskText] = useState('');
 
-  const [jobReport, setJobReport] = useState(null);
-  const [reportNotes, setReportNotes] = useState('');
-  const [generatingReport, setGeneratingReport] = useState(false);
-  const [reportError, setReportError] = useState('');
-  const [recording, setRecording] = useState(false);
-
   const weekDays = useMemo(
     () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
     [weekStart]
@@ -98,76 +92,9 @@ export default function AdminRota() {
   }, [weekStart]);
 
   useEffect(() => {
-    if (selectedJob) {
-      loadTasks(selectedJob.id);
-      loadReport(selectedJob.id);
-    } else {
-      setJobTasks([]);
-      setJobReport(null);
-      setReportNotes('');
-      setReportError('');
-    }
+    if (selectedJob) loadTasks(selectedJob.id);
+    else setJobTasks([]);
   }, [selectedJob?.id]);
-
-  const loadReport = async (jobId) => {
-    const { data } = await supabase.from('job_reports').select('*').eq('job_id', jobId).maybeSingle();
-    setJobReport(data || null);
-    setReportNotes(data?.input_notes || '');
-    setReportError('');
-  };
-
-  const generateReport = async () => {
-    if (!selectedJob) return;
-    setGeneratingReport(true);
-    setReportError('');
-
-    const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch('/api/reports/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ job_id: selectedJob.id, notes: reportNotes }),
-    });
-
-    setGeneratingReport(false);
-    if (res.ok) {
-      setJobReport(await res.json());
-    } else {
-      const body = await res.json().catch(() => ({}));
-      setReportError(body.detail || body.error || 'Something went wrong generating the report.');
-    }
-  };
-
-  const toggleRecording = () => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setReportError('Voice input is not supported in this browser (try Chrome).');
-      return;
-    }
-
-    if (recording) {
-      window.__wfRecognition?.stop();
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = false;
-    recognition.lang = 'en-GB';
-
-    recognition.onresult = (e) => {
-      let transcript = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        transcript += e.results[i][0].transcript;
-      }
-      setReportNotes((prev) => (prev ? `${prev} ${transcript}` : transcript));
-    };
-    recognition.onend = () => setRecording(false);
-    recognition.onerror = () => setRecording(false);
-
-    window.__wfRecognition = recognition;
-    recognition.start();
-    setRecording(true);
-  };
 
   const loadTasks = async (jobId) => {
     const { data } = await supabase
@@ -562,59 +489,6 @@ export default function AdminRota() {
               />
               <button type="submit" className="btn-primary">Add</button>
             </form>
-          </div>
-
-          <div style={{ marginTop: 16 }}>
-            <label>Report</label>
-
-            {jobReport ? (
-              <div style={{ fontSize: 14, lineHeight: 1.6 }}>
-                <div style={{ marginBottom: 10 }}>
-                  <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Work completed</strong>
-                  <p style={{ margin: '4px 0 0' }}>{jobReport.summary}</p>
-                </div>
-                <div style={{ marginBottom: 10 }}>
-                  <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Issues found</strong>
-                  <p style={{ margin: '4px 0 0' }}>{jobReport.issues}</p>
-                </div>
-                <div style={{ marginBottom: 10 }}>
-                  <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Suggestions</strong>
-                  <p style={{ margin: '4px 0 0' }}>{jobReport.suggestions}</p>
-                </div>
-                <button className="btn-secondary" onClick={() => setJobReport(null)}>Regenerate</button>
-              </div>
-            ) : (
-              <>
-                <p className="empty-state" style={{ padding: '4px 0' }}>
-                  Add a few notes (or speak them), and generate a report from those notes and the job's photos.
-                </p>
-                <textarea
-                  value={reportNotes}
-                  onChange={(e) => setReportNotes(e.target.value)}
-                  placeholder="e.g. Deep cleaned kitchen and bathrooms, noticed a leak under the sink..."
-                  rows={4}
-                  style={{
-                    width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10,
-                    background: '#f8fafc', fontSize: 14, fontFamily: 'inherit', marginBottom: 10, resize: 'vertical',
-                  }}
-                />
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button type="button" className="btn-secondary" onClick={toggleRecording}>
-                    {recording ? '⏹ Stop' : '🎤 Speak notes'}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={generateReport}
-                    disabled={generatingReport}
-                    style={{ flex: 1 }}
-                  >
-                    {generatingReport ? 'Generating...' : 'Generate Report'}
-                  </button>
-                </div>
-                {reportError && <p style={{ color: 'crimson', fontSize: 13, marginTop: 8 }}>{reportError}</p>}
-              </>
-            )}
           </div>
         </div>
       )}
