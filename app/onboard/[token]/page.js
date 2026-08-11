@@ -13,6 +13,20 @@ By typing your full name below and clicking "Sign & Submit", you confirm
 that the details you've provided are accurate and that you agree to the
 terms of employment discussed with your employer.`;
 
+// PLACEHOLDER — a starting point, not legal advice. Review with a solicitor
+// or your usual HR guidance before using this for real staff, and fill in
+// the bracketed retention period to match your actual policy.
+const PRIVACY_NOTICE = `We collect the details on this form (including your
+date of birth, home address, National Insurance number, and a photo of
+your ID) to set you up as a member of staff, run payroll, and meet our
+legal obligations as an employer.
+
+This information is stored securely and is only accessible to admin staff
+who need it for these purposes. We keep it for [RETENTION PERIOD — e.g.
+the duration of your employment plus 6 years, or as required by law], after
+which it is deleted. You can ask what information we hold about you, or
+ask us to correct it, at any time by contacting your employer.`;
+
 export default function OnboardPage() {
   const { token } = useParams();
   const [status, setStatus] = useState('loading'); // loading | ready | error | done
@@ -118,6 +132,13 @@ export default function OnboardPage() {
       <p className="login-subtitle" style={{ marginBottom: 20 }}>
         Please fill in your details, upload your ID, and sign below.
       </p>
+
+      <div className="card" style={{ background: '#f8fafc' }}>
+        <h2>How we use your information</h2>
+        <p style={{ fontSize: 13.5, color: 'var(--ink-soft)', whiteSpace: 'pre-wrap', margin: 0 }}>
+          {PRIVACY_NOTICE}
+        </p>
+      </div>
 
       <form onSubmit={handleSubmit}>
         <div className="card">
