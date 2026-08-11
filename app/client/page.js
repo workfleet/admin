@@ -72,9 +72,9 @@ export default function ClientPortal() {
           </div>
 
           {expandedJob === job.id && (
-            <div style={{ marginTop: 12, borderTop: '1px solid #eee', paddingTop: 12 }}>
+            <div style={{ marginTop: 12, borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
               {checkin && (
-                <p style={{ fontSize: 13, color: '#6b7280' }}>
+                <p style={{ fontSize: 13, color: 'var(--muted)' }}>
                   Checked in: {checkin.checked_in_at ? new Date(checkin.checked_in_at).toLocaleTimeString() : '—'}{' '}
                   · Checked out: {checkin.checked_out_at ? new Date(checkin.checked_out_at).toLocaleTimeString() : '—'}
                 </p>

@@ -171,12 +171,12 @@ export default function JobDetailPage() {
 
   return (
     <div className="container">
-      <button onClick={() => router.push('/cleaner')} style={{ background: 'transparent', color: '#2563eb', padding: 0, marginBottom: 12 }}>
+      <button onClick={() => router.push('/cleaner')} style={{ background: 'transparent', color: 'var(--brand-primary)', padding: 0, marginBottom: 12 }}>
         ← Back
       </button>
 
       <h1>{job.properties?.address}</h1>
-      <p style={{ color: '#6b7280' }}>{new Date(job.scheduled_at).toLocaleString()}</p>
+      <p style={{ color: 'var(--muted)' }}>{new Date(job.scheduled_at).toLocaleString()}</p>
       {job.properties?.notes && <p className="card">{job.properties.notes}</p>}
 
       {job.properties?.lat != null && job.properties?.lng != null && (
@@ -203,7 +203,7 @@ export default function JobDetailPage() {
 
       <div className="card">
         <h2>To-Do List</h2>
-        {tasks.length === 0 && <p style={{ fontSize: 14, color: '#6b7280' }}>No tasks added yet.</p>}
+        {tasks.length === 0 && <p style={{ fontSize: 14, color: 'var(--muted)' }}>No tasks added yet.</p>}
         {tasks.map((task) => (
           <div key={task.id} className={`task-row ${task.completed ? 'done' : ''}`}>
             <input type="checkbox" checked={task.completed} onChange={() => toggleTask(task)} style={{ width: 'auto', margin: 0 }} />

@@ -335,7 +335,7 @@ export default function AdminClients() {
                 <div key={p.id} className="task-row">
                   <div style={{ flex: 1 }}>
                     <div>{p.address}</div>
-                    {p.notes && <div style={{ fontSize: 12, color: '#6b7280' }}>{p.notes}</div>}
+                    {p.notes && <div style={{ fontSize: 12, color: 'var(--muted)' }}>{p.notes}</div>}
                   </div>
                   <button className="btn-secondary" onClick={() => deleteProperty(p.id)}>Remove</button>
                 </div>

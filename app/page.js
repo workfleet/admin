@@ -102,7 +102,7 @@ export default function LoginPage() {
           required
         />
         {error && <p style={{ color: 'crimson', fontSize: 14 }}>{error}</p>}
-        {info && <p style={{ color: 'seagreen', fontSize: 14 }}>{info}</p>}
+        {info && <p style={{ color: 'var(--brand-primary-dark)', fontSize: 14 }}>{info}</p>}
         <button type="submit" disabled={loading}>
           {loading ? 'Please wait...' : mode === 'login' ? 'Log in' : 'Sign up'}
         </button>
