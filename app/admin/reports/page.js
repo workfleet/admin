@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
+import { REPORT_TEMPLATES, DEFAULT_TEMPLATE } from '../../../lib/reportTemplates';
 
 export default function AdminReports() {
   const router = useRouter();
@@ -13,6 +14,7 @@ export default function AdminReports() {
   const [expandedJobId, setExpandedJobId] = useState(null);
   const [editingReport, setEditingReport] = useState(false);
   const [notes, setNotes] = useState('');
+  const [template, setTemplate] = useState(DEFAULT_TEMPLATE);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
   const [recording, setRecording] = useState(false);
@@ -27,7 +29,7 @@ export default function AdminReports() {
 
     const { data } = await supabase
       .from('jobs')
-      .select('id, scheduled_at, status, properties(address), job_reports(id, summary, issues, suggestions, input_notes, created_at)')
+      .select('id, scheduled_at, status, properties(address), job_reports(id, summary, issues, suggestions, input_notes, template, created_at)')
       .order('scheduled_at', { ascending: false })
       .limit(100);
 
@@ -39,9 +41,11 @@ export default function AdminReports() {
 
   const toggleExpand = (job) => {
     const isOpen = expandedJobId === job.id;
+    const existing = reportFor(job);
     setExpandedJobId(isOpen ? null : job.id);
     setEditingReport(false);
-    setNotes(isOpen ? '' : reportFor(job)?.input_notes || '');
+    setNotes(isOpen ? '' : existing?.input_notes || '');
+    setTemplate(isOpen ? DEFAULT_TEMPLATE : existing?.template || DEFAULT_TEMPLATE);
     setError('');
   };
 
@@ -53,7 +57,7 @@ export default function AdminReports() {
     const res = await fetch('/api/reports/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ job_id: jobId, notes }),
+      body: JSON.stringify({ job_id: jobId, notes, template }),
     });
 
     setGenerating(false);
@@ -147,16 +151,25 @@ export default function AdminReports() {
               {isExpanded && (
                 report && !editingReport ? (
                   <div style={{ fontSize: 14, lineHeight: 1.6 }}>
+                    <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '0 0 10px', fontWeight: 600 }}>
+                      Template: {REPORT_TEMPLATES[report.template]?.label || REPORT_TEMPLATES[DEFAULT_TEMPLATE].label}
+                    </p>
                     <div style={{ marginBottom: 10 }}>
-                      <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Work completed</strong>
+                      <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        {(REPORT_TEMPLATES[report.template] || REPORT_TEMPLATES[DEFAULT_TEMPLATE]).sectionLabels.summary}
+                      </strong>
                       <p style={{ margin: '4px 0 0' }}>{report.summary}</p>
                     </div>
                     <div style={{ marginBottom: 10 }}>
-                      <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Issues found</strong>
+                      <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        {(REPORT_TEMPLATES[report.template] || REPORT_TEMPLATES[DEFAULT_TEMPLATE]).sectionLabels.issues}
+                      </strong>
                       <p style={{ margin: '4px 0 0' }}>{report.issues}</p>
                     </div>
                     <div style={{ marginBottom: 10 }}>
-                      <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Suggestions</strong>
+                      <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        {(REPORT_TEMPLATES[report.template] || REPORT_TEMPLATES[DEFAULT_TEMPLATE]).sectionLabels.suggestions}
+                      </strong>
                       <p style={{ margin: '4px 0 0' }}>{report.suggestions}</p>
                     </div>
                     <button className="btn-secondary" onClick={() => setEditingReport(true)}>
@@ -166,8 +179,16 @@ export default function AdminReports() {
                 ) : (
                   <>
                     <p className="empty-state" style={{ padding: '4px 0' }}>
-                      Add a few notes (or speak them), and generate a report from those notes and the job's photos.
+                      Add a few notes (or speak them), pick a template, and generate a report from those notes and the job's photos.
                     </p>
+                    <div className="field" style={{ marginBottom: 10 }}>
+                      <label className="field-label">Template</label>
+                      <select value={template} onChange={(e) => setTemplate(e.target.value)} style={{ marginBottom: 0 }}>
+                        {Object.entries(REPORT_TEMPLATES).map(([id, t]) => (
+                          <option key={id} value={id}>{t.label}</option>
+                        ))}
+                      </select>
+                    </div>
                     <textarea
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}

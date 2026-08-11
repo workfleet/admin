@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { supabaseAdmin } from '../../../../lib/supabaseAdmin';
+import { REPORT_TEMPLATES, DEFAULT_TEMPLATE } from '../../../../lib/reportTemplates';
 
 const IMAGE_MEDIA_TYPES = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp' };
 
@@ -22,8 +23,10 @@ export async function POST(request) {
   const admin = await requireAdmin(request);
   if (!admin) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const { job_id: jobId, notes } = await request.json();
+  const { job_id: jobId, notes, template: templateId } = await request.json();
   if (!jobId) return NextResponse.json({ error: 'missing_job_id' }, { status: 400 });
+
+  const template = REPORT_TEMPLATES[templateId] || REPORT_TEMPLATES[DEFAULT_TEMPLATE];
 
   const { data: job } = await supabaseAdmin
     .from('jobs')
@@ -64,14 +67,16 @@ ${notes?.trim() || '(no notes provided)'}
 
 ${imageBlocks.length} photo(s) from the job are attached below.
 
-Write a report with three sections based on the notes and photos. Be concise, specific, and professional. Do not invent details that aren't supported by the notes or visible in the photos - if there isn't much to say for a section, keep it brief rather than padding it out.
+${template.promptInstructions}
+
+Be concise, specific, and professional. Do not invent details that aren't supported by the notes or visible in the photos - if there isn't much to say for a section, keep it brief rather than padding it out.
 
 Respond with ONLY valid JSON, no other text, in exactly this shape:
 {"summary": "...", "issues": "...", "suggestions": "..."}
 
-- "summary": what was done during this clean.
-- "issues": any issues/damage/wear noticed with the property (write "No issues noted." if none).
-- "suggestions": recommendations going forward, e.g. maintenance, follow-up work, supply needs (write "No further suggestions." if none).`;
+- "summary" -> the "${template.sectionLabels.summary}" section.
+- "issues" -> the "${template.sectionLabels.issues}" section (write "None noted." if there's nothing to report).
+- "suggestions" -> the "${template.sectionLabels.suggestions}" section (write "None." if there's nothing to add).`;
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -105,6 +110,7 @@ Respond with ONLY valid JSON, no other text, in exactly this shape:
         summary: reportJson.summary || null,
         issues: reportJson.issues || null,
         suggestions: reportJson.suggestions || null,
+        template: templateId && REPORT_TEMPLATES[templateId] ? templateId : DEFAULT_TEMPLATE,
         generated_by: admin.id,
       },
       { onConflict: 'job_id' }
