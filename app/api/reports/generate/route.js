@@ -88,7 +88,9 @@ Respond with ONLY valid JSON, no other text, in exactly this shape:
       ],
     });
 
-    const text = message.content.find((block) => block.type === 'text')?.text || '{}';
+    const rawText = message.content.find((block) => block.type === 'text')?.text || '{}';
+    // Claude sometimes wraps JSON in a ```json ... ``` fence despite being asked not to.
+    const text = rawText.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
     reportJson = JSON.parse(text);
   } catch (err) {
     return NextResponse.json({ error: 'generation_failed', detail: err.message }, { status: 500 });
