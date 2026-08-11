@@ -35,6 +35,12 @@ function addDays(date, n) {
   return d;
 }
 
+function jobsOverlap(startA, durationA, startB, durationB) {
+  const endA = new Date(startA.getTime() + durationA * 60000);
+  const endB = new Date(startB.getTime() + durationB * 60000);
+  return startA < endB && startB < endA;
+}
+
 function formatDuration(mins) {
   const h = Math.floor(mins / 60);
   const m = mins % 60;
@@ -142,7 +148,40 @@ export default function AdminRota() {
     setJobs(data || []);
   };
 
+  // Looks for another job already on this cleaner's schedule that overlaps
+  // the given time window, so double-bookings get a warning instead of
+  // silently happening. Scoped to the same calendar day for efficiency.
+  const findConflict = async (cleanerId, start, durationMinutes, excludeJobId) => {
+    if (!cleanerId) return null;
+
+    const dayStart = new Date(start);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = addDays(dayStart, 1);
+
+    const { data } = await supabase
+      .from('jobs')
+      .select('id, scheduled_at, duration_minutes, properties(address)')
+      .eq('cleaner_id', cleanerId)
+      .gte('scheduled_at', dayStart.toISOString())
+      .lt('scheduled_at', dayEnd.toISOString());
+
+    return (data || []).find(
+      (j) => j.id !== excludeJobId && jobsOverlap(start, durationMinutes, new Date(j.scheduled_at), j.duration_minutes || 120)
+    ) || null;
+  };
+
   const assignCleaner = async (jobId, cleanerId) => {
+    const job = jobs.find((j) => j.id === jobId) || selectedJob;
+    if (cleanerId && job) {
+      const conflict = await findConflict(cleanerId, new Date(job.scheduled_at), job.duration_minutes || 120, jobId);
+      if (conflict) {
+        const proceed = confirm(
+          `This cleaner is already booked at ${conflict.properties?.address} around this time (${new Date(conflict.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}). Assign anyway?`
+        );
+        if (!proceed) return;
+      }
+    }
+
     await supabase.from('jobs').update({ cleaner_id: cleanerId || null }).eq('id', jobId);
     setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, cleaner_id: cleanerId } : j)));
     setSelectedJob((sj) => (sj && sj.id === jobId ? { ...sj, cleaner_id: cleanerId } : sj));
@@ -162,7 +201,18 @@ export default function AdminRota() {
     e.preventDefault();
     if (!propertyId || !jobDate || !jobTime) return;
 
-    const scheduledAt = new Date(`${jobDate}T${jobTime}`).toISOString();
+    const scheduledAtDate = new Date(`${jobDate}T${jobTime}`);
+    const scheduledAt = scheduledAtDate.toISOString();
+
+    if (formCleanerId) {
+      const conflict = await findConflict(formCleanerId, scheduledAtDate, duration, null);
+      if (conflict) {
+        const proceed = confirm(
+          `This cleaner is already booked at ${conflict.properties?.address} around this time (${new Date(conflict.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}). Create this job anyway?`
+        );
+        if (!proceed) return;
+      }
+    }
 
     const { data } = await supabase
       .from('jobs')
