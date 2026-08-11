@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Mic, Square } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { REPORT_TEMPLATES, DEFAULT_TEMPLATE } from '../../../lib/reportTemplates';
 
@@ -200,8 +201,14 @@ export default function AdminReports() {
                       }}
                     />
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button type="button" className="btn-secondary" onClick={toggleRecording}>
-                        {recording ? '⏹ Stop' : '🎤 Speak notes'}
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={toggleRecording}
+                        style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                      >
+                        {recording ? <Square size={14} /> : <Mic size={14} />}
+                        {recording ? 'Stop' : 'Speak notes'}
                       </button>
                       <button
                         type="button"

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { CheckCircle2, Circle } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
 export default function ClientPortal() {
@@ -83,7 +84,12 @@ export default function ClientPortal() {
               <h2 style={{ marginTop: 10 }}>Tasks</h2>
               {tasks.map((t) => (
                 <div key={t.id} className={`task-row ${t.completed ? 'done' : ''}`}>
-                  <span>{t.completed ? '✅' : '⬜️'} {t.description}</span>
+                  {t.completed ? (
+                    <CheckCircle2 size={16} color="var(--brand-primary)" style={{ flexShrink: 0 }} />
+                  ) : (
+                    <Circle size={16} color="var(--muted)" style={{ flexShrink: 0 }} />
+                  )}
+                  <span>{t.description}</span>
                 </div>
               ))}
 

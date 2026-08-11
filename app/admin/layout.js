@@ -3,15 +3,16 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
 const NAV_ITEMS = [
-  { href: '/admin', label: 'Dashboard', icon: '🏠' },
-  { href: '/admin/rota', label: 'Rota', icon: '🗓️' },
-  { href: '/admin/clients', label: 'Clients', icon: '🏢' },
-  { href: '/admin/cleaners', label: 'Cleaners', icon: '🧹' },
-  { href: '/admin/onboarding', label: 'Onboarding', icon: '📋' },
-  { href: '/admin/reports', label: 'Reports', icon: '📝' },
+  { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/admin/rota', label: 'Rota', icon: Calendar },
+  { href: '/admin/clients', label: 'Clients', icon: Building2 },
+  { href: '/admin/cleaners', label: 'Cleaners', icon: Users },
+  { href: '/admin/onboarding', label: 'Onboarding', icon: ClipboardList },
+  { href: '/admin/reports', label: 'Reports', icon: FileText },
 ];
 
 export default function AdminLayout({ children }) {
@@ -61,13 +62,14 @@ export default function AdminLayout({ children }) {
         <nav className="sidebar-nav">
           {NAV_ITEMS.map((item) => {
             const active = pathname === item.href;
+            const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={`sidebar-link ${active ? 'active' : ''}`}
               >
-                <span className="sidebar-icon">{item.icon}</span>
+                <Icon className="sidebar-icon" size={18} strokeWidth={2} />
                 {item.label}
               </Link>
             );
