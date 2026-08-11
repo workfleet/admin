@@ -24,9 +24,15 @@ export default function LoginPage() {
   const redirectByRole = async (userId) => {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, active')
       .eq('id', userId)
       .single();
+
+    if (profile?.active === false) {
+      await supabase.auth.signOut();
+      setError('This account has been deactivated. Contact your admin.');
+      return;
+    }
 
     if (profile?.role === 'admin') router.push('/admin');
     else if (profile?.role === 'client') router.push('/client');

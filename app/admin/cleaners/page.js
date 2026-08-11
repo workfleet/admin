@@ -20,7 +20,7 @@ export default function AdminCleaners() {
 
     const { data: cleanersData } = await supabase
       .from('profiles')
-      .select('id, full_name, created_at')
+      .select('id, full_name, created_at, active')
       .eq('role', 'cleaner')
       .order('created_at');
 
@@ -35,6 +35,19 @@ export default function AdminCleaners() {
     setCleaners(cleanersData || []);
     setJobCounts(counts);
     setLoading(false);
+  };
+
+  const toggleActive = async (cleaner) => {
+    const nextActive = !cleaner.active;
+    if (!nextActive && !confirm(`Deactivate ${cleaner.full_name || 'this cleaner'}? They won't be able to log in until reactivated.`)) return;
+
+    const { data } = await supabase
+      .from('profiles').update({ active: nextActive }).eq('id', cleaner.id)
+      .select('id, active').single();
+
+    if (data) {
+      setCleaners((prev) => prev.map((c) => (c.id === cleaner.id ? { ...c, active: data.active } : c)));
+    }
   };
 
   if (loading) return <div className="page-inner">Loading...</div>;
@@ -63,7 +76,11 @@ export default function AdminCleaners() {
                 Joined {new Date(c.created_at).toLocaleDateString()}
                 {' · '}{jobCounts[c.id] || 0} job{(jobCounts[c.id] || 0) === 1 ? '' : 's'} assigned
               </p>
+              {c.active === false && <span className="badge missed">deactivated</span>}
             </div>
+            <button className="btn-secondary" onClick={() => toggleActive(c)}>
+              {c.active === false ? 'Reactivate' : 'Deactivate'}
+            </button>
           </div>
         ))}
       </div>
