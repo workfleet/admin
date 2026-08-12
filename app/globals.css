@@ -881,14 +881,35 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
   outline: 2px solid var(--brand-primary);
 }
 
+.calendar-job[draggable="true"] {
+  cursor: grab;
+}
+
+.calendar-job.dragging {
+  opacity: 0.4;
+}
+
+.calendar-day-col.drag-over {
+  background: rgba(47, 165, 169, 0.1);
+}
+
 .calendar-job-time {
   font-weight: 700;
 }
 
+.calendar-job-client {
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calendar-job-staff,
 .calendar-job-address {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  opacity: 0.85;
 }
 
 

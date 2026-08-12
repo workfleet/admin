@@ -72,6 +72,8 @@ export default function AdminRota() {
   const [clients, setClients] = useState([]);
   const [properties, setProperties] = useState([]);
   const [selectedJob, setSelectedJob] = useState(null);
+  const [draggingJobId, setDraggingJobId] = useState(null);
+  const [dragOverDayKey, setDragOverDayKey] = useState(null);
 
   const [showForm, setShowForm] = useState(false);
   const [clientId, setClientId] = useState('');
@@ -165,7 +167,7 @@ export default function AdminRota() {
         notes: editNotes.trim() || null,
       })
       .eq('id', selectedJob.id)
-      .select('id, scheduled_at, status, cleaner_id, duration_minutes, notes, properties(address)')
+      .select('id, scheduled_at, status, cleaner_id, duration_minutes, notes, properties(address, clients(name)), profiles(full_name)')
       .single();
 
     setSavingJob(false);
@@ -226,7 +228,7 @@ export default function AdminRota() {
 
     const { data } = await supabase
       .from('jobs')
-      .select('id, scheduled_at, status, cleaner_id, duration_minutes, notes, properties(address)')
+      .select('id, scheduled_at, status, cleaner_id, duration_minutes, notes, properties(address, clients(name)), profiles(full_name)')
       .gte('scheduled_at', rangeStart)
       .lt('scheduled_at', rangeEnd)
       .order('scheduled_at', { ascending: true });
@@ -297,8 +299,9 @@ export default function AdminRota() {
     }
 
     await supabase.from('jobs').update({ cleaner_id: cleanerId || null }).eq('id', jobId);
-    setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, cleaner_id: cleanerId } : j)));
-    setSelectedJob((sj) => (sj && sj.id === jobId ? { ...sj, cleaner_id: cleanerId } : sj));
+    const assignedProfile = cleanerId ? { full_name: cleaners.find((c) => c.id === cleanerId)?.full_name } : null;
+    setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, cleaner_id: cleanerId, profiles: assignedProfile } : j)));
+    setSelectedJob((sj) => (sj && sj.id === jobId ? { ...sj, cleaner_id: cleanerId, profiles: assignedProfile } : sj));
 
     if (cleanerId && job) {
       notify({ type: 'shift_assigned', cleanerId, address: job.properties?.address, scheduledAt: job.scheduled_at });
@@ -365,7 +368,7 @@ export default function AdminRota() {
         duration_minutes: duration,
         cleaner_id: formCleanerId || null,
       })
-      .select('id, scheduled_at, status, cleaner_id, duration_minutes, properties(address)')
+      .select('id, scheduled_at, status, cleaner_id, duration_minutes, properties(address, clients(name)), profiles(full_name)')
       .single();
 
     if (data) {
@@ -386,6 +389,74 @@ export default function AdminRota() {
     const top = Math.max(0, (hourFloat - START_HOUR) * HOUR_HEIGHT);
     const height = ((job.duration_minutes || 120) / 60) * HOUR_HEIGHT;
     return { top, height };
+  };
+
+  const handleJobDragStart = (e, job) => {
+    e.dataTransfer.setData('text/plain', job.id);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggingJobId(job.id);
+  };
+
+  const handleJobDragEnd = () => {
+    setDraggingJobId(null);
+    setDragOverDayKey(null);
+  };
+
+  const handleDayDragOver = (e, day) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverDayKey(day.toDateString());
+  };
+
+  const handleDayDragLeave = () => setDragOverDayKey(null);
+
+  // Dropping a job re-times it to wherever it was released: the day column
+  // it landed in sets the date, the vertical offset (snapped to 15 minutes,
+  // matching the manual time picker's granularity) sets the time. Runs the
+  // same conflict checks as a manual edit so a drag can't silently create a
+  // double-booking or clash with approved time off.
+  const handleJobDrop = async (e, day) => {
+    e.preventDefault();
+    setDragOverDayKey(null);
+
+    const jobId = e.dataTransfer.getData('text/plain');
+    setDraggingJobId(null);
+    const job = jobs.find((j) => j.id === jobId);
+    if (!job) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const offsetY = e.clientY - rect.top;
+    const hourFloat = offsetY / HOUR_HEIGHT + START_HOUR;
+    const snappedMinutes = Math.round((hourFloat * 60) / 15) * 15;
+    const clampedMinutes = Math.min(Math.max(snappedMinutes, 0), (END_HOUR - START_HOUR) * 60 - 1);
+
+    const newDate = new Date(day);
+    newDate.setHours(Math.floor(clampedMinutes / 60), clampedMinutes % 60, 0, 0);
+
+    if (newDate.getTime() === new Date(job.scheduled_at).getTime()) return;
+
+    if (job.cleaner_id) {
+      const conflict = await findConflict(job.cleaner_id, newDate, job.duration_minutes || 120, job.id);
+      if (conflict) {
+        const proceed = confirm(
+          `This cleaner is already booked at ${conflict.properties?.address} around this time (${new Date(conflict.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}). Move anyway?`
+        );
+        if (!proceed) return;
+      }
+      if (!(await confirmTimeOffConflict(job.cleaner_id, newDate))) return;
+    }
+
+    const { data, error } = await supabase
+      .from('jobs')
+      .update({ scheduled_at: newDate.toISOString() })
+      .eq('id', job.id)
+      .select('id, scheduled_at, status, cleaner_id, duration_minutes, notes, properties(address, clients(name)), profiles(full_name)')
+      .single();
+
+    if (error) return;
+
+    setJobs((prev) => prev.map((j) => (j.id === data.id ? { ...j, ...data } : j)));
+    setSelectedJob((sj) => (sj && sj.id === data.id ? { ...sj, ...data } : sj));
   };
 
   const jobsForDay = (day) =>
@@ -556,7 +627,13 @@ export default function AdminRota() {
             </div>
 
             {weekDays.map((day, i) => (
-              <div key={i} className="calendar-day-col">
+              <div
+                key={i}
+                className={`calendar-day-col ${dragOverDayKey === day.toDateString() ? 'drag-over' : ''}`}
+                onDragOver={(e) => handleDayDragOver(e, day)}
+                onDragLeave={handleDayDragLeave}
+                onDrop={(e) => handleJobDrop(e, day)}
+              >
                 {hourSlots.map((h) => (
                   <div key={h} className="calendar-hour-line" style={{ height: HOUR_HEIGHT }} />
                 ))}
@@ -564,17 +641,24 @@ export default function AdminRota() {
                 {jobsForDay(day).map((job) => {
                   const { top, height } = jobPosition(job);
                   const isSelected = selectedJob?.id === job.id;
+                  const isDraggable = job.status === 'scheduled';
                   return (
                     <div
                       key={job.id}
-                      className={`calendar-job ${job.status} ${isSelected ? 'selected' : ''}`}
+                      className={`calendar-job ${job.status} ${isSelected ? 'selected' : ''} ${draggingJobId === job.id ? 'dragging' : ''}`}
                       style={{ top, height: Math.max(height, 24) }}
                       onClick={() => setSelectedJob(job)}
+                      draggable={isDraggable}
+                      onDragStart={isDraggable ? (e) => handleJobDragStart(e, job) : undefined}
+                      onDragEnd={handleJobDragEnd}
+                      title={isDraggable ? 'Drag to reschedule' : undefined}
                     >
                       <div className="calendar-job-time">
                         {new Date(job.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                         {' · '}{formatDuration(job.duration_minutes || 120)}
                       </div>
+                      <div className="calendar-job-client">{job.properties?.clients?.name || 'Unknown client'}</div>
+                      <div className="calendar-job-staff">{job.profiles?.full_name || 'Unassigned'}</div>
                       <div className="calendar-job-address">{job.properties?.address}</div>
                     </div>
                   );
