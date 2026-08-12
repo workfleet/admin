@@ -124,6 +124,11 @@ export default function JobDetailPage() {
   };
 
   const handleCheckOut = async () => {
+    if (photos.length === 0) {
+      const proceed = confirm("You haven't added any photos for this job. Once you check out you won't be able to add any later. Check out anyway?");
+      if (!proceed) return;
+    }
+
     await supabase
       .from('checkins')
       .update({ checked_out_at: new Date().toISOString() })
@@ -224,13 +229,18 @@ export default function JobDetailPage() {
 
       <div className="card">
         <h2>Photos</h2>
+        {!isHistory && photos.length === 0 && (
+          <p style={{ fontSize: 13.5, color: '#92400e', background: '#fef3c7', padding: '8px 12px', borderRadius: 10, margin: '0 0 10px' }}>
+            📷 Remember to take photos before you check out — you won't be able to add them afterwards.
+          </p>
+        )}
         {!isHistory && (
           <>
             <input type="file" accept="image/*" capture="environment" onChange={handlePhotoUpload} disabled={uploading} />
             {uploading && <p style={{ fontSize: 13 }}>Uploading...</p>}
           </>
         )}
-        {photos.length === 0 && <p style={{ fontSize: 14, color: 'var(--muted)' }}>No photos taken.</p>}
+        {photos.length === 0 && isHistory && <p style={{ fontSize: 14, color: 'var(--muted)' }}>No photos taken.</p>}
         <div className="photo-grid">
           {photos.map((p) => (
             <img key={p.id} src={p.signedUrl} alt="job" />

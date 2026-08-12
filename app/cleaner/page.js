@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabaseClient';
 export default function CleanerDashboard() {
   const router = useRouter();
   const [jobs, setJobs] = useState([]);
+  const [jobsMissingPhotos, setJobsMissingPhotos] = useState(new Set());
   const [notifications, setNotifications] = useState([]);
   const [myRequests, setMyRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -45,6 +46,15 @@ export default function CleanerDashboard() {
       .select('id, type, description, status, created_at, resolution_note')
       .order('created_at', { ascending: false })
       .limit(10);
+
+    const inProgressIds = (jobsData || []).filter((j) => j.status === 'in_progress').map((j) => j.id);
+    if (inProgressIds.length > 0) {
+      const { data: photoRows } = await supabase.from('photos').select('job_id').in('job_id', inProgressIds);
+      const hasPhotos = new Set((photoRows || []).map((p) => p.job_id));
+      setJobsMissingPhotos(new Set(inProgressIds.filter((jid) => !hasPhotos.has(jid))));
+    } else {
+      setJobsMissingPhotos(new Set());
+    }
 
     setJobs(jobsData || []);
     setNotifications(notifData || []);
@@ -114,6 +124,9 @@ export default function CleanerDashboard() {
             {new Date(job.scheduled_at).toLocaleString()}
           </p>
           <span className={`badge ${job.status}`}>{job.status.replace('_', ' ')}</span>
+          {jobsMissingPhotos.has(job.id) && (
+            <span className="badge scheduled" style={{ marginLeft: 6 }}>📷 photos needed</span>
+          )}
         </div>
       ))}
 
