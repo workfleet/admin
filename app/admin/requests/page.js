@@ -64,7 +64,7 @@ export default function AdminRequests() {
       supabase.from('job_assignments').select('cleaner_id, jobs(id, status, duration_minutes)'),
       supabase
         .from('time_extension_requests')
-        .select('id, job_id, requested_minutes, reason, status, admin_note, suggested_scheduled_at, suggested_duration_minutes, created_at, cleaner_id, profiles(full_name), jobs(scheduled_at, duration_minutes, properties(address))')
+        .select('id, job_id, requested_minutes, reason, status, admin_note, suggested_scheduled_at, suggested_duration_minutes, created_at, cleaner_id, profiles!time_extension_requests_cleaner_id_fkey(full_name), jobs(scheduled_at, duration_minutes, properties(address))')
         .order('created_at', { ascending: false }),
     ]);
 
