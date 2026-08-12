@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
+import { notify } from '../../../lib/notify';
 
 function groupByDate(jobs) {
   const groups = {};
@@ -38,10 +39,24 @@ function DayGroup({ date, jobs, router, dim }) {
   );
 }
 
+const EMPTY_FORM = { type: 'holiday', startDate: '', endDate: '', reason: '' };
+
+function holidayDaysUsed(timeOffRequests) {
+  return timeOffRequests
+    .filter((t) => t.type === 'holiday' && t.status === 'approved')
+    .reduce((sum, t) => sum + (new Date(t.end_date) - new Date(t.start_date)) / 86400000 + 1, 0);
+}
+
 export default function CleanerRota() {
   const router = useRouter();
   const [jobs, setJobs] = useState([]);
+  const [timeOff, setTimeOff] = useState([]);
+  const [allowance, setAllowance] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     load();
@@ -51,14 +66,60 @@ export default function CleanerRota() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/'); return; }
 
-    const { data } = await supabase
-      .from('jobs')
-      .select('id, scheduled_at, status, duration_minutes, properties(address)')
-      .eq('cleaner_id', session.user.id)
-      .order('scheduled_at', { ascending: true });
+    const [{ data: jobsData }, { data: timeOffData }, { data: profileData }] = await Promise.all([
+      supabase
+        .from('jobs')
+        .select('id, scheduled_at, status, duration_minutes, properties(address)')
+        .eq('cleaner_id', session.user.id)
+        .order('scheduled_at', { ascending: true }),
+      supabase
+        .from('time_off_requests')
+        .select('id, type, start_date, end_date, reason, status, admin_note, created_at')
+        .order('start_date', { ascending: false }),
+      supabase.from('profiles').select('holiday_allowance_days').eq('id', session.user.id).single(),
+    ]);
 
-    setJobs(data || []);
+    setJobs(jobsData || []);
+    setTimeOff(timeOffData || []);
+    setAllowance(profileData?.holiday_allowance_days ?? null);
     setLoading(false);
+  };
+
+  const submitRequest = async (e) => {
+    e.preventDefault();
+    if (!form.startDate || !form.endDate) return;
+    if (form.endDate < form.startDate) { alert('End date must be on or after the start date.'); return; }
+    setSubmitting(true);
+
+    const { data: { session } } = await supabase.auth.getSession();
+
+    const { data } = await supabase
+      .from('time_off_requests')
+      .insert({
+        cleaner_id: session.user.id,
+        type: form.type,
+        start_date: form.startDate,
+        end_date: form.endDate,
+        reason: form.reason.trim() || null,
+      })
+      .select('id, type, start_date, end_date, reason, status, admin_note, created_at')
+      .single();
+
+    setSubmitting(false);
+    if (data) {
+      setTimeOff((prev) => [data, ...prev]);
+      setForm(EMPTY_FORM);
+      setShowForm(false);
+
+      const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', session.user.id).single();
+      notify({
+        type: 'time_off_requested',
+        cleanerName: profile?.full_name || 'A cleaner',
+        requestType: form.type,
+        startDate: form.startDate,
+        endDate: form.endDate,
+      });
+    }
   };
 
   if (loading) return <div className="container">Loading...</div>;
@@ -71,6 +132,72 @@ export default function CleanerRota() {
   return (
     <div className="container">
       <h1>My Rota</h1>
+
+      <div className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ margin: 0 }}>Time Off</h2>
+          <button className="btn-secondary" onClick={() => { setShowForm((s) => !s); setForm(EMPTY_FORM); }}>
+            {showForm ? 'Cancel' : '+ Request'}
+          </button>
+        </div>
+
+        {allowance !== null && (
+          <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>
+            {allowance - holidayDaysUsed(timeOff)} of {allowance} holiday day{allowance === 1 ? '' : 's'} remaining
+          </p>
+        )}
+
+        {showForm && (
+          <form onSubmit={submitRequest} style={{ marginTop: 12 }}>
+            <label>Type</label>
+            <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}>
+              <option value="holiday">Holiday</option>
+              <option value="unavailable">Unavailable</option>
+            </select>
+
+            <div className="field-row">
+              <div className="field">
+                <label className="field-label">From</label>
+                <input type="date" value={form.startDate} onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} required />
+              </div>
+              <div className="field">
+                <label className="field-label">To</label>
+                <input type="date" value={form.endDate} onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} required />
+              </div>
+            </div>
+
+            <label>Reason (optional)</label>
+            <input
+              value={form.reason}
+              onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
+              placeholder="e.g. Family holiday, medical appointment"
+            />
+
+            <button type="submit" disabled={submitting} style={{ marginTop: 8 }}>
+              {submitting ? 'Sending...' : 'Submit Request'}
+            </button>
+          </form>
+        )}
+
+        {!showForm && timeOff.length === 0 && <p className="empty-state">No time off requested.</p>}
+
+        {!showForm && timeOff.map((t) => (
+          <div key={t.id} className="task-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>
+                  {t.type === 'holiday' ? 'Holiday' : 'Unavailable'} · {new Date(t.start_date).toLocaleDateString()} – {new Date(t.end_date).toLocaleDateString()}
+                </div>
+                {t.reason && <div style={{ fontSize: 13, color: 'var(--muted)' }}>{t.reason}</div>}
+              </div>
+              <span className={`badge ${t.status === 'approved' ? 'completed' : t.status === 'declined' ? 'missed' : 'scheduled'}`}>{t.status}</span>
+            </div>
+            {t.admin_note && (
+              <div style={{ fontSize: 12.5, color: 'var(--muted)', fontStyle: 'italic', marginTop: 4 }}>"{t.admin_note}"</div>
+            )}
+          </div>
+        ))}
+      </div>
 
       {jobs.length === 0 && <p className="empty-state">No jobs scheduled.</p>}
 

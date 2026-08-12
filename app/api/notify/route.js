@@ -75,6 +75,19 @@ export async function POST(request) {
       to = [email];
       subject = `New message from ${senderProfile?.full_name || 'a team member'}`;
       text = payload.body;
+    } else if (payload.type === 'time_off_requested') {
+      to = await adminEmails();
+      if (to.length === 0) return NextResponse.json({ skipped: 'no_email' });
+      const label = payload.requestType === 'holiday' ? 'Holiday' : 'Unavailability';
+      subject = `${label} request from ${payload.cleanerName}`;
+      text = `${payload.cleanerName} requested ${label.toLowerCase()} from ${payload.startDate} to ${payload.endDate}.`;
+    } else if (payload.type === 'time_off_decided') {
+      const email = await emailForUserId(payload.cleanerId);
+      if (!email) return NextResponse.json({ skipped: 'no_email' });
+      to = [email];
+      subject = `Your time off request was ${payload.status}`;
+      text = `Your request for ${payload.startDate} to ${payload.endDate} was ${payload.status}.`
+        + (payload.note ? `\n\nNote from admin: ${payload.note}` : '');
     } else {
       return NextResponse.json({ error: 'unknown_type' }, { status: 400 });
     }
