@@ -169,14 +169,19 @@ export default function JobDetailPage() {
 
   if (!job) return <div className="container">Loading...</div>;
 
+  // A completed job is history, not something to keep editing - no
+  // re-checking-in, no toggling tasks, no adding photos weeks later.
+  const isHistory = job.status === 'completed';
+
   return (
     <div className="container">
-      <button onClick={() => router.push('/cleaner')} style={{ background: 'transparent', color: 'var(--brand-primary)', padding: 0, marginBottom: 12 }}>
+      <button onClick={() => router.push(isHistory ? '/cleaner/rota' : '/cleaner')} style={{ background: 'transparent', color: 'var(--brand-primary)', padding: 0, marginBottom: 12 }}>
         ← Back
       </button>
 
       <h1>{job.properties?.address}</h1>
       <p style={{ color: 'var(--muted)' }}>{new Date(job.scheduled_at).toLocaleString()}</p>
+      {isHistory && <span className="badge completed">completed</span>}
       {job.properties?.notes && <p className="card">{job.properties.notes}</p>}
 
       {job.properties?.lat != null && job.properties?.lng != null && (
@@ -187,17 +192,16 @@ export default function JobDetailPage() {
 
       <div className="card">
         <h2>Check In / Out</h2>
-        {!checkin && <button onClick={handleCheckIn}>Check In</button>}
-        {checkin && !checkin.checked_out_at && (
-          <>
-            <p style={{ fontSize: 14 }}>Checked in at {new Date(checkin.checked_in_at).toLocaleTimeString()}</p>
-            <button onClick={handleCheckOut}>Check Out</button>
-          </>
-        )}
-        {checkin?.checked_out_at && (
+        {!checkin && !isHistory && <button onClick={handleCheckIn}>Check In</button>}
+        {!checkin && isHistory && <p style={{ fontSize: 14, color: 'var(--muted)' }}>No check-in was recorded.</p>}
+        {checkin && (
           <p style={{ fontSize: 14 }}>
-            Checked out at {new Date(checkin.checked_out_at).toLocaleTimeString()}
+            Checked in at {new Date(checkin.checked_in_at).toLocaleTimeString()}
+            {checkin.checked_out_at && ` – checked out at ${new Date(checkin.checked_out_at).toLocaleTimeString()}`}
           </p>
+        )}
+        {checkin && !checkin.checked_out_at && !isHistory && (
+          <button onClick={handleCheckOut}>Check Out</button>
         )}
       </div>
 
@@ -206,7 +210,13 @@ export default function JobDetailPage() {
         {tasks.length === 0 && <p style={{ fontSize: 14, color: 'var(--muted)' }}>No tasks added yet.</p>}
         {tasks.map((task) => (
           <div key={task.id} className={`task-row ${task.completed ? 'done' : ''}`}>
-            <input type="checkbox" checked={task.completed} onChange={() => toggleTask(task)} style={{ width: 'auto', margin: 0 }} />
+            <input
+              type="checkbox"
+              checked={task.completed}
+              onChange={() => toggleTask(task)}
+              disabled={isHistory}
+              style={{ width: 'auto', margin: 0 }}
+            />
             <span>{task.description}</span>
           </div>
         ))}
@@ -214,8 +224,13 @@ export default function JobDetailPage() {
 
       <div className="card">
         <h2>Photos</h2>
-        <input type="file" accept="image/*" capture="environment" onChange={handlePhotoUpload} disabled={uploading} />
-        {uploading && <p style={{ fontSize: 13 }}>Uploading...</p>}
+        {!isHistory && (
+          <>
+            <input type="file" accept="image/*" capture="environment" onChange={handlePhotoUpload} disabled={uploading} />
+            {uploading && <p style={{ fontSize: 13 }}>Uploading...</p>}
+          </>
+        )}
+        {photos.length === 0 && <p style={{ fontSize: 14, color: 'var(--muted)' }}>No photos taken.</p>}
         <div className="photo-grid">
           {photos.map((p) => (
             <img key={p.id} src={p.signedUrl} alt="job" />

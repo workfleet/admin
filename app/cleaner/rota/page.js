@@ -237,7 +237,10 @@ export default function CleanerRota() {
 
       {past.length > 0 && (
         <>
-          <h2 style={{ marginTop: 24, marginBottom: 12 }}>Completed</h2>
+          <h2 style={{ marginTop: 24, marginBottom: 4 }}>History</h2>
+          <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
+            {past.length} job{past.length === 1 ? '' : 's'} completed · {worked.toFixed(1)}h worked
+          </p>
           {Object.entries(pastGroups).map(([date, dayJobs]) => (
             <DayGroup key={date} date={date} jobs={dayJobs} router={router} dim />
           ))}
