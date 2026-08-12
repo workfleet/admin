@@ -82,6 +82,19 @@ export async function POST(request) {
       subject = `${label} request from ${payload.cleanerName}`;
       text = `${payload.cleanerName} requested ${label.toLowerCase()} from ${payload.startDate} to ${payload.endDate}`
         + (payload.hours ? ` (${payload.hours} hours).` : '.');
+    } else if (payload.type === 'staff_invite') {
+      // Unlike every other type above, the recipient here is a raw
+      // client-supplied address (there's no account yet to resolve an
+      // email from) - restrict this one to admins so it can't be used
+      // as an open relay to spam arbitrary addresses.
+      const { data: profile } = await supabaseAdmin.from('profiles').select('role').eq('id', user.id).single();
+      if (profile?.role !== 'admin') return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+      if (!payload.email) return NextResponse.json({ skipped: 'no_email' });
+      to = [payload.email];
+      subject = 'Complete your CrewConnect Cleaning onboarding';
+      text = `Hi${payload.expectedName ? ' ' + payload.expectedName : ''},\n\n`
+        + `Welcome to CrewConnect Cleaning! Please complete your onboarding - your details, ID document, and signed contract - using the link below:\n\n${payload.link}\n\n`
+        + `This link expires in 14 days.`;
     } else if (payload.type === 'time_off_decided') {
       const email = await emailForUserId(payload.cleanerId);
       if (!email) return NextResponse.json({ skipped: 'no_email' });

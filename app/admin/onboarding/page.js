@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
+import { notify } from '../../../lib/notify';
 
 export default function AdminOnboarding() {
   const router = useRouter();
@@ -12,7 +13,9 @@ export default function AdminOnboarding() {
 
   const [showForm, setShowForm] = useState(false);
   const [expectedName, setExpectedName] = useState('');
+  const [expectedEmail, setExpectedEmail] = useState('');
   const [justCreatedLink, setJustCreatedLink] = useState(null);
+  const [justCreatedEmail, setJustCreatedEmail] = useState(null);
 
   const [expandedId, setExpandedId] = useState(null);
   const [docUrl, setDocUrl] = useState(null);
@@ -28,7 +31,7 @@ export default function AdminOnboarding() {
 
     const { data: invitesData } = await supabase
       .from('staff_invites')
-      .select('id, token, expected_name, status, created_at, expires_at')
+      .select('id, token, expected_name, email, status, created_at, expires_at')
       .order('created_at', { ascending: false });
 
     const { data: submissionsData } = await supabase
@@ -45,15 +48,19 @@ export default function AdminOnboarding() {
 
     const { data } = await supabase
       .from('staff_invites')
-      .insert({ expected_name: expectedName.trim() || null })
-      .select('id, token, expected_name, status, created_at, expires_at')
+      .insert({ expected_name: expectedName.trim() || null, email: expectedEmail.trim() })
+      .select('id, token, expected_name, email, status, created_at, expires_at')
       .single();
 
     if (data) {
       setInvites((prev) => [data, ...prev]);
-      setJustCreatedLink(`${window.location.origin}/onboard/${data.token}`);
+      const link = `${window.location.origin}/onboard/${data.token}`;
+      setJustCreatedLink(link);
+      setJustCreatedEmail(data.email);
+      notify({ type: 'staff_invite', email: data.email, link, expectedName: data.expected_name });
     }
     setExpectedName('');
+    setExpectedEmail('');
     setShowForm(false);
   };
 
@@ -128,24 +135,39 @@ export default function AdminOnboarding() {
                   autoFocus
                 />
               </div>
+              <div className="field">
+                <label className="field-label">Email</label>
+                <input
+                  type="email"
+                  value={expectedEmail}
+                  onChange={(e) => setExpectedEmail(e.target.value)}
+                  placeholder="e.g. sam@example.com"
+                  required
+                />
+              </div>
             </div>
             <div className="job-form-actions">
               <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
-              <button type="submit" className="btn-primary">Generate Link</button>
+              <button type="submit" className="btn-primary">Send Invite</button>
             </div>
           </form>
         </div>
       )}
 
       {justCreatedLink && (
-        <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ flex: 1, fontSize: 13.5, wordBreak: 'break-all' }}>{justCreatedLink}</div>
-          <button
-            className="btn-secondary"
-            onClick={() => copyLink(justCreatedLink.split('/onboard/')[1])}
-          >
-            Copy
-          </button>
+        <div className="card">
+          <p style={{ fontSize: 13.5, margin: '0 0 8px' }}>
+            Invite emailed to <strong>{justCreatedEmail}</strong>. You can also share the link directly:
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ flex: 1, fontSize: 13.5, wordBreak: 'break-all' }}>{justCreatedLink}</div>
+            <button
+              className="btn-secondary"
+              onClick={() => copyLink(justCreatedLink.split('/onboard/')[1])}
+            >
+              Copy
+            </button>
+          </div>
         </div>
       )}
 
@@ -163,6 +185,7 @@ export default function AdminOnboarding() {
                 <div>
                   <h2 style={{ margin: 0 }}>{invite.expected_name || submission?.full_name || 'Unnamed invite'}</h2>
                   <p className="job-time">
+                    {invite.email && `${invite.email} · `}
                     Created {new Date(invite.created_at).toLocaleDateString()}
                     {invite.status === 'pending' && !expired && ` · expires ${new Date(invite.expires_at).toLocaleDateString()}`}
                   </p>
