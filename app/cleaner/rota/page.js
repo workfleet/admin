@@ -52,6 +52,12 @@ function holidayHoursUsed(timeOffRequests) {
     .reduce((sum, t) => sum + (t.hours || 0), 0);
 }
 
+function holidayHoursPending(timeOffRequests) {
+  return timeOffRequests
+    .filter((t) => t.type === 'holiday' && t.status === 'pending')
+    .reduce((sum, t) => sum + (t.hours || 0), 0);
+}
+
 export default function CleanerRota() {
   const router = useRouter();
   const [jobs, setJobs] = useState([]);
@@ -62,6 +68,7 @@ export default function CleanerRota() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
 
   useEffect(() => {
     load();
@@ -92,14 +99,27 @@ export default function CleanerRota() {
 
   const submitRequest = async (e) => {
     e.preventDefault();
+    setFormError('');
     if (!form.startDate || !form.endDate) return;
-    if (form.endDate < form.startDate) { alert('End date must be on or after the start date.'); return; }
-    if (form.type === 'holiday' && (!form.hours || Number(form.hours) <= 0)) { alert('Enter how many hours of holiday you\'re requesting.'); return; }
+    if (form.endDate < form.startDate) { setFormError('End date must be on or after the start date.'); return; }
+
+    if (form.type === 'holiday') {
+      const requestedHours = Number(form.hours);
+      if (!form.hours || requestedHours <= 0) { setFormError("Enter how many hours of holiday you're requesting."); return; }
+
+      const available = hoursWorked(jobs) * HOLIDAY_ACCRUAL_RATE + adjustmentHours
+        - holidayHoursUsed(timeOff) - holidayHoursPending(timeOff);
+      if (requestedHours > available) {
+        setFormError(`You only have ${available.toFixed(1)} hours available to request (some may already be pending approval).`);
+        return;
+      }
+    }
+
     setSubmitting(true);
 
     const { data: { session } } = await supabase.auth.getSession();
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('time_off_requests')
       .insert({
         cleaner_id: session.user.id,
@@ -113,6 +133,12 @@ export default function CleanerRota() {
       .single();
 
     setSubmitting(false);
+
+    if (error) {
+      setFormError(error.message.replace(/^.*?:\s*/, ''));
+      return;
+    }
+
     if (data) {
       setTimeOff((prev) => [data, ...prev]);
       setForm(EMPTY_FORM);
@@ -140,7 +166,9 @@ export default function CleanerRota() {
   const worked = hoursWorked(jobs);
   const accrued = worked * HOLIDAY_ACCRUAL_RATE + adjustmentHours;
   const used = holidayHoursUsed(timeOff);
+  const pending = holidayHoursPending(timeOff);
   const remaining = accrued - used;
+  const available = remaining - pending;
 
   return (
     <div className="container">
@@ -149,20 +177,27 @@ export default function CleanerRota() {
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 style={{ margin: 0 }}>Time Off</h2>
-          <button className="btn-secondary" onClick={() => { setShowForm((s) => !s); setForm(EMPTY_FORM); }}>
+          <button className="btn-secondary" onClick={() => { setShowForm((s) => !s); setForm(EMPTY_FORM); setFormError(''); }}>
             {showForm ? 'Cancel' : '+ Request'}
           </button>
         </div>
 
         <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>
-          {remaining.toFixed(1)} of {accrued.toFixed(1)} holiday hours remaining
+          {available.toFixed(1)} hours available to request
         </p>
         <p style={{ fontSize: 12, color: 'var(--muted)', margin: '2px 0 0' }}>
-          Accrued at 12.07% of hours worked ({worked.toFixed(1)}h so far{adjustmentHours ? `, plus a ${adjustmentHours}h adjustment` : ''})
+          {accrued.toFixed(1)}h accrued at 12.07% of hours worked ({worked.toFixed(1)}h so far{adjustmentHours ? `, plus a ${adjustmentHours}h adjustment` : ''})
+          {used > 0 && ` · ${used.toFixed(1)}h taken`}
+          {pending > 0 && ` · ${pending.toFixed(1)}h pending approval`}
         </p>
 
         {showForm && (
           <form onSubmit={submitRequest} style={{ marginTop: 12 }}>
+            {formError && (
+              <p style={{ fontSize: 13, color: '#991b1b', background: '#fee2e2', padding: '8px 12px', borderRadius: 10, margin: '0 0 10px' }}>
+                {formError}
+              </p>
+            )}
             <label>Type</label>
             <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}>
               <option value="holiday">Holiday</option>
