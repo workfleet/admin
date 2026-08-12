@@ -106,8 +106,14 @@ export async function POST(request) {
       return NextResponse.json({ error: 'unknown_type' }, { status: 400 });
     }
 
-    await resend.emails.send({ from: EMAIL_FROM, to, subject, text });
-    return NextResponse.json({ sent: true });
+    // The SDK resolves (doesn't throw) on a rejected send - the failure
+    // shows up as `error` in the result, not as an exception.
+    const { data, error: sendError } = await resend.emails.send({ from: EMAIL_FROM, to, subject, text });
+    if (sendError) {
+      console.error('Resend rejected the email:', sendError);
+      return NextResponse.json({ error: sendError.message || 'send_rejected' }, { status: 502 });
+    }
+    return NextResponse.json({ sent: true, id: data?.id });
   } catch (err) {
     console.error('Email notify failed:', err.message);
     return NextResponse.json({ error: err.message }, { status: 500 });
