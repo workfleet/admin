@@ -110,6 +110,26 @@ export default function AdminRequests() {
 
   const confirmDecide = async (id) => {
     const target = timeOff.find((t) => t.id === id);
+
+    if (decidingStatus === 'approved' && target?.cleaner_id) {
+      const dayAfterEnd = new Date(target.end_date);
+      dayAfterEnd.setDate(dayAfterEnd.getDate() + 1);
+
+      const { data: existingJobs } = await supabase
+        .from('jobs')
+        .select('id, scheduled_at, properties(address)')
+        .eq('cleaner_id', target.cleaner_id)
+        .gte('scheduled_at', new Date(target.start_date).toISOString())
+        .lt('scheduled_at', dayAfterEnd.toISOString());
+
+      if (existingJobs && existingJobs.length > 0) {
+        const proceed = confirm(
+          `${target.profiles?.full_name || 'This cleaner'} already has ${existingJobs.length} job${existingJobs.length === 1 ? '' : 's'} scheduled during this period (first: ${existingJobs[0].properties?.address} on ${new Date(existingJobs[0].scheduled_at).toLocaleDateString()}). Approve anyway?`
+        );
+        if (!proceed) return;
+      }
+    }
+
     const { data: { session } } = await supabase.auth.getSession();
 
     const { data } = await supabase

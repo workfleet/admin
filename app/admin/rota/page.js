@@ -154,6 +154,7 @@ export default function AdminRota() {
         );
         if (!proceed) { setSavingJob(false); return; }
       }
+      if (!(await confirmTimeOffConflict(selectedJob.cleaner_id, scheduledAtDate))) { setSavingJob(false); return; }
     }
 
     const { data, error } = await supabase
@@ -255,6 +256,33 @@ export default function AdminRota() {
     ) || null;
   };
 
+  // Separate from findConflict (double-booking against other jobs) - this
+  // checks the job's date against the cleaner's own approved time off, so
+  // scheduling someone during their holiday gets caught instead of only
+  // being visible after the fact on their Rota.
+  const findTimeOffConflict = async (cleanerId, date) => {
+    if (!cleanerId) return null;
+    const dateStr = date.toISOString().slice(0, 10);
+
+    const { data } = await supabase
+      .from('time_off_requests')
+      .select('id, type, start_date, end_date')
+      .eq('cleaner_id', cleanerId)
+      .eq('status', 'approved')
+      .lte('start_date', dateStr)
+      .gte('end_date', dateStr);
+
+    return (data && data[0]) || null;
+  };
+
+  const confirmTimeOffConflict = async (cleanerId, date) => {
+    const conflict = await findTimeOffConflict(cleanerId, date);
+    if (!conflict) return true;
+    return confirm(
+      `This cleaner has approved ${conflict.type === 'holiday' ? 'holiday' : 'unavailability'} covering ${new Date(conflict.start_date).toLocaleDateString()}–${new Date(conflict.end_date).toLocaleDateString()}. Schedule anyway?`
+    );
+  };
+
   const assignCleaner = async (jobId, cleanerId) => {
     const job = jobs.find((j) => j.id === jobId) || selectedJob;
     if (cleanerId && job) {
@@ -265,6 +293,7 @@ export default function AdminRota() {
         );
         if (!proceed) return;
       }
+      if (!(await confirmTimeOffConflict(cleanerId, new Date(job.scheduled_at)))) return;
     }
 
     await supabase.from('jobs').update({ cleaner_id: cleanerId || null }).eq('id', jobId);
@@ -305,6 +334,7 @@ export default function AdminRota() {
         );
         if (!proceed) return;
       }
+      if (!(await confirmTimeOffConflict(formCleanerId, scheduledAtDate))) return;
     }
 
     // Reuse the property if this exact address already exists for the
