@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle } from 'lucide-react';
+import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, Menu, X } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
 const NAV_ITEMS = [
@@ -21,10 +21,15 @@ export default function AdminLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
   const [authorized, setAuthorized] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     checkAccess();
   }, []);
+
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [pathname]);
 
   const checkAccess = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -52,13 +57,28 @@ export default function AdminLayout({ children }) {
 
   return (
     <div className="admin-shell">
-      <aside className="sidebar">
+      <div className="admin-topbar">
+        <div className="admin-topbar-brand">
+          <div className="sidebar-logo">WF</div>
+          <div className="sidebar-brand-name">Workfleet</div>
+        </div>
+        <button type="button" className="admin-topbar-menu-btn" onClick={() => setDrawerOpen(true)} aria-label="Open menu">
+          <Menu size={20} />
+        </button>
+      </div>
+
+      {drawerOpen && <div className="admin-drawer-overlay" onClick={() => setDrawerOpen(false)} />}
+
+      <aside className={`sidebar ${drawerOpen ? 'sidebar-open' : ''}`}>
         <div className="sidebar-brand">
           <div className="sidebar-logo">WF</div>
           <div>
             <div className="sidebar-brand-name">Workfleet</div>
             <div className="sidebar-brand-sub">Operations</div>
           </div>
+          <button type="button" className="sidebar-close" onClick={() => setDrawerOpen(false)} aria-label="Close menu">
+            <X size={18} />
+          </button>
         </div>
 
         <nav className="sidebar-nav">
