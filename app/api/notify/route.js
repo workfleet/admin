@@ -68,6 +68,17 @@ export async function POST(request) {
       if (to.length === 0) return NextResponse.json({ skipped: 'no_email' });
       subject = 'New message from CrewConnect Cleaning';
       text = payload.body;
+    } else if (payload.type === 'staff_message') {
+      to = await adminEmails();
+      if (to.length === 0) return NextResponse.json({ skipped: 'no_email' });
+      subject = `New message from ${payload.cleanerName}`;
+      text = payload.body;
+    } else if (payload.type === 'admin_staff_reply') {
+      const email = await emailForUserId(payload.cleanerId);
+      if (!email) return NextResponse.json({ skipped: 'no_email' });
+      to = [email];
+      subject = 'New message from CrewConnect Cleaning';
+      text = payload.body;
     } else {
       return NextResponse.json({ error: 'unknown_type' }, { status: 400 });
     }
