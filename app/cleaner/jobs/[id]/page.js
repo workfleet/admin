@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { supabase } from '../../../../lib/supabaseClient';
+import { notify } from '../../../../lib/notify';
 
 // Leaflet touches `window` at load time, so it can't run during SSR.
 const PropertyMap = dynamic(() => import('../../../components/PropertyMap'), { ssr: false });
@@ -17,6 +18,11 @@ export default function JobDetailPage() {
   const [checkin, setCheckin] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [userId, setUserId] = useState(null);
+  const [extensionRequests, setExtensionRequests] = useState([]);
+  const [showExtensionForm, setShowExtensionForm] = useState(false);
+  const [requestMinutes, setRequestMinutes] = useState('');
+  const [requestReason, setRequestReason] = useState('');
+  const [submittingExtension, setSubmittingExtension] = useState(false);
 
   useEffect(() => {
     loadJob();
@@ -29,9 +35,16 @@ export default function JobDetailPage() {
 
     const { data: jobData } = await supabase
       .from('jobs')
-      .select('id, scheduled_at, status, properties(address, notes, lat, lng)')
+      .select('id, scheduled_at, status, duration_minutes, properties(address, notes, lat, lng)')
       .eq('id', id)
       .single();
+
+    const { data: extensionData } = await supabase
+      .from('time_extension_requests')
+      .select('*')
+      .eq('job_id', id)
+      .eq('cleaner_id', session.user.id)
+      .order('created_at', { ascending: false });
 
     const { data: taskData } = await supabase
       .from('tasks')
@@ -55,6 +68,7 @@ export default function JobDetailPage() {
     setTasks(taskData || []);
     setPhotos(await withSignedUrls(photoData || []));
     setCheckin(checkinData);
+    setExtensionRequests(extensionData || []);
   };
 
   // photos.url stores the job-photos storage path (not a public URL) since
@@ -144,6 +158,41 @@ export default function JobDetailPage() {
     setCheckin((c) => ({ ...c, checked_out_at: new Date().toISOString() }));
   };
 
+  const submitExtensionRequest = async (e) => {
+    e.preventDefault();
+    const minutes = Number(requestMinutes);
+    if (!minutes || minutes <= 0) return;
+    setSubmittingExtension(true);
+
+    const { data, error } = await supabase
+      .from('time_extension_requests')
+      .insert({
+        job_id: id,
+        cleaner_id: userId,
+        requested_minutes: minutes,
+        reason: requestReason.trim() || null,
+      })
+      .select('*')
+      .single();
+
+    setSubmittingExtension(false);
+    if (error || !data) return;
+
+    setExtensionRequests((prev) => [data, ...prev]);
+    setShowExtensionForm(false);
+    setRequestMinutes('');
+    setRequestReason('');
+
+    const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', userId).single();
+    notify({
+      type: 'time_extension_requested',
+      cleanerName: profile?.full_name || 'A cleaner',
+      address: job.properties?.address,
+      requestedMinutes: minutes,
+      reason: requestReason.trim() || null,
+    });
+  };
+
   const toggleTask = async (task) => {
     const updated = {
       completed: !task.completed,
@@ -217,6 +266,67 @@ export default function JobDetailPage() {
           <button onClick={handleCheckOut}>Check Out</button>
         )}
       </div>
+
+      {checkin && !checkin.checked_out_at && !isHistory && (
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 style={{ margin: 0 }}>Need More Time?</h2>
+            <button className="btn-secondary" onClick={() => setShowExtensionForm((s) => !s)}>
+              {showExtensionForm ? 'Cancel' : 'Request'}
+            </button>
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>
+            Currently allocated: {job.duration_minutes ? `${Math.floor(job.duration_minutes / 60)}h ${job.duration_minutes % 60}m`.replace('0h ', '') : '—'}
+          </p>
+
+          {showExtensionForm && (
+            <form onSubmit={submitExtensionRequest} style={{ marginTop: 12 }}>
+              <label>Extra minutes needed</label>
+              <input
+                type="number"
+                min="1"
+                value={requestMinutes}
+                onChange={(e) => setRequestMinutes(e.target.value)}
+                placeholder="e.g. 30"
+                required
+              />
+              <label>Reason (optional)</label>
+              <input
+                value={requestReason}
+                onChange={(e) => setRequestReason(e.target.value)}
+                placeholder="e.g. Extra mess in the kitchen"
+              />
+              <button type="submit" disabled={submittingExtension} style={{ width: '100%' }}>
+                {submittingExtension ? 'Sending...' : 'Send Request'}
+              </button>
+            </form>
+          )}
+
+          {extensionRequests.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              {extensionRequests.map((r) => (
+                <div key={r.id} className="task-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontSize: 13.5 }}>+{r.requested_minutes} min{r.reason ? ` — ${r.reason}` : ''}</span>
+                    <span className={`badge ${r.status === 'approved' ? 'completed' : r.status === 'declined' ? 'missed' : 'scheduled'}`}>
+                      {r.status === 'alternative_suggested' ? 'alternative suggested' : r.status}
+                    </span>
+                  </div>
+                  {r.status === 'alternative_suggested' && r.suggested_scheduled_at && (
+                    <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 4 }}>
+                      Suggested: {new Date(r.suggested_scheduled_at).toLocaleString()}
+                      {r.suggested_duration_minutes ? ` · ${r.suggested_duration_minutes} min` : ''}
+                    </div>
+                  )}
+                  {r.admin_note && (
+                    <div style={{ fontSize: 12.5, color: 'var(--muted)', fontStyle: 'italic', marginTop: 4 }}>"{r.admin_note}"</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="card">
         <h2>To-Do List</h2>

@@ -15,7 +15,7 @@ function holidayHoursUsed(cleanerId, timeOffRequests) {
 
 export default function AdminRequests() {
   const router = useRouter();
-  const [section, setSection] = useState('requests'); // requests | timeoff
+  const [section, setSection] = useState('requests'); // requests | timeoff | extensions
   const [loading, setLoading] = useState(true);
   const [holidayBalances, setHolidayBalances] = useState({}); // cleanerId -> accrued hours
 
@@ -32,6 +32,17 @@ export default function AdminRequests() {
   const [decidingStatus, setDecidingStatus] = useState(null);
   const [adminNote, setAdminNote] = useState('');
 
+  // time extension requests
+  const [extensions, setExtensions] = useState([]);
+  const [extensionFilter, setExtensionFilter] = useState('pending'); // pending | decided | all
+  const [decidingExtensionId, setDecidingExtensionId] = useState(null);
+  const [decidingExtensionAction, setDecidingExtensionAction] = useState(null); // approved | declined | alternative_suggested
+  const [extensionAdminNote, setExtensionAdminNote] = useState('');
+  const [altDate, setAltDate] = useState('');
+  const [altHour, setAltHour] = useState('09');
+  const [altMinute, setAltMinute] = useState('00');
+  const [altDuration, setAltDuration] = useState(120);
+
   useEffect(() => {
     load();
   }, []);
@@ -40,7 +51,7 @@ export default function AdminRequests() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/'); return; }
 
-    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, { data: assignmentsData }] = await Promise.all([
+    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, { data: assignmentsData }, { data: extensionsData }] = await Promise.all([
       supabase
         .from('staff_requests')
         .select('id, type, description, status, created_at, resolved_at, resolution_note, cleaner_id, profiles(full_name), jobs(scheduled_at, properties(address))')
@@ -51,6 +62,10 @@ export default function AdminRequests() {
         .order('created_at', { ascending: false }),
       supabase.from('profiles').select('id, holiday_adjustment_hours').eq('role', 'cleaner'),
       supabase.from('job_assignments').select('cleaner_id, jobs(id, status, duration_minutes)'),
+      supabase
+        .from('time_extension_requests')
+        .select('id, job_id, requested_minutes, reason, status, admin_note, suggested_scheduled_at, suggested_duration_minutes, created_at, cleaner_id, profiles(full_name), jobs(scheduled_at, duration_minutes, properties(address))')
+        .order('created_at', { ascending: false }),
     ]);
 
     // A job's duration is split evenly across everyone assigned to it.
@@ -70,6 +85,7 @@ export default function AdminRequests() {
     setHolidayBalances(balanceMap);
     setRequests(requestsData || []);
     setTimeOff(timeOffData || []);
+    setExtensions(extensionsData || []);
     setLoading(false);
   };
 
@@ -164,11 +180,76 @@ export default function AdminRequests() {
     setDecidingId(null);
   };
 
+  const startDecideExtension = (id, action) => {
+    setDecidingExtensionId(id);
+    setDecidingExtensionAction(action);
+    setExtensionAdminNote('');
+    const target = extensions.find((r) => r.id === id);
+    const d = target?.jobs?.scheduled_at ? new Date(target.jobs.scheduled_at) : new Date();
+    setAltDate(d.toISOString().slice(0, 10));
+    setAltHour(String(d.getHours()).padStart(2, '0'));
+    setAltMinute(String(d.getMinutes() - (d.getMinutes() % 15)).padStart(2, '0'));
+    setAltDuration(target?.jobs?.duration_minutes || 120);
+  };
+
+  const confirmDecideExtension = async (id) => {
+    const target = extensions.find((r) => r.id === id);
+    if (!target) return;
+
+    const updates = {
+      status: decidingExtensionAction,
+      admin_note: extensionAdminNote.trim() || null,
+    };
+
+    if (decidingExtensionAction === 'alternative_suggested') {
+      updates.suggested_scheduled_at = new Date(`${altDate}T${altHour}:${altMinute}`).toISOString();
+      updates.suggested_duration_minutes = altDuration;
+    }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    updates.decided_by = session.user.id;
+    updates.decided_at = new Date().toISOString();
+
+    const { data } = await supabase
+      .from('time_extension_requests')
+      .update(updates)
+      .eq('id', id)
+      .select('id, status, admin_note, suggested_scheduled_at, suggested_duration_minutes')
+      .single();
+
+    if (!data) { setDecidingExtensionId(null); return; }
+
+    // Approving actually extends the job - not just marking the request
+    // approved - by adding the requested minutes onto its current duration.
+    if (decidingExtensionAction === 'approved') {
+      const newDuration = (target.jobs?.duration_minutes || 0) + target.requested_minutes;
+      await supabase.from('jobs').update({ duration_minutes: newDuration }).eq('id', target.job_id);
+    }
+
+    setExtensions((prev) => prev.map((r) => (r.id === id ? { ...r, ...data } : r)));
+
+    notify({
+      type: 'time_extension_decided',
+      cleanerId: target.cleaner_id,
+      status: data.status,
+      address: target.jobs?.properties?.address,
+      requestedMinutes: target.requested_minutes,
+      suggestedScheduledAt: data.suggested_scheduled_at,
+      suggestedDuration: data.suggested_duration_minutes,
+      note: data.admin_note,
+    });
+
+    setDecidingExtensionId(null);
+  };
+
   const filteredRequests = requests.filter((r) => filter === 'all' || r.status === filter);
   const openCount = requests.filter((r) => r.status === 'open').length;
 
   const filteredTimeOff = timeOff.filter((t) => timeOffFilter === 'all' || t.status === timeOffFilter);
   const pendingCount = timeOff.filter((t) => t.status === 'pending').length;
+
+  const filteredExtensions = extensions.filter((r) => extensionFilter === 'all' || (extensionFilter === 'decided' ? r.status !== 'pending' : r.status === extensionFilter));
+  const pendingExtensionCount = extensions.filter((r) => r.status === 'pending').length;
 
   if (loading) return <div className="page-inner">Loading...</div>;
 
@@ -177,7 +258,7 @@ export default function AdminRequests() {
       <div className="page-header-row">
         <div>
           <h1>Requests</h1>
-          <p className="page-subtitle">Kit top-ups, issues, and time off requested by staff</p>
+          <p className="page-subtitle">Kit top-ups, issues, time off, and extra time requested by staff</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className={section === 'requests' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('requests')}>
@@ -185,6 +266,9 @@ export default function AdminRequests() {
           </button>
           <button className={section === 'timeoff' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('timeoff')}>
             Time Off ({pendingCount})
+          </button>
+          <button className={section === 'extensions' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('extensions')}>
+            Time Extensions ({pendingExtensionCount})
           </button>
         </div>
       </div>
@@ -302,6 +386,100 @@ export default function AdminRequests() {
                       <button className="btn-secondary" onClick={() => setDecidingId(null)}>Cancel</button>
                       <button className="btn-primary" onClick={() => confirmDecide(t.id)}>
                         Confirm {decidingStatus === 'approved' ? 'Approval' : 'Decline'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {section === 'extensions' && (
+        <>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <button className={extensionFilter === 'pending' ? 'btn-primary' : 'btn-secondary'} onClick={() => setExtensionFilter('pending')}>Pending</button>
+            <button className={extensionFilter === 'decided' ? 'btn-primary' : 'btn-secondary'} onClick={() => setExtensionFilter('decided')}>Decided</button>
+            <button className={extensionFilter === 'all' ? 'btn-primary' : 'btn-secondary'} onClick={() => setExtensionFilter('all')}>All</button>
+          </div>
+
+          {filteredExtensions.length === 0 && <p className="empty-state">Nothing here.</p>}
+
+          <div className="job-list">
+            {filteredExtensions.map((r) => (
+              <div key={r.id} className="card job-card" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                  <div>
+                    <h2>+{r.requested_minutes} minutes</h2>
+                    <p style={{ fontSize: 14, margin: '4px 0' }}>
+                      {r.jobs?.properties?.address || 'Job no longer exists'}
+                      {r.jobs?.scheduled_at && ` · currently ${r.jobs.duration_minutes} min, starts ${new Date(r.jobs.scheduled_at).toLocaleString()}`}
+                    </p>
+                    {r.reason && <p style={{ fontSize: 13.5, color: 'var(--muted)', margin: '0 0 4px' }}>{r.reason}</p>}
+                    <p className="job-time">
+                      {r.profiles?.full_name || 'Unknown cleaner'} · {new Date(r.created_at).toLocaleString()}
+                    </p>
+                    <span className={`badge ${r.status === 'approved' ? 'completed' : r.status === 'declined' ? 'missed' : r.status === 'alternative_suggested' ? 'in_progress' : 'scheduled'}`}>
+                      {r.status === 'alternative_suggested' ? 'alternative suggested' : r.status}
+                    </span>
+                    {r.status === 'alternative_suggested' && r.suggested_scheduled_at && (
+                      <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 6 }}>
+                        Suggested: {new Date(r.suggested_scheduled_at).toLocaleString()} · {r.suggested_duration_minutes} min
+                      </p>
+                    )}
+                    {r.status !== 'pending' && r.admin_note && (
+                      <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 6, fontStyle: 'italic' }}>"{r.admin_note}"</p>
+                    )}
+                  </div>
+                  {r.status === 'pending' && r.jobs && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, height: 'fit-content', justifyContent: 'flex-end' }}>
+                      <button className="btn-secondary" onClick={() => startDecideExtension(r.id, 'declined')}>Decline</button>
+                      <button className="btn-secondary" onClick={() => startDecideExtension(r.id, 'alternative_suggested')}>Suggest Alternative</button>
+                      <button className="btn-primary" onClick={() => startDecideExtension(r.id, 'approved')}>Approve</button>
+                    </div>
+                  )}
+                </div>
+
+                {decidingExtensionId === r.id && (
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--hairline)' }}>
+                    {decidingExtensionAction === 'alternative_suggested' && (
+                      <div className="field-row" style={{ marginBottom: 10 }}>
+                        <div className="field">
+                          <label className="field-label">New date &amp; time</label>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <input type="date" value={altDate} onChange={(e) => setAltDate(e.target.value)} style={{ marginBottom: 0 }} />
+                            <select value={altHour} onChange={(e) => setAltHour(e.target.value)} style={{ marginBottom: 0 }}>
+                              {Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0')).map((h) => (
+                                <option key={h} value={h}>{h}:00</option>
+                              ))}
+                            </select>
+                            <select value={altMinute} onChange={(e) => setAltMinute(e.target.value)} style={{ marginBottom: 0 }}>
+                              {['00', '15', '30', '45'].map((m) => <option key={m} value={m}>:{m}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="field">
+                          <label className="field-label">Duration (min)</label>
+                          <input type="number" min="15" step="15" value={altDuration} onChange={(e) => setAltDuration(Number(e.target.value))} />
+                        </div>
+                      </div>
+                    )}
+                    <label>
+                      {decidingExtensionAction === 'approved' ? 'Approve' : decidingExtensionAction === 'declined' ? 'Decline' : 'Suggest alternative'} — note (optional)
+                    </label>
+                    <textarea
+                      value={extensionAdminNote}
+                      onChange={(e) => setExtensionAdminNote(e.target.value)}
+                      placeholder={decidingExtensionAction === 'approved' ? 'e.g. No problem, take the time you need' : "e.g. Can't extend today, but here's another slot"}
+                      rows={2}
+                      autoFocus
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10, background: '#f8fafc', fontSize: 14, fontFamily: 'inherit', marginBottom: 8, resize: 'vertical' }}
+                    />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button className="btn-secondary" onClick={() => setDecidingExtensionId(null)}>Cancel</button>
+                      <button className="btn-primary" onClick={() => confirmDecideExtension(r.id)}>
+                        Confirm {decidingExtensionAction === 'approved' ? 'Approval' : decidingExtensionAction === 'declined' ? 'Decline' : 'Suggestion'}
                       </button>
                     </div>
                   </div>

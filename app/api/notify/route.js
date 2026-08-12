@@ -102,6 +102,26 @@ export async function POST(request) {
       subject = `Your time off request was ${payload.status}`;
       text = `Your request for ${payload.startDate} to ${payload.endDate} was ${payload.status}.`
         + (payload.note ? `\n\nNote from admin: ${payload.note}` : '');
+    } else if (payload.type === 'time_extension_requested') {
+      to = await adminEmails();
+      if (to.length === 0) return NextResponse.json({ skipped: 'no_email' });
+      subject = `${payload.cleanerName} needs more time at ${payload.address}`;
+      text = `${payload.cleanerName} requested ${payload.requestedMinutes} more minutes at ${payload.address}.`
+        + (payload.reason ? `\n\nReason: ${payload.reason}` : '');
+    } else if (payload.type === 'time_extension_decided') {
+      const email = await emailForUserId(payload.cleanerId);
+      if (!email) return NextResponse.json({ skipped: 'no_email' });
+      to = [email];
+      if (payload.status === 'alternative_suggested') {
+        subject = 'Admin suggested a different time for your job';
+        text = `Instead of the extra time you requested at ${payload.address}, admin suggested: `
+          + `${new Date(payload.suggestedScheduledAt).toLocaleString()} (${payload.suggestedDuration} minutes).`
+          + (payload.note ? `\n\nNote from admin: ${payload.note}` : '');
+      } else {
+        subject = `Your request for more time was ${payload.status}`;
+        text = `Your request for ${payload.requestedMinutes} more minutes at ${payload.address} was ${payload.status}.`
+          + (payload.note ? `\n\nNote from admin: ${payload.note}` : '');
+      }
     } else {
       return NextResponse.json({ error: 'unknown_type' }, { status: 400 });
     }
