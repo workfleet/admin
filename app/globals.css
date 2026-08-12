@@ -849,15 +849,16 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
   left: 3px;
   right: 3px;
   min-height: 44px;
-  background: var(--brand-accent-soft);
-  color: var(--brand-primary-dark);
+  /* Default = "scheduled" (coming up) - blue. */
+  background: #dbeafe;
+  color: #1e40af;
   border-radius: var(--radius-sm);
   padding: 4px 6px;
   font-size: 11px;
   cursor: pointer;
   overflow: hidden;
   box-shadow: none;
-  border-left: 3px solid var(--brand-primary);
+  border-left: 3px solid #1e40af;
   transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
 
@@ -867,14 +868,22 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
 }
 
 .calendar-job.in_progress {
-  background: #dbeafe;
-  border-left-color: #1e40af;
+  background: #ffedd5;
+  color: #9a3412;
+  border-left-color: #c2410c;
 }
 
 .calendar-job.completed {
   background: #d1fae5;
+  color: #065f46;
   border-left-color: #065f46;
   opacity: 0.75;
+}
+
+.calendar-job.missed {
+  background: #fee2e2;
+  color: #991b1b;
+  border-left-color: #991b1b;
 }
 
 .calendar-job.selected {
