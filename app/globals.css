@@ -583,6 +583,23 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
   color: var(--ink);
 }
 
+.dismiss-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dismiss-btn:hover {
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--ink);
+}
+
 .job-form-body {
   display: flex;
   flex-direction: column;

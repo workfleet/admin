@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { X } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
+import { purgeOldNotifications } from '../../lib/notifications';
 
 export default function CleanerDashboard() {
   const router = useRouter();
@@ -34,10 +37,13 @@ export default function CleanerDashboard() {
       .eq('cleaner_id', session.user.id)
       .order('scheduled_at', { ascending: true });
 
+    await purgeOldNotifications(session.user.id);
+
     const { data: notifData } = await supabase
       .from('notifications')
       .select('id, message, read, created_at')
       .eq('user_id', session.user.id)
+      .is('dismissed_at', null)
       .order('created_at', { ascending: false })
       .limit(5);
 
@@ -60,6 +66,11 @@ export default function CleanerDashboard() {
     setNotifications(notifData || []);
     setMyRequests(requestsData || []);
     setLoading(false);
+  };
+
+  const dismissNotification = async (id) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    await supabase.from('notifications').update({ dismissed_at: new Date().toISOString() }).eq('id', id);
   };
 
   const openRequestForm = (type) => {
@@ -99,13 +110,28 @@ export default function CleanerDashboard() {
 
   return (
     <div className="container">
-      <h1>My Jobs</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h1>My Jobs</h1>
+        <Link href="/cleaner/notifications" style={{ fontSize: 13, fontWeight: 600, color: 'var(--brand-primary)', textDecoration: 'none' }}>
+          Notifications
+        </Link>
+      </div>
 
       {notifications.length > 0 && (
         <div className="card" style={{ background: '#fffbeb' }}>
           <h2>Notifications</h2>
           {notifications.map((n) => (
-            <p key={n.id} style={{ fontSize: 14, margin: '4px 0' }}>{n.message}</p>
+            <div key={n.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, margin: '4px 0' }}>
+              <p style={{ fontSize: 14, margin: 0 }}>{n.message}</p>
+              <button
+                type="button"
+                className="dismiss-btn"
+                onClick={() => dismissNotification(n.id)}
+                aria-label="Dismiss notification"
+              >
+                <X size={14} />
+              </button>
+            </div>
           ))}
         </div>
       )}
