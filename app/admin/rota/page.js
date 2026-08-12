@@ -19,7 +19,25 @@ const QUICK_DURATIONS = [30, 60, 90, 120, 180, 240];
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => h);
 const MINUTE_OPTIONS = [0, 15, 30, 45];
 
-const JOB_SELECT = 'id, scheduled_at, status, duration_minutes, notes, properties(address, clients(name)), job_assignments(cleaner_id, profiles(full_name))';
+const JOB_SELECT = 'id, scheduled_at, status, duration_minutes, notes, series_id, properties(address, clients(name)), job_assignments(cleaner_id, profiles(full_name))';
+
+// Sanity cap against a mistake (e.g. daily "forever") generating an
+// unbounded number of jobs in one go.
+const MAX_OCCURRENCES = 104;
+
+function generateOccurrenceDates(start, recurrenceType, intervalCount, endMode, endDate, count) {
+  const dates = [];
+  const current = new Date(start);
+  while (dates.length < MAX_OCCURRENCES) {
+    dates.push(new Date(current));
+    if (endMode === 'count' && dates.length >= count) break;
+    if (recurrenceType === 'daily') current.setDate(current.getDate() + intervalCount);
+    else if (recurrenceType === 'weekly') current.setDate(current.getDate() + intervalCount * 7);
+    else if (recurrenceType === 'monthly') current.setMonth(current.getMonth() + intervalCount);
+    if (endMode === 'date' && current > endDate) break;
+  }
+  return dates;
+}
 
 function formatHour12(h) {
   const period = h < 12 ? 'AM' : 'PM';
@@ -91,6 +109,12 @@ export default function AdminRota() {
   const [duration, setDuration] = useState(120);
   const [useCustomDuration, setUseCustomDuration] = useState(false);
   const [formCleanerIds, setFormCleanerIds] = useState([]);
+  const [repeatJob, setRepeatJob] = useState(false);
+  const [recurrenceType, setRecurrenceType] = useState('weekly');
+  const [recurrenceInterval, setRecurrenceInterval] = useState(1);
+  const [recurrenceEndMode, setRecurrenceEndMode] = useState('count');
+  const [recurrenceCount, setRecurrenceCount] = useState(8);
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState('');
 
   const [jobTasks, setJobTasks] = useState([]);
   const [newTaskText, setNewTaskText] = useState('');
@@ -327,6 +351,32 @@ export default function AdminRota() {
     setSelectedJob((sj) => (sj && sj.id === jobId ? withoutAssignment(sj) : sj));
   };
 
+  const deleteJob = async (job) => {
+    if (!confirm(`Delete this job at ${job.properties?.address} on ${new Date(job.scheduled_at).toLocaleString()}? This can't be undone.`)) return;
+
+    await supabase.from('jobs').delete().eq('id', job.id);
+    setJobs((prev) => prev.filter((j) => j.id !== job.id));
+    setSelectedJob(null);
+  };
+
+  // Deletes this occurrence and every future one sharing the same
+  // series_id - past occurrences (already happened) are left alone.
+  const deleteFutureInSeries = async (job) => {
+    if (!job.series_id) return;
+    if (!confirm('Delete this and every future job in this recurring series? Past occurrences will be kept.')) return;
+
+    const { data: deleted } = await supabase
+      .from('jobs')
+      .delete()
+      .eq('series_id', job.series_id)
+      .gte('scheduled_at', job.scheduled_at)
+      .select('id');
+
+    const deletedIds = new Set((deleted || []).map((d) => d.id));
+    setJobs((prev) => prev.filter((j) => !deletedIds.has(j.id)));
+    setSelectedJob(null);
+  };
+
   const resetForm = () => {
     setClientId('');
     setPropertyAddress('');
@@ -337,26 +387,52 @@ export default function AdminRota() {
     setDuration(120);
     setUseCustomDuration(false);
     setFormCleanerIds([]);
+    setRepeatJob(false);
+    setRecurrenceType('weekly');
+    setRecurrenceInterval(1);
+    setRecurrenceEndMode('count');
+    setRecurrenceCount(8);
+    setRecurrenceEndDate('');
     setShowForm(false);
   };
 
   const createJob = async (e) => {
     e.preventDefault();
     if (!clientId || !propertyAddress.trim() || !jobDate || !jobHour) return;
+    if (repeatJob && recurrenceEndMode === 'date' && !recurrenceEndDate) return;
 
     const jobTime = `${jobHour}:${jobMinute}`;
-    const scheduledAtDate = new Date(`${jobDate}T${jobTime}`);
-    const scheduledAt = scheduledAtDate.toISOString();
+    const firstDate = new Date(`${jobDate}T${jobTime}`);
 
+    const occurrenceDates = repeatJob
+      ? generateOccurrenceDates(
+          firstDate,
+          recurrenceType,
+          recurrenceInterval,
+          recurrenceEndMode,
+          recurrenceEndMode === 'date' ? new Date(`${recurrenceEndDate}T23:59`) : null,
+          recurrenceCount
+        )
+      : [firstDate];
+
+    // One combined confirmation across every occurrence x assigned
+    // cleaner, rather than a popup per occurrence.
+    let conflictCount = 0;
+    let timeOffConflictCount = 0;
     for (const cid of formCleanerIds) {
-      const conflict = await findConflict(cid, scheduledAtDate, duration, null);
-      if (conflict) {
-        const proceed = confirm(
-          `${cleaners.find((c) => c.id === cid)?.full_name || 'This cleaner'} is already booked at ${conflict.properties?.address} around this time (${new Date(conflict.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}). Create this job anyway?`
-        );
-        if (!proceed) return;
+      for (const d of occurrenceDates) {
+        if (await findConflict(cid, d, duration, null)) conflictCount++;
+        if (await findTimeOffConflict(cid, d)) timeOffConflictCount++;
       }
-      if (!(await confirmTimeOffConflict(cid, scheduledAtDate))) return;
+    }
+    if (conflictCount > 0 || timeOffConflictCount > 0) {
+      const parts = [];
+      if (conflictCount > 0) parts.push(`${conflictCount} double-booking${conflictCount === 1 ? '' : 's'}`);
+      if (timeOffConflictCount > 0) parts.push(`${timeOffConflictCount} clash${timeOffConflictCount === 1 ? '' : 'es'} with approved time off`);
+      const proceed = confirm(
+        `This will create ${occurrenceDates.length} job${occurrenceDates.length === 1 ? '' : 's'}, including ${parts.join(' and ')}. Create anyway?`
+      );
+      if (!proceed) return;
     }
 
     // Reuse the property if this exact address already exists for the
@@ -379,33 +455,61 @@ export default function AdminRota() {
       setProperties((prev) => [...prev, newProperty]);
     }
 
-    const { data } = await supabase
+    let seriesId = null;
+    if (repeatJob && occurrenceDates.length > 1) {
+      const { data: { session } } = await supabase.auth.getSession();
+      const { data: seriesRow } = await supabase
+        .from('job_series')
+        .insert({
+          property_id: property.id,
+          duration_minutes: duration,
+          recurrence_type: recurrenceType,
+          interval_count: recurrenceInterval,
+          created_by: session.user.id,
+        })
+        .select('id')
+        .single();
+      seriesId = seriesRow?.id || null;
+    }
+
+    const { data: insertedJobs } = await supabase
       .from('jobs')
-      .insert({
+      .insert(occurrenceDates.map((d) => ({
         property_id: property.id,
-        scheduled_at: scheduledAt,
+        scheduled_at: d.toISOString(),
         duration_minutes: duration,
-      })
-      .select('id, scheduled_at, status, duration_minutes, properties(address, clients(name))')
-      .single();
+        series_id: seriesId,
+      })))
+      .select('id, scheduled_at, status, duration_minutes, series_id, properties(address, clients(name))');
 
-    if (data) {
-      let assignments = [];
+    if (insertedJobs && insertedJobs.length > 0) {
+      const assignmentsByJob = {};
       if (formCleanerIds.length > 0) {
-        const { data: assignmentRows } = await supabase
+        const { data: allAssignments } = await supabase
           .from('job_assignments')
-          .insert(formCleanerIds.map((cid) => ({ job_id: data.id, cleaner_id: cid })))
-          .select('cleaner_id, profiles(full_name)');
-        assignments = assignmentRows || [];
+          .insert(insertedJobs.flatMap((j) => formCleanerIds.map((cid) => ({ job_id: j.id, cleaner_id: cid }))))
+          .select('job_id, cleaner_id, profiles(full_name)');
+
+        (allAssignments || []).forEach((a) => {
+          if (!assignmentsByJob[a.job_id]) assignmentsByJob[a.job_id] = [];
+          assignmentsByJob[a.job_id].push(a);
+        });
       }
 
-      const fullJob = { ...data, job_assignments: assignments };
-      const jd = new Date(data.scheduled_at);
-      if (jd >= weekStart && jd < addDays(weekStart, 7)) {
-        setJobs((prev) => [...prev, fullJob].sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at)));
+      const fullJobs = insertedJobs.map((j) => ({ ...j, job_assignments: assignmentsByJob[j.id] || [] }));
+      const inWeek = fullJobs.filter((j) => {
+        const jd = new Date(j.scheduled_at);
+        return jd >= weekStart && jd < addDays(weekStart, 7);
+      });
+      if (inWeek.length > 0) {
+        setJobs((prev) => [...prev, ...inWeek].sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at)));
       }
+
+      // One notification per cleaner for the series, not one per
+      // occurrence - avoids spamming e.g. 8 "new shift" alerts at once.
+      const firstJob = insertedJobs[0];
       formCleanerIds.forEach((cid) => {
-        notify({ type: 'shift_assigned', cleanerId: cid, address: data.properties?.address, scheduledAt: data.scheduled_at });
+        notify({ type: 'shift_assigned', cleanerId: cid, address: firstJob.properties?.address, scheduledAt: firstJob.scheduled_at });
       });
     }
     resetForm();
@@ -636,6 +740,77 @@ export default function AdminRota() {
                   ))}
                 </div>
               </div>
+
+              <div className="field">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, textTransform: 'none', fontWeight: 500, fontSize: 14, color: 'var(--ink)' }}>
+                  <input
+                    type="checkbox"
+                    checked={repeatJob}
+                    onChange={(e) => setRepeatJob(e.target.checked)}
+                    style={{ width: 'auto', margin: 0 }}
+                  />
+                  Repeat this job
+                </label>
+
+                {repeatJob && (
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--hairline)' }}>
+                    <div className="field-row">
+                      <div className="field">
+                        <label className="field-label">Frequency</label>
+                        <select value={recurrenceType} onChange={(e) => setRecurrenceType(e.target.value)}>
+                          <option value="daily">Daily</option>
+                          <option value="weekly">Weekly</option>
+                          <option value="monthly">Monthly</option>
+                        </select>
+                      </div>
+                      <div className="field">
+                        <label className="field-label">
+                          Every {recurrenceInterval > 1 ? `${recurrenceInterval} ` : ''}
+                          {recurrenceType === 'daily' ? `day${recurrenceInterval > 1 ? 's' : ''}` : recurrenceType === 'weekly' ? `week${recurrenceInterval > 1 ? 's' : ''}` : `month${recurrenceInterval > 1 ? 's' : ''}`}
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="52"
+                          value={recurrenceInterval}
+                          onChange={(e) => setRecurrenceInterval(Math.max(1, Number(e.target.value)))}
+                        />
+                      </div>
+                    </div>
+
+                    <label className="field-label">Ends</label>
+                    <div className="field-row">
+                      <div className="field">
+                        <select value={recurrenceEndMode} onChange={(e) => setRecurrenceEndMode(e.target.value)}>
+                          <option value="count">After a number of times</option>
+                          <option value="date">On a date</option>
+                        </select>
+                      </div>
+                      <div className="field">
+                        {recurrenceEndMode === 'count' ? (
+                          <input
+                            type="number"
+                            min="1"
+                            max={MAX_OCCURRENCES}
+                            value={recurrenceCount}
+                            onChange={(e) => setRecurrenceCount(Math.max(1, Number(e.target.value)))}
+                          />
+                        ) : (
+                          <input
+                            type="date"
+                            value={recurrenceEndDate}
+                            onChange={(e) => setRecurrenceEndDate(e.target.value)}
+                            required={repeatJob && recurrenceEndMode === 'date'}
+                          />
+                        )}
+                      </div>
+                    </div>
+                    <p style={{ fontSize: 12, color: 'var(--muted)', margin: 0 }}>
+                      Capped at {MAX_OCCURRENCES} occurrences. Each one can be moved, reassigned, or deleted individually afterwards.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="job-form-actions">
@@ -717,7 +892,20 @@ export default function AdminRota() {
             <h2 style={{ margin: 0 }}>{selectedJob.properties?.address}</h2>
             <button className="btn-secondary" onClick={() => setSelectedJob(null)}>Close</button>
           </div>
-          <span className={`badge ${selectedJob.status}`}>{selectedJob.status.replace('_', ' ')}</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <span className={`badge ${selectedJob.status}`}>{selectedJob.status.replace('_', ' ')}</span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {selectedJob.series_id && (
+                <button className="btn-secondary" onClick={() => deleteFutureInSeries(selectedJob)}>
+                  Delete this + future in series
+                </button>
+              )}
+              <button className="btn-secondary" onClick={() => deleteJob(selectedJob)}>Delete Job</button>
+            </div>
+          </div>
+          {selectedJob.series_id && (
+            <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 6 }}>Part of a recurring series.</p>
+          )}
 
           <div style={{ marginTop: 14 }}>
             <div className="field-row">
