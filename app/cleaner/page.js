@@ -42,7 +42,7 @@ export default function CleanerDashboard() {
 
     const { data: requestsData } = await supabase
       .from('staff_requests')
-      .select('id, type, description, status, created_at')
+      .select('id, type, description, status, created_at, resolution_note')
       .order('created_at', { ascending: false })
       .limit(10);
 
@@ -73,7 +73,7 @@ export default function CleanerDashboard() {
         type: requestType,
         description: requestDescription.trim(),
       })
-      .select('id, type, description, status, created_at')
+      .select('id, type, description, status, created_at, resolution_note')
       .single();
 
     setSubmittingRequest(false);
@@ -176,14 +176,21 @@ export default function CleanerDashboard() {
         <div className="card">
           <h2>Your recent requests</h2>
           {myRequests.map((r) => (
-            <div key={r.id} className="task-row">
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>
-                  {r.type === 'kit_topup' ? 'Kit top-up' : 'Issue'}
+            <div key={r.id} className="task-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>
+                    {r.type === 'kit_topup' ? 'Kit top-up' : 'Issue'}
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--muted)' }}>{r.description}</div>
                 </div>
-                <div style={{ fontSize: 13, color: 'var(--muted)' }}>{r.description}</div>
+                <span className={`badge ${r.status === 'resolved' ? 'completed' : 'scheduled'}`}>{r.status}</span>
               </div>
-              <span className={`badge ${r.status === 'resolved' ? 'completed' : 'scheduled'}`}>{r.status}</span>
+              {r.status === 'resolved' && r.resolution_note && (
+                <div style={{ fontSize: 12.5, color: 'var(--muted)', fontStyle: 'italic', marginTop: 4 }}>
+                  "{r.resolution_note}"
+                </div>
+              )}
             </div>
           ))}
         </div>
