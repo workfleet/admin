@@ -17,7 +17,7 @@ export default function AdminDashboard() {
   const router = useRouter();
   const [stats, setStats] = useState({ clients: 0, properties: 0, cleaners: 0, jobsThisWeek: 0, unassigned: 0 });
   const [todaysJobs, setTodaysJobs] = useState([]);
-  const [notifications, setNotifications] = useState([]);
+  const [todos, setTodos] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -28,14 +28,12 @@ export default function AdminDashboard() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/'); return; }
 
-    const { data: notifData } = await supabase
-      .from('notifications')
-      .select('id, message, read, created_at')
-      .eq('user_id', session.user.id)
-      .eq('read', false)
-      .order('created_at', { ascending: false })
-      .limit(10);
-    setNotifications(notifData || []);
+    const { data: todoData } = await supabase
+      .from('staff_requests')
+      .select('id, type, description, created_at, profiles(full_name)')
+      .eq('status', 'open')
+      .order('created_at', { ascending: true });
+    setTodos(todoData || []);
 
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
@@ -77,9 +75,12 @@ export default function AdminDashboard() {
     setLoading(false);
   };
 
-  const dismissNotification = async (id) => {
-    await supabase.from('notifications').update({ read: true }).eq('id', id);
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  const completeTodo = async (id) => {
+    setTodos((prev) => prev.filter((t) => t.id !== id));
+    await supabase
+      .from('staff_requests')
+      .update({ status: 'resolved', resolved_at: new Date().toISOString() })
+      .eq('id', id);
   };
 
   if (loading) return <div className="page-inner">Loading...</div>;
@@ -95,14 +96,24 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {notifications.length > 0 && (
+      {todos.length > 0 && (
         <div className="card" style={{ background: '#fffbeb', marginBottom: 20 }}>
-          <h2>Notifications</h2>
-          {notifications.map((n) => (
-            <div key={n.id} className="task-row">
-              <span style={{ flex: 1, fontSize: 14 }}>{n.message}</span>
-              <button className="btn-secondary" onClick={() => dismissNotification(n.id)}>Dismiss</button>
-            </div>
+          <h2>To-Do ({todos.length})</h2>
+          {todos.map((t) => (
+            <label key={t.id} className="task-row" style={{ cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                onChange={() => completeTodo(t.id)}
+                style={{ width: 18, height: 18, marginRight: 10, flexShrink: 0 }}
+              />
+              <span style={{ flex: 1, fontSize: 14 }}>
+                <strong>{t.type === 'kit_topup' ? 'Kit Top-up' : 'Issue'}</strong> — {t.description}
+                <br />
+                <span style={{ color: 'var(--muted)', fontSize: 12.5 }}>
+                  {t.profiles?.full_name || 'A cleaner'} · {new Date(t.created_at).toLocaleString()}
+                </span>
+              </span>
+            </label>
           ))}
         </div>
       )}
