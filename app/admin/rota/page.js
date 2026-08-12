@@ -95,6 +95,7 @@ export default function AdminRota() {
   const [cleaners, setCleaners] = useState([]);
   const [clients, setClients] = useState([]);
   const [properties, setProperties] = useState([]);
+  const [templates, setTemplates] = useState([]);
   const [selectedJob, setSelectedJob] = useState(null);
   const [draggingJobId, setDraggingJobId] = useState(null);
   const [dragOverDayKey, setDragOverDayKey] = useState(null);
@@ -109,6 +110,7 @@ export default function AdminRota() {
   const [duration, setDuration] = useState(120);
   const [useCustomDuration, setUseCustomDuration] = useState(false);
   const [formCleanerIds, setFormCleanerIds] = useState([]);
+  const [formTemplateId, setFormTemplateId] = useState('');
   const [repeatJob, setRepeatJob] = useState(false);
   const [recurrenceType, setRecurrenceType] = useState('weekly');
   const [recurrenceInterval, setRecurrenceInterval] = useState(1);
@@ -128,6 +130,7 @@ export default function AdminRota() {
   const [savingJob, setSavingJob] = useState(false);
   const [jobSaveError, setJobSaveError] = useState('');
   const [addCleanerSelection, setAddCleanerSelection] = useState('');
+  const [applyTemplateSelection, setApplyTemplateSelection] = useState('');
 
   const calendarScrollRef = useRef(null);
 
@@ -238,6 +241,23 @@ export default function AdminRota() {
     setJobTasks((prev) => prev.filter((t) => t.id !== taskId));
   };
 
+  // Always appends to whatever tasks the job already has - never clears
+  // the existing list, so applying the wrong template by mistake never
+  // loses work someone already did.
+  const applyTemplateToJob = async () => {
+    if (!applyTemplateSelection || !selectedJob) return;
+    const template = templates.find((t) => t.id === applyTemplateSelection);
+    if (!template || template.job_template_items.length === 0) return;
+
+    const { data } = await supabase
+      .from('tasks')
+      .insert(template.job_template_items.map((item) => ({ job_id: selectedJob.id, description: item.description })))
+      .select('id, description, completed');
+
+    if (data) setJobTasks((prev) => [...prev, ...data]);
+    setApplyTemplateSelection('');
+  };
+
   const loadLookups = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/'); return; }
@@ -248,10 +268,16 @@ export default function AdminRota() {
       .from('clients').select('id, name').order('name');
     const { data: propertiesData } = await supabase
       .from('properties').select('id, client_id, address, lat, lng');
+    const { data: templatesData } = await supabase
+      .from('job_templates').select('id, name, job_template_items(id, description, sort_order)').order('name');
 
     setCleaners(cleanersData || []);
     setClients(clientsData || []);
     setProperties(propertiesData || []);
+    setTemplates((templatesData || []).map((t) => ({
+      ...t,
+      job_template_items: (t.job_template_items || []).sort((a, b) => a.sort_order - b.sort_order),
+    })));
   };
 
   const loadJobs = async () => {
@@ -387,6 +413,7 @@ export default function AdminRota() {
     setDuration(120);
     setUseCustomDuration(false);
     setFormCleanerIds([]);
+    setFormTemplateId('');
     setRepeatJob(false);
     setRecurrenceType('weekly');
     setRecurrenceInterval(1);
@@ -511,6 +538,13 @@ export default function AdminRota() {
       formCleanerIds.forEach((cid) => {
         notify({ type: 'shift_assigned', cleanerId: cid, address: firstJob.properties?.address, scheduledAt: firstJob.scheduled_at });
       });
+
+      const template = templates.find((t) => t.id === formTemplateId);
+      if (template && template.job_template_items.length > 0) {
+        await supabase.from('tasks').insert(
+          insertedJobs.flatMap((j) => template.job_template_items.map((item) => ({ job_id: j.id, description: item.description })))
+        );
+      }
     }
     resetForm();
   };
@@ -720,6 +754,16 @@ export default function AdminRota() {
                     </select>
                   </div>
                 )}
+              </div>
+
+              <div className="field">
+                <label className="field-label">Checklist template (optional)</label>
+                <select value={formTemplateId} onChange={(e) => setFormTemplateId(e.target.value)}>
+                  <option value="">No template</option>
+                  {templates.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.job_template_items.length} items)</option>
+                  ))}
+                </select>
               </div>
 
               <div className="field">
@@ -1024,6 +1068,21 @@ export default function AdminRota() {
 
           <div style={{ marginTop: 16 }}>
             <label>To-do list</label>
+            {templates.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                <select
+                  value={applyTemplateSelection}
+                  onChange={(e) => setApplyTemplateSelection(e.target.value)}
+                  style={{ flex: 1, marginBottom: 0 }}
+                >
+                  <option value="">Apply a template...</option>
+                  {templates.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.job_template_items.length} items)</option>
+                  ))}
+                </select>
+                <button className="btn-secondary" disabled={!applyTemplateSelection} onClick={applyTemplateToJob}>Apply</button>
+              </div>
+            )}
             {jobTasks.length === 0 && (
               <p className="empty-state" style={{ padding: '4px 0' }}>No tasks yet.</p>
             )}

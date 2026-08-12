@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, Menu, X } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
 const NAV_ITEMS = [
@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: '/admin/clients', label: 'Clients', icon: Building2 },
   { href: '/admin/cleaners', label: 'Cleaners', icon: Users },
   { href: '/admin/onboarding', label: 'Onboarding', icon: ClipboardList },
+  { href: '/admin/templates', label: 'Templates', icon: ListChecks },
   { href: '/admin/reports', label: 'Reports', icon: FileText },
   { href: '/admin/requests', label: 'Requests', icon: MessageSquareWarning },
   { href: '/admin/messages', label: 'Messages', icon: MessageCircle },
