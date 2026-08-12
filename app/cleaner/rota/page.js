@@ -39,19 +39,24 @@ function DayGroup({ date, jobs, router, dim }) {
   );
 }
 
-const EMPTY_FORM = { type: 'holiday', startDate: '', endDate: '', reason: '' };
+const EMPTY_FORM = { type: 'holiday', startDate: '', endDate: '', hours: '', reason: '' };
+const HOLIDAY_ACCRUAL_RATE = 0.1207; // UK statutory: 5.6 weeks / 46.4 working weeks
 
-function holidayDaysUsed(timeOffRequests) {
+function hoursWorked(jobs) {
+  return jobs.filter((j) => j.status === 'completed').reduce((sum, j) => sum + (j.duration_minutes || 0), 0) / 60;
+}
+
+function holidayHoursUsed(timeOffRequests) {
   return timeOffRequests
     .filter((t) => t.type === 'holiday' && t.status === 'approved')
-    .reduce((sum, t) => sum + (new Date(t.end_date) - new Date(t.start_date)) / 86400000 + 1, 0);
+    .reduce((sum, t) => sum + (t.hours || 0), 0);
 }
 
 export default function CleanerRota() {
   const router = useRouter();
   const [jobs, setJobs] = useState([]);
   const [timeOff, setTimeOff] = useState([]);
-  const [allowance, setAllowance] = useState(null);
+  const [adjustmentHours, setAdjustmentHours] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const [showForm, setShowForm] = useState(false);
@@ -74,14 +79,14 @@ export default function CleanerRota() {
         .order('scheduled_at', { ascending: true }),
       supabase
         .from('time_off_requests')
-        .select('id, type, start_date, end_date, reason, status, admin_note, created_at')
+        .select('id, type, start_date, end_date, hours, reason, status, admin_note, created_at')
         .order('start_date', { ascending: false }),
-      supabase.from('profiles').select('holiday_allowance_days').eq('id', session.user.id).single(),
+      supabase.from('profiles').select('holiday_adjustment_hours').eq('id', session.user.id).single(),
     ]);
 
     setJobs(jobsData || []);
     setTimeOff(timeOffData || []);
-    setAllowance(profileData?.holiday_allowance_days ?? null);
+    setAdjustmentHours(profileData?.holiday_adjustment_hours ?? 0);
     setLoading(false);
   };
 
@@ -89,6 +94,7 @@ export default function CleanerRota() {
     e.preventDefault();
     if (!form.startDate || !form.endDate) return;
     if (form.endDate < form.startDate) { alert('End date must be on or after the start date.'); return; }
+    if (form.type === 'holiday' && (!form.hours || Number(form.hours) <= 0)) { alert('Enter how many hours of holiday you\'re requesting.'); return; }
     setSubmitting(true);
 
     const { data: { session } } = await supabase.auth.getSession();
@@ -100,9 +106,10 @@ export default function CleanerRota() {
         type: form.type,
         start_date: form.startDate,
         end_date: form.endDate,
+        hours: form.type === 'holiday' ? Number(form.hours) : null,
         reason: form.reason.trim() || null,
       })
-      .select('id, type, start_date, end_date, reason, status, admin_note, created_at')
+      .select('id, type, start_date, end_date, hours, reason, status, admin_note, created_at')
       .single();
 
     setSubmitting(false);
@@ -118,6 +125,7 @@ export default function CleanerRota() {
         requestType: form.type,
         startDate: form.startDate,
         endDate: form.endDate,
+        hours: form.type === 'holiday' ? Number(form.hours) : null,
       });
     }
   };
@@ -128,6 +136,11 @@ export default function CleanerRota() {
   const past = jobs.filter((j) => j.status === 'completed');
   const upcomingGroups = groupByDate(upcoming);
   const pastGroups = groupByDate(past);
+
+  const worked = hoursWorked(jobs);
+  const accrued = worked * HOLIDAY_ACCRUAL_RATE + adjustmentHours;
+  const used = holidayHoursUsed(timeOff);
+  const remaining = accrued - used;
 
   return (
     <div className="container">
@@ -141,11 +154,12 @@ export default function CleanerRota() {
           </button>
         </div>
 
-        {allowance !== null && (
-          <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>
-            {allowance - holidayDaysUsed(timeOff)} of {allowance} holiday day{allowance === 1 ? '' : 's'} remaining
-          </p>
-        )}
+        <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>
+          {remaining.toFixed(1)} of {accrued.toFixed(1)} holiday hours remaining
+        </p>
+        <p style={{ fontSize: 12, color: 'var(--muted)', margin: '2px 0 0' }}>
+          Accrued at 12.07% of hours worked ({worked.toFixed(1)}h so far{adjustmentHours ? `, plus a ${adjustmentHours}h adjustment` : ''})
+        </p>
 
         {showForm && (
           <form onSubmit={submitRequest} style={{ marginTop: 12 }}>
@@ -165,6 +179,21 @@ export default function CleanerRota() {
                 <input type="date" value={form.endDate} onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} required />
               </div>
             </div>
+
+            {form.type === 'holiday' && (
+              <>
+                <label>Hours requested</label>
+                <input
+                  type="number"
+                  min="0.5"
+                  step="0.5"
+                  value={form.hours}
+                  onChange={(e) => setForm((f) => ({ ...f, hours: e.target.value }))}
+                  placeholder="e.g. 16"
+                  required
+                />
+              </>
+            )}
 
             <label>Reason (optional)</label>
             <input
@@ -187,6 +216,7 @@ export default function CleanerRota() {
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>
                   {t.type === 'holiday' ? 'Holiday' : 'Unavailable'} · {new Date(t.start_date).toLocaleDateString()} – {new Date(t.end_date).toLocaleDateString()}
+                  {t.type === 'holiday' && t.hours ? ` · ${t.hours}h` : ''}
                 </div>
                 {t.reason && <div style={{ fontSize: 13, color: 'var(--muted)' }}>{t.reason}</div>}
               </div>

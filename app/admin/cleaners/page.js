@@ -4,21 +4,29 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 
-function holidayDaysUsed(cleanerId, timeOffRequests) {
+const HOLIDAY_ACCRUAL_RATE = 0.1207; // UK statutory: 5.6 weeks / 46.4 working weeks
+
+function hoursWorked(cleanerId, jobs) {
+  return jobs
+    .filter((j) => j.cleaner_id === cleanerId && j.status === 'completed')
+    .reduce((sum, j) => sum + (j.duration_minutes || 0), 0) / 60;
+}
+
+function holidayHoursUsed(cleanerId, timeOffRequests) {
   return timeOffRequests
     .filter((t) => t.cleaner_id === cleanerId && t.type === 'holiday' && t.status === 'approved')
-    .reduce((sum, t) => sum + (new Date(t.end_date) - new Date(t.start_date)) / 86400000 + 1, 0);
+    .reduce((sum, t) => sum + (t.hours || 0), 0);
 }
 
 export default function AdminCleaners() {
   const router = useRouter();
   const [cleaners, setCleaners] = useState([]);
-  const [jobCounts, setJobCounts] = useState({});
+  const [jobs, setJobs] = useState([]);
   const [timeOffRequests, setTimeOffRequests] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const [editingAllowanceId, setEditingAllowanceId] = useState(null);
-  const [allowanceInput, setAllowanceInput] = useState('');
+  const [editingAdjustmentId, setEditingAdjustmentId] = useState(null);
+  const [adjustmentInput, setAdjustmentInput] = useState('');
 
   useEffect(() => {
     load();
@@ -29,37 +37,34 @@ export default function AdminCleaners() {
     if (!session) { router.push('/'); return; }
 
     const [{ data: cleanersData }, { data: jobsData }, { data: timeOffData }] = await Promise.all([
-      supabase.from('profiles').select('id, full_name, created_at, active, holiday_allowance_days').eq('role', 'cleaner').order('created_at'),
-      supabase.from('jobs').select('cleaner_id').not('cleaner_id', 'is', null),
-      supabase.from('time_off_requests').select('cleaner_id, type, status, start_date, end_date'),
+      supabase.from('profiles').select('id, full_name, created_at, active, holiday_adjustment_hours').eq('role', 'cleaner').order('created_at'),
+      supabase.from('jobs').select('cleaner_id, status, duration_minutes').not('cleaner_id', 'is', null),
+      supabase.from('time_off_requests').select('cleaner_id, type, status, hours'),
     ]);
 
-    const counts = {};
-    (jobsData || []).forEach((j) => { counts[j.cleaner_id] = (counts[j.cleaner_id] || 0) + 1; });
-
     setCleaners(cleanersData || []);
-    setJobCounts(counts);
+    setJobs(jobsData || []);
     setTimeOffRequests(timeOffData || []);
     setLoading(false);
   };
 
-  const startEditAllowance = (cleaner) => {
-    setEditingAllowanceId(cleaner.id);
-    setAllowanceInput(String(cleaner.holiday_allowance_days));
+  const startEditAdjustment = (cleaner) => {
+    setEditingAdjustmentId(cleaner.id);
+    setAdjustmentInput(String(cleaner.holiday_adjustment_hours));
   };
 
-  const saveAllowance = async (cleanerId) => {
-    const value = parseFloat(allowanceInput);
-    if (isNaN(value) || value < 0) return;
+  const saveAdjustment = async (cleanerId) => {
+    const value = parseFloat(adjustmentInput);
+    if (isNaN(value)) return;
 
     const { data } = await supabase
-      .from('profiles').update({ holiday_allowance_days: value }).eq('id', cleanerId)
-      .select('id, holiday_allowance_days').single();
+      .from('profiles').update({ holiday_adjustment_hours: value }).eq('id', cleanerId)
+      .select('id, holiday_adjustment_hours').single();
 
     if (data) {
-      setCleaners((prev) => prev.map((c) => (c.id === cleanerId ? { ...c, holiday_allowance_days: data.holiday_allowance_days } : c)));
+      setCleaners((prev) => prev.map((c) => (c.id === cleanerId ? { ...c, holiday_adjustment_hours: data.holiday_adjustment_hours } : c)));
     }
-    setEditingAllowanceId(null);
+    setEditingAdjustmentId(null);
   };
 
   const toggleActive = async (cleaner) => {
@@ -74,6 +79,8 @@ export default function AdminCleaners() {
       setCleaners((prev) => prev.map((c) => (c.id === cleaner.id ? { ...c, active: data.active } : c)));
     }
   };
+
+  const jobCount = (cleanerId) => jobs.filter((j) => j.cleaner_id === cleanerId).length;
 
   if (loading) return <div className="page-inner">Loading...</div>;
 
@@ -94,9 +101,11 @@ export default function AdminCleaners() {
 
       <div className="job-list">
         {cleaners.map((c) => {
-          const used = holidayDaysUsed(c.id, timeOffRequests);
-          const remaining = c.holiday_allowance_days - used;
-          const isEditingAllowance = editingAllowanceId === c.id;
+          const worked = hoursWorked(c.id, jobs);
+          const accrued = worked * HOLIDAY_ACCRUAL_RATE + (c.holiday_adjustment_hours || 0);
+          const used = holidayHoursUsed(c.id, timeOffRequests);
+          const remaining = accrued - used;
+          const isEditingAdjustment = editingAdjustmentId === c.id;
 
           return (
             <div key={c.id} className="card job-card" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
@@ -105,17 +114,19 @@ export default function AdminCleaners() {
                   <h2>{c.full_name || 'Unnamed cleaner'}</h2>
                   <p className="job-time">
                     Joined {new Date(c.created_at).toLocaleDateString()}
-                    {' · '}{jobCounts[c.id] || 0} job{(jobCounts[c.id] || 0) === 1 ? '' : 's'} assigned
+                    {' · '}{jobCount(c.id)} job{jobCount(c.id) === 1 ? '' : 's'} assigned
                   </p>
                   <p className="job-time">
-                    Holiday: {remaining} of {c.holiday_allowance_days} day{c.holiday_allowance_days === 1 ? '' : 's'} remaining
+                    Holiday: {remaining.toFixed(1)} of {accrued.toFixed(1)} hours remaining
+                    {' '}(12.07% of {worked.toFixed(1)}h worked
+                    {c.holiday_adjustment_hours ? `, ${c.holiday_adjustment_hours > 0 ? '+' : ''}${c.holiday_adjustment_hours}h adjustment` : ''})
                     {' '}
                     <button
                       className="btn-secondary"
-                      onClick={() => (isEditingAllowance ? setEditingAllowanceId(null) : startEditAllowance(c))}
+                      onClick={() => (isEditingAdjustment ? setEditingAdjustmentId(null) : startEditAdjustment(c))}
                       style={{ padding: '2px 10px', fontSize: 12, marginLeft: 4 }}
                     >
-                      {isEditingAllowance ? 'Cancel' : 'Edit'}
+                      {isEditingAdjustment ? 'Cancel' : 'Adjust'}
                     </button>
                   </p>
                   {c.active === false && <span className="badge missed">deactivated</span>}
@@ -125,19 +136,18 @@ export default function AdminCleaners() {
                 </button>
               </div>
 
-              {isEditingAllowance && (
+              {isEditingAdjustment && (
                 <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--hairline)', display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <label style={{ margin: 0 }}>Annual allowance (days)</label>
+                  <label style={{ margin: 0 }}>Manual adjustment (hours, +/-)</label>
                   <input
                     type="number"
-                    min="0"
                     step="0.5"
-                    value={allowanceInput}
-                    onChange={(e) => setAllowanceInput(e.target.value)}
+                    value={adjustmentInput}
+                    onChange={(e) => setAdjustmentInput(e.target.value)}
                     style={{ width: 80 }}
                     autoFocus
                   />
-                  <button className="btn-primary" onClick={() => saveAllowance(c.id)}>Save</button>
+                  <button className="btn-primary" onClick={() => saveAdjustment(c.id)}>Save</button>
                 </div>
               )}
             </div>

@@ -5,17 +5,19 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { notify } from '../../../lib/notify';
 
-function holidayDaysUsed(cleanerId, timeOffRequests) {
+const HOLIDAY_ACCRUAL_RATE = 0.1207; // UK statutory: 5.6 weeks / 46.4 working weeks
+
+function holidayHoursUsed(cleanerId, timeOffRequests) {
   return timeOffRequests
     .filter((t) => t.cleaner_id === cleanerId && t.type === 'holiday' && t.status === 'approved')
-    .reduce((sum, t) => sum + (new Date(t.end_date) - new Date(t.start_date)) / 86400000 + 1, 0);
+    .reduce((sum, t) => sum + (t.hours || 0), 0);
 }
 
 export default function AdminRequests() {
   const router = useRouter();
   const [section, setSection] = useState('requests'); // requests | timeoff
   const [loading, setLoading] = useState(true);
-  const [allowances, setAllowances] = useState({});
+  const [holidayBalances, setHolidayBalances] = useState({}); // cleanerId -> accrued hours
 
   // kit top-up / issue requests
   const [requests, setRequests] = useState([]);
@@ -38,21 +40,27 @@ export default function AdminRequests() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/'); return; }
 
-    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }] = await Promise.all([
+    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, { data: jobsData }] = await Promise.all([
       supabase
         .from('staff_requests')
         .select('id, type, description, status, created_at, resolved_at, resolution_note, cleaner_id, profiles(full_name), jobs(scheduled_at, properties(address))')
         .order('created_at', { ascending: false }),
       supabase
         .from('time_off_requests')
-        .select('id, type, start_date, end_date, reason, status, admin_note, created_at, cleaner_id, profiles(full_name)')
+        .select('id, type, start_date, end_date, hours, reason, status, admin_note, created_at, cleaner_id, profiles(full_name)')
         .order('created_at', { ascending: false }),
-      supabase.from('profiles').select('id, holiday_allowance_days').eq('role', 'cleaner'),
+      supabase.from('profiles').select('id, holiday_adjustment_hours').eq('role', 'cleaner'),
+      supabase.from('jobs').select('cleaner_id, status, duration_minutes').not('cleaner_id', 'is', null),
     ]);
 
-    const allowanceMap = {};
-    (cleanerProfiles || []).forEach((p) => { allowanceMap[p.id] = p.holiday_allowance_days; });
-    setAllowances(allowanceMap);
+    const balanceMap = {};
+    (cleanerProfiles || []).forEach((p) => {
+      const worked = (jobsData || [])
+        .filter((j) => j.cleaner_id === p.id && j.status === 'completed')
+        .reduce((sum, j) => sum + (j.duration_minutes || 0), 0) / 60;
+      balanceMap[p.id] = worked * HOLIDAY_ACCRUAL_RATE + (p.holiday_adjustment_hours || 0);
+    });
+    setHolidayBalances(balanceMap);
     setRequests(requestsData || []);
     setTimeOff(timeOffData || []);
     setLoading(false);
@@ -228,12 +236,13 @@ export default function AdminRequests() {
                     <h2>{t.type === 'holiday' ? 'Holiday' : 'Unavailable'}</h2>
                     <p style={{ fontSize: 14, margin: '4px 0' }}>
                       {new Date(t.start_date).toLocaleDateString()} – {new Date(t.end_date).toLocaleDateString()}
+                      {t.type === 'holiday' && t.hours ? ` · ${t.hours}h requested` : ''}
                     </p>
                     {t.reason && <p style={{ fontSize: 13.5, color: 'var(--muted)', margin: '0 0 4px' }}>{t.reason}</p>}
                     <p className="job-time">
                       {t.profiles?.full_name || 'Unknown cleaner'} · {new Date(t.created_at).toLocaleString()}
-                      {t.type === 'holiday' && allowances[t.cleaner_id] !== undefined && (
-                        ` · ${allowances[t.cleaner_id] - holidayDaysUsed(t.cleaner_id, timeOff)} of ${allowances[t.cleaner_id]} day${allowances[t.cleaner_id] === 1 ? '' : 's'} remaining`
+                      {t.type === 'holiday' && holidayBalances[t.cleaner_id] !== undefined && (
+                        ` · ${(holidayBalances[t.cleaner_id] - holidayHoursUsed(t.cleaner_id, timeOff)).toFixed(1)}h remaining`
                       )}
                     </p>
                     <span className={`badge ${t.status === 'approved' ? 'completed' : t.status === 'declined' ? 'missed' : 'scheduled'}`}>{t.status}</span>

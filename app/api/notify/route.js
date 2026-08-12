@@ -80,7 +80,8 @@ export async function POST(request) {
       if (to.length === 0) return NextResponse.json({ skipped: 'no_email' });
       const label = payload.requestType === 'holiday' ? 'Holiday' : 'Unavailability';
       subject = `${label} request from ${payload.cleanerName}`;
-      text = `${payload.cleanerName} requested ${label.toLowerCase()} from ${payload.startDate} to ${payload.endDate}.`;
+      text = `${payload.cleanerName} requested ${label.toLowerCase()} from ${payload.startDate} to ${payload.endDate}`
+        + (payload.hours ? ` (${payload.hours} hours).` : '.');
     } else if (payload.type === 'time_off_decided') {
       const email = await emailForUserId(payload.cleanerId);
       if (!email) return NextResponse.json({ skipped: 'no_email' });
