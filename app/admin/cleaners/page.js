@@ -1,15 +1,30 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 
 const HOLIDAY_ACCRUAL_RATE = 0.1207; // UK statutory: 5.6 weeks / 46.4 working weeks
 
-function hoursWorked(cleanerId, jobs) {
-  return jobs
-    .filter((j) => j.cleaner_id === cleanerId && j.status === 'completed')
-    .reduce((sum, j) => sum + (j.duration_minutes || 0), 0) / 60;
+// A job's duration is split evenly across everyone assigned to it - a
+// 2-hour job with 2 people counts as 1 hour each, not 2 hours each.
+function buildAssigneeCounts(assignmentRows) {
+  const counts = {};
+  assignmentRows.forEach((row) => {
+    if (!row.jobs) return;
+    counts[row.jobs.id] = (counts[row.jobs.id] || 0) + 1;
+  });
+  return counts;
+}
+
+function hoursWorked(cleanerId, assignmentRows, assigneeCounts) {
+  return assignmentRows
+    .filter((row) => row.cleaner_id === cleanerId && row.jobs?.status === 'completed')
+    .reduce((sum, row) => sum + (row.jobs.duration_minutes || 0) / (assigneeCounts[row.jobs.id] || 1), 0) / 60;
+}
+
+function jobCount(cleanerId, assignmentRows) {
+  return assignmentRows.filter((row) => row.cleaner_id === cleanerId).length;
 }
 
 function holidayHoursUsed(cleanerId, timeOffRequests) {
@@ -51,14 +66,14 @@ export default function AdminCleaners() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/'); return; }
 
-    const [{ data: cleanersData }, { data: jobsData }, { data: timeOffData }] = await Promise.all([
+    const [{ data: cleanersData }, { data: assignmentsData }, { data: timeOffData }] = await Promise.all([
       supabase.from('profiles').select('id, full_name, created_at, active, holiday_adjustment_hours').eq('role', 'cleaner').order('created_at'),
-      supabase.from('jobs').select('cleaner_id, status, duration_minutes').not('cleaner_id', 'is', null),
+      supabase.from('job_assignments').select('cleaner_id, jobs(id, status, duration_minutes)'),
       supabase.from('time_off_requests').select('cleaner_id, type, status, hours'),
     ]);
 
     setCleaners(cleanersData || []);
-    setJobs(jobsData || []);
+    setJobs(assignmentsData || []);
     setTimeOffRequests(timeOffData || []);
     setLoading(false);
   };
@@ -95,8 +110,6 @@ export default function AdminCleaners() {
     }
   };
 
-  const jobCount = (cleanerId) => jobs.filter((j) => j.cleaner_id === cleanerId).length;
-
   const createCleaner = async (e) => {
     e.preventDefault();
     setCreateError('');
@@ -128,6 +141,8 @@ export default function AdminCleaners() {
     setNewEmail('');
     setNewPassword('');
   };
+
+  const assigneeCounts = useMemo(() => buildAssigneeCounts(jobs), [jobs]);
 
   if (loading) return <div className="page-inner">Loading...</div>;
 
@@ -208,11 +223,12 @@ export default function AdminCleaners() {
 
       <div className="job-list">
         {cleaners.map((c) => {
-          const worked = hoursWorked(c.id, jobs);
+          const worked = hoursWorked(c.id, jobs, assigneeCounts);
           const accrued = worked * HOLIDAY_ACCRUAL_RATE + (c.holiday_adjustment_hours || 0);
           const used = holidayHoursUsed(c.id, timeOffRequests);
           const remaining = accrued - used;
           const isEditingAdjustment = editingAdjustmentId === c.id;
+          const cJobCount = jobCount(c.id, jobs);
 
           return (
             <div key={c.id} className="card job-card" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
@@ -221,7 +237,7 @@ export default function AdminCleaners() {
                   <h2>{c.full_name || 'Unnamed cleaner'}</h2>
                   <p className="job-time">
                     Joined {new Date(c.created_at).toLocaleDateString()}
-                    {' · '}{jobCount(c.id)} job{jobCount(c.id) === 1 ? '' : 's'} assigned
+                    {' · '}{cJobCount} job{cJobCount === 1 ? '' : 's'} assigned
                   </p>
                   <p className="job-time">
                     Holiday: {remaining.toFixed(1)} of {accrued.toFixed(1)} hours remaining

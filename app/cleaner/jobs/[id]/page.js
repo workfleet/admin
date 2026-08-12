@@ -108,6 +108,11 @@ export default function JobDetailPage() {
       );
     });
 
+  // jobs.status is no longer set from here - with multiple cleaners
+  // possibly assigned to the same job, a database trigger derives it from
+  // everyone's check-in state (in_progress once anyone's checked in,
+  // completed only once everyone has checked out), so it's re-read after
+  // each check-in/out rather than guessed at client-side.
   const handleCheckIn = async () => {
     const { lat, lng } = await getLocation();
     const { data, error } = await supabase
@@ -118,8 +123,8 @@ export default function JobDetailPage() {
 
     if (!error) {
       setCheckin(data);
-      await supabase.from('jobs').update({ status: 'in_progress' }).eq('id', id);
-      setJob((j) => ({ ...j, status: 'in_progress' }));
+      const { data: jobRow } = await supabase.from('jobs').select('status').eq('id', id).single();
+      if (jobRow) setJob((j) => ({ ...j, status: jobRow.status }));
     }
   };
 
@@ -134,8 +139,8 @@ export default function JobDetailPage() {
       .update({ checked_out_at: new Date().toISOString() })
       .eq('id', checkin.id);
 
-    await supabase.from('jobs').update({ status: 'completed' }).eq('id', id);
-    setJob((j) => ({ ...j, status: 'completed' }));
+    const { data: jobRow } = await supabase.from('jobs').select('status').eq('id', id).single();
+    if (jobRow) setJob((j) => ({ ...j, status: jobRow.status }));
     setCheckin((c) => ({ ...c, checked_out_at: new Date().toISOString() }));
   };
 
@@ -176,7 +181,10 @@ export default function JobDetailPage() {
 
   // A completed job is history, not something to keep editing - no
   // re-checking-in, no toggling tasks, no adding photos weeks later.
-  const isHistory = job.status === 'completed';
+  // Also locks down once THIS cleaner has personally checked out, even if
+  // the job as a whole is still in_progress because a teammate on the
+  // same job hasn't checked out yet - their part is done either way.
+  const isHistory = job.status === 'completed' || !!checkin?.checked_out_at;
 
   return (
     <div className="container">

@@ -12,7 +12,7 @@ export default function ClientPortal() {
   const [expandedJob, setExpandedJob] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [photos, setPhotos] = useState([]);
-  const [checkin, setCheckin] = useState(null);
+  const [checkins, setCheckins] = useState([]);
 
   const [clientId, setClientId] = useState(null);
   const [clientName, setClientName] = useState('');
@@ -31,7 +31,7 @@ export default function ClientPortal() {
 
     const { data } = await supabase
       .from('jobs')
-      .select('id, scheduled_at, status, properties(address), profiles(full_name)')
+      .select('id, scheduled_at, status, properties(address), job_assignments(profiles(full_name))')
       .order('scheduled_at', { ascending: false });
 
     setJobs(data || []);
@@ -101,7 +101,7 @@ export default function ClientPortal() {
     const [{ data: taskData }, { data: photoData }, { data: checkinData }] = await Promise.all([
       supabase.from('tasks').select('*').eq('job_id', jobId),
       supabase.from('photos').select('*').eq('job_id', jobId).order('created_at', { ascending: false }),
-      supabase.from('checkins').select('*').eq('job_id', jobId).maybeSingle(),
+      supabase.from('checkins').select('*, profiles(full_name)').eq('job_id', jobId),
     ]);
 
     // photos.url stores the job-photos storage path, not a public URL —
@@ -115,7 +115,7 @@ export default function ClientPortal() {
 
     setTasks(taskData || []);
     setPhotos(photosWithUrls);
-    setCheckin(checkinData);
+    setCheckins(checkinData || []);
   };
 
   return (
@@ -166,24 +166,27 @@ export default function ClientPortal() {
 
       {jobs.length === 0 && <p>No jobs recorded yet.</p>}
 
-      {jobs.map((job) => (
+      {jobs.map((job) => {
+        const staffNames = (job.job_assignments || []).map((a) => a.profiles?.full_name).filter(Boolean);
+        return (
         <div key={job.id} className="card">
           <div onClick={() => openJob(job.id)} style={{ cursor: 'pointer' }}>
             <h2>{job.properties?.address}</h2>
             <p style={{ margin: '4px 0', fontSize: 14 }}>
-              {new Date(job.scheduled_at).toLocaleString()} — {job.profiles?.full_name || 'Unassigned'}
+              {new Date(job.scheduled_at).toLocaleString()} — {staffNames.length > 0 ? staffNames.join(', ') : 'Unassigned'}
             </p>
             <span className={`badge ${job.status}`}>{job.status.replace('_', ' ')}</span>
           </div>
 
           {expandedJob === job.id && (
             <div style={{ marginTop: 12, borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
-              {checkin && (
-                <p style={{ fontSize: 13, color: 'var(--muted)' }}>
-                  Checked in: {checkin.checked_in_at ? new Date(checkin.checked_in_at).toLocaleTimeString() : '—'}{' '}
-                  · Checked out: {checkin.checked_out_at ? new Date(checkin.checked_out_at).toLocaleTimeString() : '—'}
+              {checkins.map((c) => (
+                <p key={c.id} style={{ fontSize: 13, color: 'var(--muted)' }}>
+                  {c.profiles?.full_name ? `${c.profiles.full_name} — ` : ''}
+                  Checked in: {c.checked_in_at ? new Date(c.checked_in_at).toLocaleTimeString() : '—'}{' '}
+                  · Checked out: {c.checked_out_at ? new Date(c.checked_out_at).toLocaleTimeString() : '—'}
                 </p>
-              )}
+              ))}
 
               <h2 style={{ marginTop: 10 }}>Tasks</h2>
               {tasks.map((t) => (
@@ -206,7 +209,8 @@ export default function ClientPortal() {
             </div>
           )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

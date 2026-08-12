@@ -109,7 +109,7 @@ async function main() {
       record('cleaner cannot see a job not assigned to them', Array.isArray(notMine.body) && notMine.body.length === 0, `${notMine.body?.length ?? '?'} rows`);
 
       // Assign it, confirm they now can.
-      await rest('PATCH', `jobs?id=eq.${job.id}`, admin.token, { cleaner_id: cleaner.userId });
+      await rest('POST', 'job_assignments', admin.token, { job_id: job.id, cleaner_id: cleaner.userId });
       const mine = await rest('GET', `jobs?id=eq.${job.id}`, cleaner.token);
       record('cleaner can see a job assigned to them', Array.isArray(mine.body) && mine.body.length === 1, `${mine.body?.length ?? '?'} rows`);
 

@@ -42,8 +42,14 @@ function DayGroup({ date, jobs, router, dim }) {
 const EMPTY_FORM = { type: 'holiday', startDate: '', endDate: '', hours: '', reason: '' };
 const HOLIDAY_ACCRUAL_RATE = 0.1207; // UK statutory: 5.6 weeks / 46.4 working weeks
 
-function hoursWorked(jobs) {
-  return jobs.filter((j) => j.status === 'completed').reduce((sum, j) => sum + (j.duration_minutes || 0), 0) / 60;
+// A job's duration is split evenly across everyone assigned to it - a
+// 2-hour job with 2 people counts as 1 hour each, not 2 hours each. This
+// must match the server-side enforce_holiday_balance() trigger exactly,
+// or the balance shown here would mislead staff about what they can request.
+function hoursWorked(jobs, assigneeCounts) {
+  return jobs
+    .filter((j) => j.status === 'completed')
+    .reduce((sum, j) => sum + (j.duration_minutes || 0) / (assigneeCounts[j.id] || 1), 0) / 60;
 }
 
 function holidayHoursUsed(timeOffRequests) {
@@ -61,6 +67,7 @@ function holidayHoursPending(timeOffRequests) {
 export default function CleanerRota() {
   const router = useRouter();
   const [jobs, setJobs] = useState([]);
+  const [assigneeCounts, setAssigneeCounts] = useState({});
   const [timeOff, setTimeOff] = useState([]);
   const [adjustmentHours, setAdjustmentHours] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -78,12 +85,11 @@ export default function CleanerRota() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/'); return; }
 
-    const [{ data: jobsData }, { data: timeOffData }, { data: profileData }] = await Promise.all([
+    const [{ data: assignmentRows }, { data: timeOffData }, { data: profileData }] = await Promise.all([
       supabase
-        .from('jobs')
-        .select('id, scheduled_at, status, duration_minutes, properties(address)')
-        .eq('cleaner_id', session.user.id)
-        .order('scheduled_at', { ascending: true }),
+        .from('job_assignments')
+        .select('jobs(id, scheduled_at, status, duration_minutes, properties(address))')
+        .eq('cleaner_id', session.user.id),
       supabase
         .from('time_off_requests')
         .select('id, type, start_date, end_date, hours, reason, status, admin_note, created_at')
@@ -91,7 +97,24 @@ export default function CleanerRota() {
       supabase.from('profiles').select('holiday_adjustment_hours').eq('id', session.user.id).single(),
     ]);
 
-    setJobs(jobsData || []);
+    const jobsData = (assignmentRows || [])
+      .map((row) => row.jobs)
+      .filter(Boolean)
+      .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
+
+    // Need the full assignee count per job (not just "am I on it"), so a
+    // second query against every teammate's assignment rows for these jobs.
+    const jobIds = jobsData.map((j) => j.id);
+    const { data: allAssignments } = jobIds.length > 0
+      ? await supabase.from('job_assignments').select('job_id').in('job_id', jobIds)
+      : { data: [] };
+    const counts = {};
+    (allAssignments || []).forEach((row) => {
+      counts[row.job_id] = (counts[row.job_id] || 0) + 1;
+    });
+
+    setJobs(jobsData);
+    setAssigneeCounts(counts);
     setTimeOff(timeOffData || []);
     setAdjustmentHours(profileData?.holiday_adjustment_hours ?? 0);
     setLoading(false);
@@ -107,7 +130,7 @@ export default function CleanerRota() {
       const requestedHours = Number(form.hours);
       if (!form.hours || requestedHours <= 0) { setFormError("Enter how many hours of holiday you're requesting."); return; }
 
-      const available = hoursWorked(jobs) * HOLIDAY_ACCRUAL_RATE + adjustmentHours
+      const available = hoursWorked(jobs, assigneeCounts) * HOLIDAY_ACCRUAL_RATE + adjustmentHours
         - holidayHoursUsed(timeOff) - holidayHoursPending(timeOff);
       if (requestedHours > available) {
         setFormError(`You only have ${available.toFixed(1)} hours available to request (some may already be pending approval).`);
@@ -163,7 +186,7 @@ export default function CleanerRota() {
   const upcomingGroups = groupByDate(upcoming);
   const pastGroups = groupByDate(past);
 
-  const worked = hoursWorked(jobs);
+  const worked = hoursWorked(jobs, assigneeCounts);
   const accrued = worked * HOLIDAY_ACCRUAL_RATE + adjustmentHours;
   const used = holidayHoursUsed(timeOff);
   const pending = holidayHoursPending(timeOff);

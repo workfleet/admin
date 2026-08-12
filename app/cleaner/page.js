@@ -31,11 +31,15 @@ export default function CleanerDashboard() {
       return;
     }
 
-    const { data: jobsData } = await supabase
-      .from('jobs')
-      .select('id, scheduled_at, status, properties(address)')
-      .eq('cleaner_id', session.user.id)
-      .order('scheduled_at', { ascending: true });
+    const { data: assignmentRows } = await supabase
+      .from('job_assignments')
+      .select('jobs(id, scheduled_at, status, properties(address))')
+      .eq('cleaner_id', session.user.id);
+
+    const jobsData = (assignmentRows || [])
+      .map((row) => row.jobs)
+      .filter(Boolean)
+      .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
 
     await purgeOldNotifications(session.user.id);
 

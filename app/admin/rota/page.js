@@ -19,6 +19,8 @@ const QUICK_DURATIONS = [30, 60, 90, 120, 180, 240];
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => h);
 const MINUTE_OPTIONS = [0, 15, 30, 45];
 
+const JOB_SELECT = 'id, scheduled_at, status, duration_minutes, notes, properties(address, clients(name)), job_assignments(cleaner_id, profiles(full_name))';
+
 function formatHour12(h) {
   const period = h < 12 ? 'AM' : 'PM';
   const h12 = h % 12 === 0 ? 12 : h % 12;
@@ -64,6 +66,10 @@ function formatDuration(mins) {
   return label.trim();
 }
 
+function assignedNames(job) {
+  return (job.job_assignments || []).map((a) => a.profiles?.full_name || 'Unknown');
+}
+
 export default function AdminRota() {
   const router = useRouter();
   const [weekStart, setWeekStart] = useState(getMonday(new Date()));
@@ -84,7 +90,7 @@ export default function AdminRota() {
   const [jobMinute, setJobMinute] = useState('00');
   const [duration, setDuration] = useState(120);
   const [useCustomDuration, setUseCustomDuration] = useState(false);
-  const [formCleanerId, setFormCleanerId] = useState('');
+  const [formCleanerIds, setFormCleanerIds] = useState([]);
 
   const [jobTasks, setJobTasks] = useState([]);
   const [newTaskText, setNewTaskText] = useState('');
@@ -97,6 +103,7 @@ export default function AdminRota() {
   const [editNotes, setEditNotes] = useState('');
   const [savingJob, setSavingJob] = useState(false);
   const [jobSaveError, setJobSaveError] = useState('');
+  const [addCleanerSelection, setAddCleanerSelection] = useState('');
 
   const calendarScrollRef = useRef(null);
 
@@ -139,6 +146,7 @@ export default function AdminRota() {
     setEditUseCustomDuration(!QUICK_DURATIONS.includes(selectedJob.duration_minutes));
     setEditNotes(selectedJob.notes || '');
     setJobSaveError('');
+    setAddCleanerSelection('');
   }, [selectedJob?.id]);
 
   const saveJobDetails = async () => {
@@ -148,15 +156,15 @@ export default function AdminRota() {
 
     const scheduledAtDate = new Date(`${editDate}T${editHour}:${editMinute}`);
 
-    if (selectedJob.cleaner_id) {
-      const conflict = await findConflict(selectedJob.cleaner_id, scheduledAtDate, editDuration, selectedJob.id);
+    for (const a of selectedJob.job_assignments || []) {
+      const conflict = await findConflict(a.cleaner_id, scheduledAtDate, editDuration, selectedJob.id);
       if (conflict) {
         const proceed = confirm(
-          `This cleaner is already booked at ${conflict.properties?.address} around this time (${new Date(conflict.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}). Save anyway?`
+          `${a.profiles?.full_name || 'This cleaner'} is already booked at ${conflict.properties?.address} around this time (${new Date(conflict.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}). Save anyway?`
         );
         if (!proceed) { setSavingJob(false); return; }
       }
-      if (!(await confirmTimeOffConflict(selectedJob.cleaner_id, scheduledAtDate))) { setSavingJob(false); return; }
+      if (!(await confirmTimeOffConflict(a.cleaner_id, scheduledAtDate))) { setSavingJob(false); return; }
     }
 
     const { data, error } = await supabase
@@ -167,7 +175,7 @@ export default function AdminRota() {
         notes: editNotes.trim() || null,
       })
       .eq('id', selectedJob.id)
-      .select('id, scheduled_at, status, cleaner_id, duration_minutes, notes, properties(address, clients(name)), profiles(full_name)')
+      .select(JOB_SELECT)
       .single();
 
     setSavingJob(false);
@@ -228,7 +236,7 @@ export default function AdminRota() {
 
     const { data } = await supabase
       .from('jobs')
-      .select('id, scheduled_at, status, cleaner_id, duration_minutes, notes, properties(address, clients(name)), profiles(full_name)')
+      .select(JOB_SELECT)
       .gte('scheduled_at', rangeStart)
       .lt('scheduled_at', rangeEnd)
       .order('scheduled_at', { ascending: true });
@@ -247,13 +255,14 @@ export default function AdminRota() {
     const dayEnd = addDays(dayStart, 1);
 
     const { data } = await supabase
-      .from('jobs')
-      .select('id, scheduled_at, duration_minutes, properties(address)')
+      .from('job_assignments')
+      .select('jobs!inner(id, scheduled_at, duration_minutes, properties(address))')
       .eq('cleaner_id', cleanerId)
-      .gte('scheduled_at', dayStart.toISOString())
-      .lt('scheduled_at', dayEnd.toISOString());
+      .gte('jobs.scheduled_at', dayStart.toISOString())
+      .lt('jobs.scheduled_at', dayEnd.toISOString());
 
-    return (data || []).find(
+    const candidateJobs = (data || []).map((row) => row.jobs).filter(Boolean);
+    return candidateJobs.find(
       (j) => j.id !== excludeJobId && jobsOverlap(start, durationMinutes, new Date(j.scheduled_at), j.duration_minutes || 120)
     ) || null;
   };
@@ -285,27 +294,37 @@ export default function AdminRota() {
     );
   };
 
-  const assignCleaner = async (jobId, cleanerId) => {
+  const addCleanerToJob = async (jobId, cleanerId) => {
+    if (!cleanerId) return;
     const job = jobs.find((j) => j.id === jobId) || selectedJob;
-    if (cleanerId && job) {
-      const conflict = await findConflict(cleanerId, new Date(job.scheduled_at), job.duration_minutes || 120, jobId);
-      if (conflict) {
-        const proceed = confirm(
-          `This cleaner is already booked at ${conflict.properties?.address} around this time (${new Date(conflict.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}). Assign anyway?`
-        );
-        if (!proceed) return;
-      }
-      if (!(await confirmTimeOffConflict(cleanerId, new Date(job.scheduled_at)))) return;
-    }
+    if (!job) return;
 
-    await supabase.from('jobs').update({ cleaner_id: cleanerId || null }).eq('id', jobId);
-    const assignedProfile = cleanerId ? { full_name: cleaners.find((c) => c.id === cleanerId)?.full_name } : null;
-    setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, cleaner_id: cleanerId, profiles: assignedProfile } : j)));
-    setSelectedJob((sj) => (sj && sj.id === jobId ? { ...sj, cleaner_id: cleanerId, profiles: assignedProfile } : sj));
-
-    if (cleanerId && job) {
-      notify({ type: 'shift_assigned', cleanerId, address: job.properties?.address, scheduledAt: job.scheduled_at });
+    const conflict = await findConflict(cleanerId, new Date(job.scheduled_at), job.duration_minutes || 120, jobId);
+    if (conflict) {
+      const proceed = confirm(
+        `This cleaner is already booked at ${conflict.properties?.address} around this time (${new Date(conflict.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}). Assign anyway?`
+      );
+      if (!proceed) return;
     }
+    if (!(await confirmTimeOffConflict(cleanerId, new Date(job.scheduled_at)))) return;
+
+    const { error } = await supabase.from('job_assignments').insert({ job_id: jobId, cleaner_id: cleanerId });
+    if (error) return;
+
+    const newAssignment = { cleaner_id: cleanerId, profiles: { full_name: cleaners.find((c) => c.id === cleanerId)?.full_name } };
+    const withNewAssignment = (j) => ({ ...j, job_assignments: [...(j.job_assignments || []), newAssignment] });
+    setJobs((prev) => prev.map((j) => (j.id === jobId ? withNewAssignment(j) : j)));
+    setSelectedJob((sj) => (sj && sj.id === jobId ? withNewAssignment(sj) : sj));
+
+    notify({ type: 'shift_assigned', cleanerId, address: job.properties?.address, scheduledAt: job.scheduled_at });
+  };
+
+  const removeCleanerFromJob = async (jobId, cleanerId) => {
+    await supabase.from('job_assignments').delete().eq('job_id', jobId).eq('cleaner_id', cleanerId);
+
+    const withoutAssignment = (j) => ({ ...j, job_assignments: (j.job_assignments || []).filter((a) => a.cleaner_id !== cleanerId) });
+    setJobs((prev) => prev.map((j) => (j.id === jobId ? withoutAssignment(j) : j)));
+    setSelectedJob((sj) => (sj && sj.id === jobId ? withoutAssignment(sj) : sj));
   };
 
   const resetForm = () => {
@@ -317,7 +336,7 @@ export default function AdminRota() {
     setJobMinute('00');
     setDuration(120);
     setUseCustomDuration(false);
-    setFormCleanerId('');
+    setFormCleanerIds([]);
     setShowForm(false);
   };
 
@@ -329,15 +348,15 @@ export default function AdminRota() {
     const scheduledAtDate = new Date(`${jobDate}T${jobTime}`);
     const scheduledAt = scheduledAtDate.toISOString();
 
-    if (formCleanerId) {
-      const conflict = await findConflict(formCleanerId, scheduledAtDate, duration, null);
+    for (const cid of formCleanerIds) {
+      const conflict = await findConflict(cid, scheduledAtDate, duration, null);
       if (conflict) {
         const proceed = confirm(
-          `This cleaner is already booked at ${conflict.properties?.address} around this time (${new Date(conflict.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}). Create this job anyway?`
+          `${cleaners.find((c) => c.id === cid)?.full_name || 'This cleaner'} is already booked at ${conflict.properties?.address} around this time (${new Date(conflict.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}). Create this job anyway?`
         );
         if (!proceed) return;
       }
-      if (!(await confirmTimeOffConflict(formCleanerId, scheduledAtDate))) return;
+      if (!(await confirmTimeOffConflict(cid, scheduledAtDate))) return;
     }
 
     // Reuse the property if this exact address already exists for the
@@ -366,19 +385,28 @@ export default function AdminRota() {
         property_id: property.id,
         scheduled_at: scheduledAt,
         duration_minutes: duration,
-        cleaner_id: formCleanerId || null,
       })
-      .select('id, scheduled_at, status, cleaner_id, duration_minutes, properties(address, clients(name)), profiles(full_name)')
+      .select('id, scheduled_at, status, duration_minutes, properties(address, clients(name))')
       .single();
 
     if (data) {
+      let assignments = [];
+      if (formCleanerIds.length > 0) {
+        const { data: assignmentRows } = await supabase
+          .from('job_assignments')
+          .insert(formCleanerIds.map((cid) => ({ job_id: data.id, cleaner_id: cid })))
+          .select('cleaner_id, profiles(full_name)');
+        assignments = assignmentRows || [];
+      }
+
+      const fullJob = { ...data, job_assignments: assignments };
       const jd = new Date(data.scheduled_at);
       if (jd >= weekStart && jd < addDays(weekStart, 7)) {
-        setJobs((prev) => [...prev, data].sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at)));
+        setJobs((prev) => [...prev, fullJob].sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at)));
       }
-      if (formCleanerId) {
-        notify({ type: 'shift_assigned', cleanerId: formCleanerId, address: data.properties?.address, scheduledAt: data.scheduled_at });
-      }
+      formCleanerIds.forEach((cid) => {
+        notify({ type: 'shift_assigned', cleanerId: cid, address: data.properties?.address, scheduledAt: data.scheduled_at });
+      });
     }
     resetForm();
   };
@@ -435,22 +463,22 @@ export default function AdminRota() {
 
     if (newDate.getTime() === new Date(job.scheduled_at).getTime()) return;
 
-    if (job.cleaner_id) {
-      const conflict = await findConflict(job.cleaner_id, newDate, job.duration_minutes || 120, job.id);
+    for (const a of job.job_assignments || []) {
+      const conflict = await findConflict(a.cleaner_id, newDate, job.duration_minutes || 120, job.id);
       if (conflict) {
         const proceed = confirm(
-          `This cleaner is already booked at ${conflict.properties?.address} around this time (${new Date(conflict.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}). Move anyway?`
+          `${a.profiles?.full_name || 'This cleaner'} is already booked at ${conflict.properties?.address} around this time (${new Date(conflict.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}). Move anyway?`
         );
         if (!proceed) return;
       }
-      if (!(await confirmTimeOffConflict(job.cleaner_id, newDate))) return;
+      if (!(await confirmTimeOffConflict(a.cleaner_id, newDate))) return;
     }
 
     const { data, error } = await supabase
       .from('jobs')
       .update({ scheduled_at: newDate.toISOString() })
       .eq('id', job.id)
-      .select('id, scheduled_at, status, cleaner_id, duration_minutes, notes, properties(address, clients(name)), profiles(full_name)')
+      .select(JOB_SELECT)
       .single();
 
     if (error) return;
@@ -466,6 +494,10 @@ export default function AdminRota() {
     });
 
   const weekLabel = `${weekStart.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${addDays(weekStart, 6).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+
+  const availableToAdd = selectedJob
+    ? cleaners.filter((c) => !(selectedJob.job_assignments || []).some((a) => a.cleaner_id === c.id))
+    : [];
 
   return (
     <div className="page-inner">
@@ -587,13 +619,22 @@ export default function AdminRota() {
               </div>
 
               <div className="field">
-                <label className="field-label">Cleaner</label>
-                <select value={formCleanerId} onChange={(e) => setFormCleanerId(e.target.value)}>
-                  <option value="">Unassigned for now</option>
+                <label className="field-label">Cleaners</label>
+                {cleaners.length === 0 && <p className="empty-state" style={{ padding: '4px 0' }}>No cleaners yet.</p>}
+                <div className="duration-chips">
                   {cleaners.map((c) => (
-                    <option key={c.id} value={c.id}>{c.full_name || c.id}</option>
+                    <button
+                      type="button"
+                      key={c.id}
+                      className={`duration-chip ${formCleanerIds.includes(c.id) ? 'active' : ''}`}
+                      onClick={() => setFormCleanerIds((prev) =>
+                        prev.includes(c.id) ? prev.filter((id) => id !== c.id) : [...prev, c.id]
+                      )}
+                    >
+                      {c.full_name || c.id}
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
             </div>
 
@@ -642,6 +683,7 @@ export default function AdminRota() {
                   const { top, height } = jobPosition(job);
                   const isSelected = selectedJob?.id === job.id;
                   const isDraggable = job.status === 'scheduled';
+                  const names = assignedNames(job);
                   return (
                     <div
                       key={job.id}
@@ -658,7 +700,7 @@ export default function AdminRota() {
                         {' · '}{formatDuration(job.duration_minutes || 120)}
                       </div>
                       <div className="calendar-job-client">{job.properties?.clients?.name || 'Unknown client'}</div>
-                      <div className="calendar-job-staff">{job.profiles?.full_name || 'Unassigned'}</div>
+                      <div className="calendar-job-staff">{names.length > 0 ? names.join(', ') : 'Unassigned'}</div>
                       <div className="calendar-job-address">{job.properties?.address}</div>
                     </div>
                   );
@@ -759,16 +801,37 @@ export default function AdminRota() {
           </div>
 
           <div style={{ marginTop: 16 }}>
-            <label>Assign cleaner</label>
-            <select
-              value={selectedJob.cleaner_id || ''}
-              onChange={(e) => assignCleaner(selectedJob.id, e.target.value)}
-            >
-              <option value="">Unassigned</option>
-              {cleaners.map((c) => (
-                <option key={c.id} value={c.id}>{c.full_name || c.id}</option>
-              ))}
-            </select>
+            <label>Assigned staff</label>
+            {(selectedJob.job_assignments || []).length === 0 && (
+              <p className="empty-state" style={{ padding: '4px 0' }}>No one assigned yet.</p>
+            )}
+            {(selectedJob.job_assignments || []).map((a) => (
+              <div key={a.cleaner_id} className="task-row" style={{ justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 14 }}>{a.profiles?.full_name || 'Unknown'}</span>
+                <button className="btn-secondary" onClick={() => removeCleanerFromJob(selectedJob.id, a.cleaner_id)}>Remove</button>
+              </div>
+            ))}
+            {availableToAdd.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                <select
+                  value={addCleanerSelection}
+                  onChange={(e) => setAddCleanerSelection(e.target.value)}
+                  style={{ flex: 1, marginBottom: 0 }}
+                >
+                  <option value="">Add a cleaner...</option>
+                  {availableToAdd.map((c) => (
+                    <option key={c.id} value={c.id}>{c.full_name || c.id}</option>
+                  ))}
+                </select>
+                <button
+                  className="btn-primary"
+                  disabled={!addCleanerSelection}
+                  onClick={() => { addCleanerToJob(selectedJob.id, addCleanerSelection); setAddCleanerSelection(''); }}
+                >
+                  Add
+                </button>
+              </div>
+            )}
           </div>
 
           <div style={{ marginTop: 16 }}>

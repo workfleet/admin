@@ -64,19 +64,25 @@ export default function AdminDashboard() {
     const { start, end } = PAYROLL_PERIODS[payrollPeriod].range();
 
     const { data } = await supabase
-      .from('jobs')
-      .select('cleaner_id, duration_minutes, profiles(full_name)')
-      .eq('status', 'completed')
-      .not('cleaner_id', 'is', null)
-      .gte('scheduled_at', start.toISOString())
-      .lt('scheduled_at', end.toISOString());
+      .from('job_assignments')
+      .select('cleaner_id, profiles(full_name), jobs!inner(id, duration_minutes, status, scheduled_at)')
+      .eq('jobs.status', 'completed')
+      .gte('jobs.scheduled_at', start.toISOString())
+      .lt('jobs.scheduled_at', end.toISOString());
+
+    // A job's duration is split evenly across everyone assigned to it, so
+    // a 2-hour job with 2 people counts as 1 hour each - not 2 hours each.
+    const assigneeCounts = {};
+    (data || []).forEach((row) => {
+      assigneeCounts[row.jobs.id] = (assigneeCounts[row.jobs.id] || 0) + 1;
+    });
 
     const totals = {};
-    (data || []).forEach((j) => {
-      const key = j.cleaner_id;
-      if (!totals[key]) totals[key] = { name: j.profiles?.full_name || 'Unknown', jobs: 0, minutes: 0 };
+    (data || []).forEach((row) => {
+      const key = row.cleaner_id;
+      if (!totals[key]) totals[key] = { name: row.profiles?.full_name || 'Unknown', jobs: 0, minutes: 0 };
       totals[key].jobs += 1;
-      totals[key].minutes += j.duration_minutes || 0;
+      totals[key].minutes += (row.jobs.duration_minutes || 0) / assigneeCounts[row.jobs.id];
     });
 
     const rows = Object.values(totals).sort((a, b) => b.minutes - a.minutes);
@@ -106,30 +112,33 @@ export default function AdminDashboard() {
       { count: clientsCount },
       { count: propertiesCount },
       { count: cleanersCount },
-      { count: jobsThisWeekCount },
-      { count: unassignedCount },
+      { data: weekJobsData },
       { data: todaysJobsData },
     ] = await Promise.all([
       supabase.from('clients').select('*', { count: 'exact', head: true }),
       supabase.from('properties').select('*', { count: 'exact', head: true }),
       supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'cleaner'),
-      supabase.from('jobs').select('*', { count: 'exact', head: true })
+      supabase.from('jobs').select('id')
         .gte('scheduled_at', startOfDay.toISOString()).lt('scheduled_at', endOfWeek.toISOString()),
-      supabase.from('jobs').select('*', { count: 'exact', head: true })
-        .gte('scheduled_at', startOfDay.toISOString()).lt('scheduled_at', endOfWeek.toISOString())
-        .is('cleaner_id', null),
       supabase.from('jobs')
-        .select('id, scheduled_at, status, duration_minutes, properties(address), profiles(full_name)')
+        .select('id, scheduled_at, status, duration_minutes, properties(address), job_assignments(cleaner_id, profiles(full_name))')
         .gte('scheduled_at', startOfDay.toISOString()).lt('scheduled_at', endOfDay.toISOString())
         .order('scheduled_at', { ascending: true }),
     ]);
+
+    const weekJobIds = (weekJobsData || []).map((j) => j.id);
+    const { data: weekAssignments } = weekJobIds.length > 0
+      ? await supabase.from('job_assignments').select('job_id').in('job_id', weekJobIds)
+      : { data: [] };
+    const assignedJobIdSet = new Set((weekAssignments || []).map((a) => a.job_id));
+    const unassignedCount = weekJobIds.filter((id) => !assignedJobIdSet.has(id)).length;
 
     setStats({
       clients: clientsCount || 0,
       properties: propertiesCount || 0,
       cleaners: cleanersCount || 0,
-      jobsThisWeek: jobsThisWeekCount || 0,
-      unassigned: unassignedCount || 0,
+      jobsThisWeek: weekJobIds.length,
+      unassigned: unassignedCount,
     });
     setTodaysJobs(todaysJobsData || []);
     setLoading(false);
@@ -250,19 +259,22 @@ export default function AdminDashboard() {
       <h2>Today's Jobs</h2>
       {todaysJobs.length === 0 && <p className="empty-state">No jobs scheduled today.</p>}
       <div className="job-list">
-        {todaysJobs.map((job) => (
-          <div key={job.id} className="card job-card">
-            <div>
-              <h2>{job.properties?.address}</h2>
-              <p className="job-time">
-                {new Date(job.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                {' · '}{formatDuration(job.duration_minutes || 120)}
-                {' · '}{job.profiles?.full_name || 'Unassigned'}
-              </p>
-              <span className={`badge ${job.status}`}>{job.status.replace('_', ' ')}</span>
+        {todaysJobs.map((job) => {
+          const names = (job.job_assignments || []).map((a) => a.profiles?.full_name || 'Unknown');
+          return (
+            <div key={job.id} className="card job-card">
+              <div>
+                <h2>{job.properties?.address}</h2>
+                <p className="job-time">
+                  {new Date(job.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                  {' · '}{formatDuration(job.duration_minutes || 120)}
+                  {' · '}{names.length > 0 ? names.join(', ') : 'Unassigned'}
+                </p>
+                <span className={`badge ${job.status}`}>{job.status.replace('_', ' ')}</span>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

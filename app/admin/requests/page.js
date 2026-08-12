@@ -40,7 +40,7 @@ export default function AdminRequests() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/'); return; }
 
-    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, { data: jobsData }] = await Promise.all([
+    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, { data: assignmentsData }] = await Promise.all([
       supabase
         .from('staff_requests')
         .select('id, type, description, status, created_at, resolved_at, resolution_note, cleaner_id, profiles(full_name), jobs(scheduled_at, properties(address))')
@@ -50,14 +50,21 @@ export default function AdminRequests() {
         .select('id, type, start_date, end_date, hours, reason, status, admin_note, created_at, cleaner_id, profiles(full_name)')
         .order('created_at', { ascending: false }),
       supabase.from('profiles').select('id, holiday_adjustment_hours').eq('role', 'cleaner'),
-      supabase.from('jobs').select('cleaner_id, status, duration_minutes').not('cleaner_id', 'is', null),
+      supabase.from('job_assignments').select('cleaner_id, jobs(id, status, duration_minutes)'),
     ]);
+
+    // A job's duration is split evenly across everyone assigned to it.
+    const assigneeCounts = {};
+    (assignmentsData || []).forEach((row) => {
+      if (!row.jobs) return;
+      assigneeCounts[row.jobs.id] = (assigneeCounts[row.jobs.id] || 0) + 1;
+    });
 
     const balanceMap = {};
     (cleanerProfiles || []).forEach((p) => {
-      const worked = (jobsData || [])
-        .filter((j) => j.cleaner_id === p.id && j.status === 'completed')
-        .reduce((sum, j) => sum + (j.duration_minutes || 0), 0) / 60;
+      const worked = (assignmentsData || [])
+        .filter((row) => row.cleaner_id === p.id && row.jobs?.status === 'completed')
+        .reduce((sum, row) => sum + (row.jobs.duration_minutes || 0) / (assigneeCounts[row.jobs.id] || 1), 0) / 60;
       balanceMap[p.id] = worked * HOLIDAY_ACCRUAL_RATE + (p.holiday_adjustment_hours || 0);
     });
     setHolidayBalances(balanceMap);
@@ -115,14 +122,16 @@ export default function AdminRequests() {
       const dayAfterEnd = new Date(target.end_date);
       dayAfterEnd.setDate(dayAfterEnd.getDate() + 1);
 
-      const { data: existingJobs } = await supabase
-        .from('jobs')
-        .select('id, scheduled_at, properties(address)')
+      const { data: existingAssignments } = await supabase
+        .from('job_assignments')
+        .select('jobs!inner(id, scheduled_at, properties(address))')
         .eq('cleaner_id', target.cleaner_id)
-        .gte('scheduled_at', new Date(target.start_date).toISOString())
-        .lt('scheduled_at', dayAfterEnd.toISOString());
+        .gte('jobs.scheduled_at', new Date(target.start_date).toISOString())
+        .lt('jobs.scheduled_at', dayAfterEnd.toISOString());
 
-      if (existingJobs && existingJobs.length > 0) {
+      const existingJobs = (existingAssignments || []).map((row) => row.jobs).filter(Boolean);
+
+      if (existingJobs.length > 0) {
         const proceed = confirm(
           `${target.profiles?.full_name || 'This cleaner'} already has ${existingJobs.length} job${existingJobs.length === 1 ? '' : 's'} scheduled during this period (first: ${existingJobs[0].properties?.address} on ${new Date(existingJobs[0].scheduled_at).toLocaleDateString()}). Approve anyway?`
         );
