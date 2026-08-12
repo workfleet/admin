@@ -29,6 +29,12 @@ export default function AdminOnboarding() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/'); return; }
 
+    // Onboarding involves reviewing ID documents and other sensitive
+    // personal data - stays full-admin only, checked here too in case
+    // someone navigates here directly by URL rather than via the nav.
+    const { data: ownProfile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+    if (ownProfile?.role !== 'admin') { router.push('/admin'); return; }
+
     const { data: invitesData } = await supabase
       .from('staff_invites')
       .select('id, token, expected_name, email, status, created_at, expires_at')

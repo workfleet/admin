@@ -23,7 +23,7 @@ export default function ClientLayout({ children }) {
       .eq('id', session.user.id)
       .single();
 
-    if (profile?.role === 'admin') { router.push('/admin'); return; }
+    if (profile?.role === 'admin' || profile?.role === 'supervisor') { router.push('/admin'); return; }
     if (profile?.role === 'cleaner') { router.push('/cleaner'); return; }
 
     setAuthorized(true);

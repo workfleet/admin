@@ -19,7 +19,11 @@ export async function POST(request) {
   const admin = await requireAdmin(request);
   if (!admin) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const { full_name: fullName, email, password } = await request.json();
+  const { full_name: fullName, email, password, role } = await request.json();
+
+  // Only 'cleaner' or 'supervisor' can be granted here - never 'admin'
+  // or 'client' through this staff-creation form.
+  const grantedRole = role === 'supervisor' ? 'supervisor' : 'cleaner';
 
   if (!fullName?.trim() || !email?.trim() || !password || password.length < 8) {
     return NextResponse.json({ error: 'missing_required_fields' }, { status: 400 });
@@ -39,9 +43,15 @@ export async function POST(request) {
     return NextResponse.json({ error: reason }, { status: 400 });
   }
 
+  // handle_new_user() always creates the profile as role='cleaner' -
+  // bump it to supervisor afterward if that's what was requested.
+  if (grantedRole === 'supervisor') {
+    await supabaseAdmin.from('profiles').update({ role: 'supervisor' }).eq('id', created.user.id);
+  }
+
   const { data: profile } = await supabaseAdmin
     .from('profiles')
-    .select('id, full_name, created_at, active, holiday_adjustment_hours')
+    .select('id, full_name, role, created_at, active, holiday_adjustment_hours')
     .eq('id', created.user.id)
     .single();
 

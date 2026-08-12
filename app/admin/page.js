@@ -50,6 +50,7 @@ export default function AdminDashboard() {
   const [todos, setTodos] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const [role, setRole] = useState(null);
   const [payrollPeriod, setPayrollPeriod] = useState('this_week');
   const [payrollRows, setPayrollRows] = useState([]);
   const [payrollLoading, setPayrollLoading] = useState(true);
@@ -59,8 +60,10 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => {
-    loadPayroll();
-  }, [payrollPeriod]);
+    // Payroll is hidden from supervisors in the UI - wait until we know
+    // the caller's own role before deciding whether to load it at all.
+    if (role === 'admin') loadPayroll();
+  }, [payrollPeriod, role]);
 
   const loadPayroll = async () => {
     setPayrollLoading(true);
@@ -96,6 +99,9 @@ export default function AdminDashboard() {
   const loadDashboard = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/'); return; }
+
+    const { data: ownProfile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+    setRole(ownProfile?.role || null);
 
     // Auto-marks overdue jobs missed/completed based on elapsed time,
     // same as the Rota page, so Today's Jobs stays consistent with it.
@@ -217,51 +223,53 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 12 }}>
-          <h2 style={{ margin: 0 }}>Payroll — Hours Worked</h2>
-          <select
-            value={payrollPeriod}
-            onChange={(e) => setPayrollPeriod(e.target.value)}
-            style={{ width: 'auto', margin: 0 }}
-          >
-            {Object.entries(PAYROLL_PERIODS).map(([key, p]) => (
-              <option key={key} value={key}>{p.label}</option>
-            ))}
-          </select>
-        </div>
-
-        {payrollLoading && <p className="empty-state">Loading...</p>}
-
-        {!payrollLoading && payrollRows.length === 0 && (
-          <p className="empty-state">No completed jobs in this period.</p>
-        )}
-
-        {!payrollLoading && payrollRows.length > 0 && (
-          <>
-            {payrollRows.map((r) => (
-              <div key={r.name} className="task-row" style={{ justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 14 }}>
-                  {r.name}{' '}
-                  <span style={{ color: 'var(--muted)', fontSize: 12.5 }}>
-                    · {r.jobs} job{r.jobs !== 1 ? 's' : ''}
-                  </span>
-                </span>
-                <strong style={{ fontSize: 14 }}>{(r.minutes / 60).toFixed(1)}h</strong>
-              </div>
-            ))}
-            <div
-              className="task-row"
-              style={{ justifyContent: 'space-between', borderTop: '2px solid var(--hairline)', borderBottom: 'none', marginTop: 2, paddingTop: 12 }}
+      {role === 'admin' && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 12 }}>
+            <h2 style={{ margin: 0 }}>Payroll — Hours Worked</h2>
+            <select
+              value={payrollPeriod}
+              onChange={(e) => setPayrollPeriod(e.target.value)}
+              style={{ width: 'auto', margin: 0 }}
             >
-              <span style={{ fontSize: 14, fontWeight: 700 }}>Total</span>
-              <strong style={{ fontSize: 14 }}>
-                {(payrollRows.reduce((sum, r) => sum + r.minutes, 0) / 60).toFixed(1)}h
-              </strong>
-            </div>
-          </>
-        )}
-      </div>
+              {Object.entries(PAYROLL_PERIODS).map(([key, p]) => (
+                <option key={key} value={key}>{p.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {payrollLoading && <p className="empty-state">Loading...</p>}
+
+          {!payrollLoading && payrollRows.length === 0 && (
+            <p className="empty-state">No completed jobs in this period.</p>
+          )}
+
+          {!payrollLoading && payrollRows.length > 0 && (
+            <>
+              {payrollRows.map((r) => (
+                <div key={r.name} className="task-row" style={{ justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 14 }}>
+                    {r.name}{' '}
+                    <span style={{ color: 'var(--muted)', fontSize: 12.5 }}>
+                      · {r.jobs} job{r.jobs !== 1 ? 's' : ''}
+                    </span>
+                  </span>
+                  <strong style={{ fontSize: 14 }}>{(r.minutes / 60).toFixed(1)}h</strong>
+                </div>
+              ))}
+              <div
+                className="task-row"
+                style={{ justifyContent: 'space-between', borderTop: '2px solid var(--hairline)', borderBottom: 'none', marginTop: 2, paddingTop: 12 }}
+              >
+                <span style={{ fontSize: 14, fontWeight: 700 }}>Total</span>
+                <strong style={{ fontSize: 14 }}>
+                  {(payrollRows.reduce((sum, r) => sum + r.minutes, 0) / 60).toFixed(1)}h
+                </strong>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       <h2>Today's Jobs</h2>
       {todaysJobs.length === 0 && <p className="empty-state">No jobs scheduled today.</p>}

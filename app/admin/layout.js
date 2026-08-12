@@ -6,12 +6,15 @@ import Link from 'next/link';
 import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, Menu, X } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
+// Cleaners/Onboarding manage staff accounts directly (adding, deactivating,
+// reviewing onboarding ID documents) - kept admin-only, hidden from
+// supervisors here and enforced again on those two pages themselves.
 const NAV_ITEMS = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/rota', label: 'Rota', icon: Calendar },
   { href: '/admin/clients', label: 'Clients', icon: Building2 },
-  { href: '/admin/cleaners', label: 'Cleaners', icon: Users },
-  { href: '/admin/onboarding', label: 'Onboarding', icon: ClipboardList },
+  { href: '/admin/cleaners', label: 'Cleaners', icon: Users, adminOnly: true },
+  { href: '/admin/onboarding', label: 'Onboarding', icon: ClipboardList, adminOnly: true },
   { href: '/admin/templates', label: 'Templates', icon: ListChecks },
   { href: '/admin/reports', label: 'Reports', icon: FileText },
   { href: '/admin/requests', label: 'Requests', icon: MessageSquareWarning },
@@ -23,6 +26,7 @@ export default function AdminLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
   const [authorized, setAuthorized] = useState(false);
+  const [role, setRole] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
@@ -43,12 +47,15 @@ export default function AdminLayout({ children }) {
       .eq('id', session.user.id)
       .single();
 
-    if (profile?.role !== 'admin') {
+    if (profile?.role !== 'admin' && profile?.role !== 'supervisor') {
       router.push('/');
       return;
     }
+    setRole(profile.role);
     setAuthorized(true);
   };
+
+  const navItems = NAV_ITEMS.filter((item) => !item.adminOnly || role === 'admin');
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -84,7 +91,7 @@ export default function AdminLayout({ children }) {
         </div>
 
         <nav className="sidebar-nav">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const active = pathname === item.href;
             const Icon = item.icon;
             return (

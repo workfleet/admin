@@ -33,7 +33,7 @@ export default function LoginPage() {
       return;
     }
 
-    if (profile?.role === 'admin') router.push('/admin');
+    if (profile?.role === 'admin' || profile?.role === 'supervisor') router.push('/admin');
     else if (profile?.role === 'client') router.push('/client');
     else router.push('/cleaner');
   };

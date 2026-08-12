@@ -54,6 +54,7 @@ export default function AdminCleaners() {
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [newRole, setNewRole] = useState('cleaner');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
   const [justCreated, setJustCreated] = useState(null);
@@ -66,8 +67,15 @@ export default function AdminCleaners() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/'); return; }
 
+    // Managing staff accounts stays full-admin only, even though
+    // supervisors can reach most of the rest of /admin - checked here
+    // too, not just hidden from the nav, in case someone navigates here
+    // directly by URL.
+    const { data: ownProfile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+    if (ownProfile?.role !== 'admin') { router.push('/admin'); return; }
+
     const [{ data: cleanersData }, { data: assignmentsData }, { data: timeOffData }] = await Promise.all([
-      supabase.from('profiles').select('id, full_name, created_at, active, holiday_adjustment_hours').eq('role', 'cleaner').order('created_at'),
+      supabase.from('profiles').select('id, full_name, role, created_at, active, holiday_adjustment_hours').in('role', ['cleaner', 'supervisor']).order('created_at'),
       supabase.from('job_assignments').select('cleaner_id, jobs(id, status, duration_minutes)'),
       supabase.from('time_off_requests').select('cleaner_id, type, status, hours'),
     ]);
@@ -119,7 +127,7 @@ export default function AdminCleaners() {
     const res = await fetch('/api/admin/cleaners/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ full_name: newName, email: newEmail, password: newPassword }),
+      body: JSON.stringify({ full_name: newName, email: newEmail, password: newPassword, role: newRole }),
     });
     const body = await res.json().catch(() => ({}));
 
@@ -140,6 +148,7 @@ export default function AdminCleaners() {
     setNewName('');
     setNewEmail('');
     setNewPassword('');
+    setNewRole('cleaner');
   };
 
   const assigneeCounts = useMemo(() => buildAssigneeCounts(jobs), [jobs]);
@@ -151,20 +160,23 @@ export default function AdminCleaners() {
       <div className="page-header-row">
         <div>
           <h1>Cleaners</h1>
-          <p className="page-subtitle">{cleaners.length} cleaner{cleaners.length === 1 ? '' : 's'}</p>
+          <p className="page-subtitle">
+            {cleaners.filter((c) => c.role !== 'supervisor').length} cleaner{cleaners.filter((c) => c.role !== 'supervisor').length === 1 ? '' : 's'}
+            {' · '}{cleaners.filter((c) => c.role === 'supervisor').length} supervisor{cleaners.filter((c) => c.role === 'supervisor').length === 1 ? '' : 's'}
+          </p>
         </div>
         <button
           className="btn-primary"
           onClick={() => { setShowAddForm((s) => !s); setJustCreated(null); setCreateError(''); }}
         >
-          {showAddForm ? 'Cancel' : '+ Add Cleaner'}
+          {showAddForm ? 'Cancel' : '+ Add Staff'}
         </button>
       </div>
 
       {showAddForm && (
         <div className="card job-form-card">
           <div className="job-form-header">
-            <h2>Add Cleaner</h2>
+            <h2>Add Staff</h2>
             <button className="job-form-close" type="button" onClick={() => setShowAddForm(false)}>×</button>
           </div>
           <form onSubmit={createCleaner}>
@@ -176,6 +188,16 @@ export default function AdminCleaners() {
               <div className="field">
                 <label className="field-label">Email</label>
                 <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} required />
+              </div>
+              <div className="field">
+                <label className="field-label">Role</label>
+                <select value={newRole} onChange={(e) => setNewRole(e.target.value)}>
+                  <option value="cleaner">Cleaner</option>
+                  <option value="supervisor">Office Staff / Supervisor</option>
+                </select>
+                <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
+                  Supervisors can manage the rota, clients, and requests like an admin, but can't manage staff accounts or see payroll.
+                </p>
               </div>
               <div className="field">
                 <label className="field-label">Password</label>
@@ -198,7 +220,7 @@ export default function AdminCleaners() {
             {createError && <p style={{ color: 'crimson', fontSize: 14, margin: '0 0 10px' }}>{createError}</p>}
             <div className="job-form-actions">
               <button type="button" className="btn-secondary" onClick={() => setShowAddForm(false)}>Cancel</button>
-              <button type="submit" className="btn-primary" disabled={creating}>{creating ? 'Adding...' : 'Add Cleaner'}</button>
+              <button type="submit" className="btn-primary" disabled={creating}>{creating ? 'Adding...' : 'Add Staff'}</button>
             </div>
           </form>
         </div>
@@ -216,10 +238,10 @@ export default function AdminCleaners() {
       )}
 
       <p className="empty-state" style={{ marginTop: showAddForm || justCreated ? 0 : -8 }}>
-        Add a cleaner directly above, or send an onboarding invite from the Onboarding page for them to fill in their own details, ID, and contract.
+        Add staff directly above, or send an onboarding invite from the Onboarding page for a new cleaner to fill in their own details, ID, and contract.
       </p>
 
-      {cleaners.length === 0 && <p className="empty-state">No cleaners yet.</p>}
+      {cleaners.length === 0 && <p className="empty-state">No staff yet.</p>}
 
       <div className="job-list">
         {cleaners.map((c) => {
@@ -234,7 +256,12 @@ export default function AdminCleaners() {
             <div key={c.id} className="card job-card" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                 <div>
-                  <h2>{c.full_name || 'Unnamed cleaner'}</h2>
+                  <h2>
+                    {c.full_name || 'Unnamed cleaner'}
+                    {c.role === 'supervisor' && (
+                      <span className="badge scheduled" style={{ marginLeft: 8, verticalAlign: 'middle' }}>supervisor</span>
+                    )}
+                  </h2>
                   <p className="job-time">
                     Joined {new Date(c.created_at).toLocaleDateString()}
                     {' · '}{cJobCount} job{cJobCount === 1 ? '' : 's'} assigned
