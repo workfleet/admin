@@ -68,16 +68,12 @@ export async function POST(request) {
       if (to.length === 0) return NextResponse.json({ skipped: 'no_email' });
       subject = 'New message from CrewConnect Cleaning';
       text = payload.body;
-    } else if (payload.type === 'staff_message') {
-      to = await adminEmails();
-      if (to.length === 0) return NextResponse.json({ skipped: 'no_email' });
-      subject = `New message from ${payload.cleanerName}`;
-      text = payload.body;
-    } else if (payload.type === 'admin_staff_reply') {
-      const email = await emailForUserId(payload.cleanerId);
+    } else if (payload.type === 'direct_message') {
+      const email = await emailForUserId(payload.toProfileId);
       if (!email) return NextResponse.json({ skipped: 'no_email' });
+      const { data: senderProfile } = await supabaseAdmin.from('profiles').select('full_name').eq('id', user.id).single();
       to = [email];
-      subject = 'New message from CrewConnect Cleaning';
+      subject = `New message from ${senderProfile?.full_name || 'a team member'}`;
       text = payload.body;
     } else {
       return NextResponse.json({ error: 'unknown_type' }, { status: 400 });
