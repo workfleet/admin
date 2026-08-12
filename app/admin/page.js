@@ -94,6 +94,10 @@ export default function AdminDashboard() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/'); return; }
 
+    // Auto-marks overdue jobs missed/completed based on elapsed time,
+    // same as the Rota page, so Today's Jobs stays consistent with it.
+    await supabase.rpc('reconcile_job_statuses');
+
     const { data: todoData } = await supabase
       .from('staff_requests')
       .select('id, type, description, created_at, profiles(full_name)')

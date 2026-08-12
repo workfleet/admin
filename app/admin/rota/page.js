@@ -284,6 +284,11 @@ export default function AdminRota() {
     const rangeStart = weekStart.toISOString();
     const rangeEnd = addDays(weekStart, 7).toISOString();
 
+    // Auto-marks overdue jobs missed/completed based on elapsed time
+    // before reading, so the calendar's colours reflect reality even for
+    // jobs nobody has touched since they were due.
+    await supabase.rpc('reconcile_job_statuses');
+
     const { data } = await supabase
       .from('jobs')
       .select(JOB_SELECT)
