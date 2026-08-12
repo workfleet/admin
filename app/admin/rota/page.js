@@ -86,6 +86,15 @@ export default function AdminRota() {
   const [jobTasks, setJobTasks] = useState([]);
   const [newTaskText, setNewTaskText] = useState('');
 
+  const [editDate, setEditDate] = useState('');
+  const [editHour, setEditHour] = useState('');
+  const [editMinute, setEditMinute] = useState('00');
+  const [editDuration, setEditDuration] = useState(120);
+  const [editUseCustomDuration, setEditUseCustomDuration] = useState(false);
+  const [editNotes, setEditNotes] = useState('');
+  const [savingJob, setSavingJob] = useState(false);
+  const [jobSaveError, setJobSaveError] = useState('');
+
   const calendarScrollRef = useRef(null);
 
   useEffect(() => {
@@ -116,6 +125,53 @@ export default function AdminRota() {
     if (selectedJob) loadTasks(selectedJob.id);
     else setJobTasks([]);
   }, [selectedJob?.id]);
+
+  useEffect(() => {
+    if (!selectedJob) return;
+    const d = new Date(selectedJob.scheduled_at);
+    setEditDate(d.toISOString().slice(0, 10));
+    setEditHour(String(d.getHours()).padStart(2, '0'));
+    setEditMinute(String(d.getMinutes() - (d.getMinutes() % 15)).padStart(2, '0'));
+    setEditDuration(selectedJob.duration_minutes || 120);
+    setEditUseCustomDuration(!QUICK_DURATIONS.includes(selectedJob.duration_minutes));
+    setEditNotes(selectedJob.notes || '');
+    setJobSaveError('');
+  }, [selectedJob?.id]);
+
+  const saveJobDetails = async () => {
+    if (!selectedJob || !editDate || !editHour) return;
+    setSavingJob(true);
+    setJobSaveError('');
+
+    const scheduledAtDate = new Date(`${editDate}T${editHour}:${editMinute}`);
+
+    if (selectedJob.cleaner_id) {
+      const conflict = await findConflict(selectedJob.cleaner_id, scheduledAtDate, editDuration, selectedJob.id);
+      if (conflict) {
+        const proceed = confirm(
+          `This cleaner is already booked at ${conflict.properties?.address} around this time (${new Date(conflict.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}). Save anyway?`
+        );
+        if (!proceed) { setSavingJob(false); return; }
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('jobs')
+      .update({
+        scheduled_at: scheduledAtDate.toISOString(),
+        duration_minutes: editDuration,
+        notes: editNotes.trim() || null,
+      })
+      .eq('id', selectedJob.id)
+      .select('id, scheduled_at, status, cleaner_id, duration_minutes, notes, properties(address)')
+      .single();
+
+    setSavingJob(false);
+    if (error) { setJobSaveError('Something went wrong saving those changes.'); return; }
+
+    setJobs((prev) => prev.map((j) => (j.id === data.id ? { ...j, ...data } : j)));
+    setSelectedJob(data);
+  };
 
   const loadTasks = async (jobId) => {
     const { data } = await supabase
@@ -168,7 +224,7 @@ export default function AdminRota() {
 
     const { data } = await supabase
       .from('jobs')
-      .select('id, scheduled_at, status, cleaner_id, duration_minutes, properties(address)')
+      .select('id, scheduled_at, status, cleaner_id, duration_minutes, notes, properties(address)')
       .gte('scheduled_at', rangeStart)
       .lt('scheduled_at', rangeEnd)
       .order('scheduled_at', { ascending: true });
@@ -497,12 +553,90 @@ export default function AdminRota() {
             <h2 style={{ margin: 0 }}>{selectedJob.properties?.address}</h2>
             <button className="btn-secondary" onClick={() => setSelectedJob(null)}>Close</button>
           </div>
-          <p className="job-time">
-            {new Date(selectedJob.scheduled_at).toLocaleString()} · {formatDuration(selectedJob.duration_minutes || 120)}
-          </p>
           <span className={`badge ${selectedJob.status}`}>{selectedJob.status.replace('_', ' ')}</span>
 
-          <div style={{ marginTop: 12 }}>
+          <div style={{ marginTop: 14 }}>
+            <div className="field-row">
+              <div className="field">
+                <label className="field-label">Date</label>
+                <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
+              </div>
+              <div className="field">
+                <label className="field-label">Time</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <select value={editHour} onChange={(e) => setEditHour(e.target.value)} style={{ flex: 1.4, marginBottom: 0 }}>
+                    {HOUR_OPTIONS.map((h) => (
+                      <option key={h} value={String(h).padStart(2, '0')}>{formatHour12(h)}</option>
+                    ))}
+                  </select>
+                  <select value={editMinute} onChange={(e) => setEditMinute(e.target.value)} style={{ flex: 1, marginBottom: 0 }}>
+                    {MINUTE_OPTIONS.map((m) => (
+                      <option key={m} value={String(m).padStart(2, '0')}>:{String(m).padStart(2, '0')}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="field" style={{ marginTop: 10 }}>
+              <label className="field-label">Duration</label>
+              <div className="duration-chips">
+                {QUICK_DURATIONS.map((mins) => (
+                  <button
+                    type="button"
+                    key={mins}
+                    className={`duration-chip ${!editUseCustomDuration && editDuration === mins ? 'active' : ''}`}
+                    onClick={() => { setEditDuration(mins); setEditUseCustomDuration(false); }}
+                  >
+                    {formatDuration(mins)}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className={`duration-chip ${editUseCustomDuration ? 'active' : ''}`}
+                  onClick={() => setEditUseCustomDuration(true)}
+                >
+                  Custom
+                </button>
+              </div>
+              {editUseCustomDuration && (
+                <div className="duration-custom-select">
+                  <select value={editDuration} onChange={(e) => setEditDuration(Number(e.target.value))}>
+                    {DURATION_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            <div className="field" style={{ marginTop: 10 }}>
+              <label className="field-label">Notes</label>
+              <textarea
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="e.g. Client wants extra attention on the windows this visit"
+                rows={3}
+                style={{
+                  width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10,
+                  background: '#f8fafc', fontSize: 14, fontFamily: 'inherit', resize: 'vertical',
+                }}
+              />
+            </div>
+
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={saveJobDetails}
+              disabled={savingJob}
+              style={{ marginTop: 10, width: '100%' }}
+            >
+              {savingJob ? 'Saving...' : 'Save Changes'}
+            </button>
+            {jobSaveError && <p style={{ color: 'crimson', fontSize: 13, marginTop: 8 }}>{jobSaveError}</p>}
+          </div>
+
+          <div style={{ marginTop: 16 }}>
             <label>Assign cleaner</label>
             <select
               value={selectedJob.cleaner_id || ''}

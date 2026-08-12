@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText } from 'lucide-react';
+import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
 const NAV_ITEMS = [
@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { href: '/admin/cleaners', label: 'Cleaners', icon: Users },
   { href: '/admin/onboarding', label: 'Onboarding', icon: ClipboardList },
   { href: '/admin/reports', label: 'Reports', icon: FileText },
+  { href: '/admin/requests', label: 'Requests', icon: MessageSquareWarning },
 ];
 
 export default function AdminLayout({ children }) {

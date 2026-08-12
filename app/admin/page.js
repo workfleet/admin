@@ -17,6 +17,7 @@ export default function AdminDashboard() {
   const router = useRouter();
   const [stats, setStats] = useState({ clients: 0, properties: 0, cleaners: 0, jobsThisWeek: 0, unassigned: 0 });
   const [todaysJobs, setTodaysJobs] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -26,6 +27,15 @@ export default function AdminDashboard() {
   const loadDashboard = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/'); return; }
+
+    const { data: notifData } = await supabase
+      .from('notifications')
+      .select('id, message, read, created_at')
+      .eq('user_id', session.user.id)
+      .eq('read', false)
+      .order('created_at', { ascending: false })
+      .limit(10);
+    setNotifications(notifData || []);
 
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
@@ -67,6 +77,11 @@ export default function AdminDashboard() {
     setLoading(false);
   };
 
+  const dismissNotification = async (id) => {
+    await supabase.from('notifications').update({ read: true }).eq('id', id);
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  };
+
   if (loading) return <div className="page-inner">Loading...</div>;
 
   return (
@@ -79,6 +94,18 @@ export default function AdminDashboard() {
           </p>
         </div>
       </div>
+
+      {notifications.length > 0 && (
+        <div className="card" style={{ background: '#fffbeb', marginBottom: 20 }}>
+          <h2>Notifications</h2>
+          {notifications.map((n) => (
+            <div key={n.id} className="task-row">
+              <span style={{ flex: 1, fontSize: 14 }}>{n.message}</span>
+              <button className="btn-secondary" onClick={() => dismissNotification(n.id)}>Dismiss</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="stat-row">
         <div className="stat-card">
