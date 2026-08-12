@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
+import { notify } from '../../../lib/notify';
 
 export default function AdminRequests() {
   const router = useRouter();
@@ -22,7 +23,7 @@ export default function AdminRequests() {
 
     const { data } = await supabase
       .from('staff_requests')
-      .select('id, type, description, status, created_at, resolved_at, resolution_note, profiles(full_name), jobs(scheduled_at, properties(address))')
+      .select('id, type, description, status, created_at, resolved_at, resolution_note, cleaner_id, profiles(full_name), jobs(scheduled_at, properties(address))')
       .order('created_at', { ascending: false });
 
     setRequests(data || []);
@@ -35,6 +36,7 @@ export default function AdminRequests() {
   };
 
   const confirmResolve = async (id) => {
+    const target = requests.find((r) => r.id === id);
     const { data } = await supabase
       .from('staff_requests')
       .update({ status: 'resolved', resolved_at: new Date().toISOString(), resolution_note: resolutionNote.trim() || null })
@@ -44,6 +46,9 @@ export default function AdminRequests() {
 
     if (data) {
       setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, ...data } : r)));
+      if (target?.cleaner_id) {
+        notify({ type: 'request_resolved', cleanerId: target.cleaner_id, description: target.description, note: data.resolution_note });
+      }
     }
     setResolvingId(null);
   };

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
+import { notify } from '../../../lib/notify';
 
 export default function AdminMessages() {
   const router = useRouter();
@@ -94,6 +95,7 @@ export default function AdminMessages() {
           .sort((a, b) => new Date(b.lastMessage.created_at) - new Date(a.lastMessage.created_at))
       );
       setReplyText('');
+      notify({ type: 'admin_reply', clientId, body: data.body });
     }
   };
 

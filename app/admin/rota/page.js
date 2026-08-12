@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
+import { notify } from '../../../lib/notify';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
 
 // Full 24hr range with scroll (CrewConnect crews run early mornings through
@@ -269,6 +270,10 @@ export default function AdminRota() {
     await supabase.from('jobs').update({ cleaner_id: cleanerId || null }).eq('id', jobId);
     setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, cleaner_id: cleanerId } : j)));
     setSelectedJob((sj) => (sj && sj.id === jobId ? { ...sj, cleaner_id: cleanerId } : sj));
+
+    if (cleanerId && job) {
+      notify({ type: 'shift_assigned', cleanerId, address: job.properties?.address, scheduledAt: job.scheduled_at });
+    }
   };
 
   const resetForm = () => {
@@ -337,6 +342,9 @@ export default function AdminRota() {
       const jd = new Date(data.scheduled_at);
       if (jd >= weekStart && jd < addDays(weekStart, 7)) {
         setJobs((prev) => [...prev, data].sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at)));
+      }
+      if (formCleanerId) {
+        notify({ type: 'shift_assigned', cleanerId: formCleanerId, address: data.properties?.address, scheduledAt: data.scheduled_at });
       }
     }
     resetForm();

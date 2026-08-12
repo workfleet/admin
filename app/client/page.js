@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, Circle } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
+import { notify } from '../../lib/notify';
 
 export default function ClientPortal() {
   const router = useRouter();
@@ -14,6 +15,7 @@ export default function ClientPortal() {
   const [checkin, setCheckin] = useState(null);
 
   const [clientId, setClientId] = useState(null);
+  const [clientName, setClientName] = useState('');
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
@@ -43,6 +45,10 @@ export default function ClientPortal() {
       .from('profiles').select('client_id').eq('id', session.user.id).single();
     if (!profile?.client_id) return;
     setClientId(profile.client_id);
+
+    const { data: clientRow } = await supabase
+      .from('clients').select('name').eq('id', profile.client_id).single();
+    setClientName(clientRow?.name || 'A client');
 
     const { data } = await supabase
       .from('client_messages')
@@ -81,6 +87,7 @@ export default function ClientPortal() {
     if (data) {
       setMessages((prev) => [...prev, data]);
       setNewMessage('');
+      notify({ type: 'client_message', clientName, body: data.body });
     }
   };
 
