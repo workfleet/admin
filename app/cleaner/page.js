@@ -112,6 +112,10 @@ export default function CleanerDashboard() {
 
   if (loading) return <div className="container">Loading...</div>;
 
+  // Completed jobs move to the Rota's History section instead of
+  // cluttering the active list here once they're done.
+  const activeJobs = jobs.filter((j) => j.status !== 'completed');
+
   return (
     <div className="container">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -140,9 +144,9 @@ export default function CleanerDashboard() {
         </div>
       )}
 
-      {jobs.length === 0 && <p>No jobs scheduled yet.</p>}
+      {activeJobs.length === 0 && <p>No jobs scheduled yet.</p>}
 
-      {jobs.map((job) => (
+      {activeJobs.map((job) => (
         <div
           key={job.id}
           className="card"
@@ -159,6 +163,14 @@ export default function CleanerDashboard() {
           )}
         </div>
       ))}
+
+      {jobs.some((j) => j.status === 'completed') && (
+        <p style={{ fontSize: 13, textAlign: 'center', margin: '-4px 0 16px' }}>
+          <Link href="/cleaner/rota" style={{ color: 'var(--brand-primary)', fontWeight: 600, textDecoration: 'none' }}>
+            Completed jobs have moved to your Rota's History →
+          </Link>
+        </p>
+      )}
 
       <div className="card">
         <h2>Need something?</h2>
