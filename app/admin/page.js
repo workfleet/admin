@@ -13,6 +13,33 @@ function formatDuration(mins) {
   return label.trim();
 }
 
+// UK payroll weeks run Monday-Sunday.
+function getWeekRange(weekOffset) {
+  const now = new Date();
+  const day = now.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() + diffToMonday + weekOffset * 7);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 7);
+  return { start, end };
+}
+
+function getMonthRange(monthOffset) {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + monthOffset + 1, 1);
+  return { start, end };
+}
+
+const PAYROLL_PERIODS = {
+  this_week: { label: 'This Week', range: () => getWeekRange(0) },
+  last_week: { label: 'Last Week', range: () => getWeekRange(-1) },
+  this_month: { label: 'This Month', range: () => getMonthRange(0) },
+  last_month: { label: 'Last Month', range: () => getMonthRange(-1) },
+};
+
 export default function AdminDashboard() {
   const router = useRouter();
   const [stats, setStats] = useState({ clients: 0, properties: 0, cleaners: 0, jobsThisWeek: 0, unassigned: 0 });
@@ -20,9 +47,42 @@ export default function AdminDashboard() {
   const [todos, setTodos] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const [payrollPeriod, setPayrollPeriod] = useState('this_week');
+  const [payrollRows, setPayrollRows] = useState([]);
+  const [payrollLoading, setPayrollLoading] = useState(true);
+
   useEffect(() => {
     loadDashboard();
   }, []);
+
+  useEffect(() => {
+    loadPayroll();
+  }, [payrollPeriod]);
+
+  const loadPayroll = async () => {
+    setPayrollLoading(true);
+    const { start, end } = PAYROLL_PERIODS[payrollPeriod].range();
+
+    const { data } = await supabase
+      .from('jobs')
+      .select('cleaner_id, duration_minutes, profiles(full_name)')
+      .eq('status', 'completed')
+      .not('cleaner_id', 'is', null)
+      .gte('scheduled_at', start.toISOString())
+      .lt('scheduled_at', end.toISOString());
+
+    const totals = {};
+    (data || []).forEach((j) => {
+      const key = j.cleaner_id;
+      if (!totals[key]) totals[key] = { name: j.profiles?.full_name || 'Unknown', jobs: 0, minutes: 0 };
+      totals[key].jobs += 1;
+      totals[key].minutes += j.duration_minutes || 0;
+    });
+
+    const rows = Object.values(totals).sort((a, b) => b.minutes - a.minutes);
+    setPayrollRows(rows);
+    setPayrollLoading(false);
+  };
 
   const loadDashboard = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -139,6 +199,52 @@ export default function AdminDashboard() {
           <div className="stat-number">{stats.unassigned}</div>
           <div className="stat-label">Unassigned</div>
         </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 12 }}>
+          <h2 style={{ margin: 0 }}>Payroll — Hours Worked</h2>
+          <select
+            value={payrollPeriod}
+            onChange={(e) => setPayrollPeriod(e.target.value)}
+            style={{ width: 'auto', margin: 0 }}
+          >
+            {Object.entries(PAYROLL_PERIODS).map(([key, p]) => (
+              <option key={key} value={key}>{p.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {payrollLoading && <p className="empty-state">Loading...</p>}
+
+        {!payrollLoading && payrollRows.length === 0 && (
+          <p className="empty-state">No completed jobs in this period.</p>
+        )}
+
+        {!payrollLoading && payrollRows.length > 0 && (
+          <>
+            {payrollRows.map((r) => (
+              <div key={r.name} className="task-row" style={{ justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 14 }}>
+                  {r.name}{' '}
+                  <span style={{ color: 'var(--muted)', fontSize: 12.5 }}>
+                    · {r.jobs} job{r.jobs !== 1 ? 's' : ''}
+                  </span>
+                </span>
+                <strong style={{ fontSize: 14 }}>{(r.minutes / 60).toFixed(1)}h</strong>
+              </div>
+            ))}
+            <div
+              className="task-row"
+              style={{ justifyContent: 'space-between', borderTop: '2px solid var(--hairline)', borderBottom: 'none', marginTop: 2, paddingTop: 12 }}
+            >
+              <span style={{ fontSize: 14, fontWeight: 700 }}>Total</span>
+              <strong style={{ fontSize: 14 }}>
+                {(payrollRows.reduce((sum, r) => sum + r.minutes, 0) / 60).toFixed(1)}h
+              </strong>
+            </div>
+          </>
+        )}
       </div>
 
       <h2>Today's Jobs</h2>

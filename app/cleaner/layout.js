@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Home, Calendar, User, FileText, Settings, MessageCircle } from 'lucide-react';
+import { Home, Calendar, User, HelpCircle, Settings, MessageCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
 const NAV_ITEMS = [
@@ -11,7 +11,7 @@ const NAV_ITEMS = [
   { href: '/cleaner/rota', label: 'Rota', icon: Calendar },
   { href: '/cleaner/messages', label: 'Messages', icon: MessageCircle },
   { href: '/cleaner/profile', label: 'Profile', icon: User },
-  { href: '/cleaner/policies', label: 'Policies', icon: FileText },
+  { href: '/cleaner/policies', label: 'Help', icon: HelpCircle },
   { href: '/cleaner/settings', label: 'Settings', icon: Settings },
 ];
 
