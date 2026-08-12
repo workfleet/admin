@@ -43,9 +43,13 @@ export default function OnboardPage() {
     emergency_contact_name: '',
     emergency_contact_phone: '',
   });
+  const [emailLocked, setEmailLocked] = useState(false);
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [idFile, setIdFile] = useState(null);
   const [agreed, setAgreed] = useState(false);
   const [signedName, setSignedName] = useState('');
+  const [formError, setFormError] = useState('');
 
   useEffect(() => {
     fetch(`/api/onboarding/${token}`)
@@ -57,9 +61,12 @@ export default function OnboardPage() {
           return;
         }
         const body = await res.json();
-        if (body.expected_name) {
-          setForm((f) => ({ ...f, full_name: body.expected_name }));
-        }
+        setForm((f) => ({
+          ...f,
+          full_name: body.expected_name || '',
+          email: body.email || '',
+        }));
+        setEmailLocked(!!body.email);
         setStatus('ready');
       })
       .catch(() => {
@@ -72,11 +79,23 @@ export default function OnboardPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setFormError('');
     if (!agreed || !signedName.trim()) return;
+
+    if (password.length < 8) {
+      setFormError('Password must be at least 8 characters.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setFormError('Passwords do not match.');
+      return;
+    }
+
     setSubmitting(true);
 
     const body = new FormData();
     Object.entries(form).forEach(([key, value]) => body.append(key, value));
+    body.append('password', password);
     body.append('contract_text', CONTRACT_TEXT);
     body.append('signed_name', signedName.trim());
     if (idFile) body.append('id_document', idFile);
@@ -88,8 +107,14 @@ export default function OnboardPage() {
       setStatus('done');
     } else {
       const respBody = await res.json().catch(() => ({}));
-      setErrorReason(respBody.error || 'error');
-      setStatus('error');
+      const reason = respBody.error || 'error';
+      if (reason === 'email_taken') {
+        setFormError('An account with this email already exists. Contact your employer for help.');
+      } else if (reason === 'missing_required_fields') {
+        setFormError('Please fill in all required fields.');
+      } else {
+        setFormError('Something went wrong. Please try again.');
+      }
     }
   };
 
@@ -119,7 +144,8 @@ export default function OnboardPage() {
         <div className="card">
           <h2>Thanks — you're all set</h2>
           <p style={{ fontSize: 14, color: 'var(--muted)' }}>
-            Your details have been submitted. Your employer will be in touch.
+            Your account has been created and your details submitted. You can now log in using the
+            email and password you just set. Your employer will be in touch.
           </p>
         </div>
       </div>
@@ -142,6 +168,44 @@ export default function OnboardPage() {
 
       <form onSubmit={handleSubmit}>
         <div className="card">
+          <h2>Create Your Login</h2>
+          <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: -6, marginBottom: 10 }}>
+            You'll use this email and password to log in to the app.
+          </p>
+          <div className="field">
+            <label className="field-label">Email</label>
+            <input
+              type="email"
+              value={form.email}
+              onChange={updateField('email')}
+              readOnly={emailLocked}
+              style={emailLocked ? { background: '#f1f5f9', color: 'var(--muted)' } : undefined}
+              required
+            />
+          </div>
+          <div className="field">
+            <label className="field-label">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="At least 8 characters"
+              required
+            />
+          </div>
+          <div className="field">
+            <label className="field-label">Confirm password</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Re-enter password"
+              required
+            />
+          </div>
+        </div>
+
+        <div className="card">
           <h2>Your details</h2>
           <div className="field">
             <label className="field-label">Full name</label>
@@ -158,10 +222,6 @@ export default function OnboardPage() {
           <div className="field">
             <label className="field-label">Phone</label>
             <input type="tel" value={form.phone} onChange={updateField('phone')} />
-          </div>
-          <div className="field">
-            <label className="field-label">Email</label>
-            <input type="email" value={form.email} onChange={updateField('email')} />
           </div>
           <div className="field">
             <label className="field-label">National Insurance number</label>
@@ -220,8 +280,10 @@ export default function OnboardPage() {
           </div>
         </div>
 
+        {formError && <p style={{ color: 'crimson', fontSize: 14, marginBottom: 10 }}>{formError}</p>}
+
         <button type="submit" disabled={submitting || !agreed || !signedName.trim()} style={{ width: '100%' }}>
-          {submitting ? 'Submitting...' : 'Sign & Submit'}
+          {submitting ? 'Submitting...' : 'Create Account & Submit'}
         </button>
       </form>
     </div>

@@ -91,9 +91,9 @@ export async function POST(request) {
       if (profile?.role !== 'admin') return NextResponse.json({ error: 'forbidden' }, { status: 403 });
       if (!payload.email) return NextResponse.json({ skipped: 'no_email' });
       to = [payload.email];
-      subject = 'Complete your CrewConnect Cleaning onboarding';
+      subject = 'Set up your CrewConnect Cleaning account';
       text = `Hi${payload.expectedName ? ' ' + payload.expectedName : ''},\n\n`
-        + `Welcome to CrewConnect Cleaning! Please complete your onboarding - your details, ID document, and signed contract - using the link below:\n\n${payload.link}\n\n`
+        + `Welcome to CrewConnect Cleaning! Use the link below to set up your login, fill in your details, upload your ID, and sign your contract:\n\n${payload.link}\n\n`
         + `This link expires in 14 days.`;
     } else if (payload.type === 'time_off_decided') {
       const email = await emailForUserId(payload.cleanerId);

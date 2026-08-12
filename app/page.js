@@ -6,7 +6,6 @@ import { supabase } from '../lib/supabaseClient';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -59,34 +58,12 @@ export default function LoginPage() {
     await redirectByRole(data.user.id);
   };
 
-  const handleSignUp = async (e) => {
-    e.preventDefault();
-    setError('');
-    setInfo('');
-    setLoading(true);
-
-    const { error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-
-    setLoading(false);
-
-    if (signUpError) {
-      setError(signUpError.message);
-      return;
-    }
-
-    setInfo('Account created. You can log in now.');
-    setMode('login');
-  };
-
   return (
     <div className="container login-page">
       <div className="brand-mark">WF</div>
       <h1>Workfleet</h1>
       <p className="login-subtitle">Sign in to manage your crew</p>
-      <form className="card" onSubmit={mode === 'login' ? handleLogin : handleSignUp}>
+      <form className="card" onSubmit={handleLogin}>
         <label>Email</label>
         <input
           type="email"
@@ -104,23 +81,11 @@ export default function LoginPage() {
         {error && <p style={{ color: 'crimson', fontSize: 14 }}>{error}</p>}
         {info && <p style={{ color: 'var(--brand-primary-dark)', fontSize: 14 }}>{info}</p>}
         <button type="submit" disabled={loading}>
-          {loading ? 'Please wait...' : mode === 'login' ? 'Log in' : 'Sign up'}
+          {loading ? 'Please wait...' : 'Log in'}
         </button>
       </form>
-      <p style={{ marginTop: 12, fontSize: 14 }}>
-        {mode === 'login' ? (
-          <>Don't have an account?{' '}
-            <a href="#" onClick={(e) => { e.preventDefault(); setMode('signup'); setError(''); setInfo(''); }}>
-              Sign up
-            </a>
-          </>
-        ) : (
-          <>Already have an account?{' '}
-            <a href="#" onClick={(e) => { e.preventDefault(); setMode('login'); setError(''); setInfo(''); }}>
-              Log in
-            </a>
-          </>
-        )}
+      <p style={{ marginTop: 12, fontSize: 14, color: 'var(--muted)' }}>
+        New staff get an account set up via their onboarding invite link.
       </p>
     </div>
   );

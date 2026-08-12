@@ -6,7 +6,7 @@ export async function POST(request, { params }) {
 
   const { data: invite, error: inviteError } = await supabaseAdmin
     .from('staff_invites')
-    .select('id, status, expires_at')
+    .select('id, status, expires_at, email')
     .eq('token', token)
     .maybeSingle();
 
@@ -22,12 +22,30 @@ export async function POST(request, { params }) {
 
   const formData = await request.formData();
   const fullName = formData.get('full_name')?.toString().trim();
+  const email = (invite.email || formData.get('email')?.toString().trim() || '').trim();
+  const password = formData.get('password')?.toString() || '';
   const signedName = formData.get('signed_name')?.toString().trim();
   const contractText = formData.get('contract_text')?.toString();
   const idFile = formData.get('id_document');
 
-  if (!fullName || !signedName || !contractText) {
+  if (!fullName || !signedName || !contractText || !email || password.length < 8) {
     return NextResponse.json({ error: 'missing_required_fields' }, { status: 400 });
+  }
+
+  // Create the new starter's login account as part of this same submission,
+  // rather than relying on the separate open self-signup on the login page.
+  const { data: created, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { full_name: fullName },
+  });
+
+  if (createUserError) {
+    const reason = createUserError.message?.toLowerCase().includes('already')
+      ? 'email_taken'
+      : 'account_creation_failed';
+    return NextResponse.json({ error: reason }, { status: 400 });
   }
 
   let idDocumentPath = null;
@@ -47,11 +65,12 @@ export async function POST(request, { params }) {
 
   const { error: insertError } = await supabaseAdmin.from('staff_onboarding_submissions').insert({
     invite_id: invite.id,
+    profile_id: created.user.id,
     full_name: fullName,
     date_of_birth: formData.get('date_of_birth')?.toString() || null,
     address: formData.get('address')?.toString().trim() || null,
     phone: formData.get('phone')?.toString().trim() || null,
-    email: formData.get('email')?.toString().trim() || null,
+    email,
     ni_number: formData.get('ni_number')?.toString().trim() || null,
     emergency_contact_name: formData.get('emergency_contact_name')?.toString().trim() || null,
     emergency_contact_phone: formData.get('emergency_contact_phone')?.toString().trim() || null,

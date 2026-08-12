@@ -6,7 +6,7 @@ export async function GET(request, { params }) {
 
   const { data: invite, error } = await supabaseAdmin
     .from('staff_invites')
-    .select('id, expected_name, status, expires_at')
+    .select('id, expected_name, email, status, expires_at')
     .eq('token', token)
     .maybeSingle();
 
@@ -22,5 +22,5 @@ export async function GET(request, { params }) {
     return NextResponse.json({ error: 'expired' }, { status: 410 });
   }
 
-  return NextResponse.json({ expected_name: invite.expected_name });
+  return NextResponse.json({ expected_name: invite.expected_name, email: invite.email });
 }
