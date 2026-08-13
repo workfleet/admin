@@ -46,7 +46,14 @@ export async function POST(request) {
   // handle_new_user() always creates the profile as role='cleaner' -
   // bump it to supervisor afterward if that's what was requested.
   if (grantedRole === 'supervisor') {
-    await supabaseAdmin.from('profiles').update({ role: 'supervisor' }).eq('id', created.user.id);
+    const { error: roleUpdateError } = await supabaseAdmin
+      .from('profiles')
+      .update({ role: 'supervisor' })
+      .eq('id', created.user.id);
+
+    if (roleUpdateError) {
+      return NextResponse.json({ error: 'role_promotion_failed' }, { status: 502 });
+    }
   }
 
   const { data: profile } = await supabaseAdmin
