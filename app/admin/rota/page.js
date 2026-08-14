@@ -19,7 +19,7 @@ const QUICK_DURATIONS = [30, 60, 90, 120, 180, 240];
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => h);
 const MINUTE_OPTIONS = [0, 15, 30, 45];
 
-const JOB_SELECT = 'id, scheduled_at, status, duration_minutes, notes, series_id, properties(address, clients(name)), job_assignments(cleaner_id, profiles(full_name))';
+const JOB_SELECT = 'id, scheduled_at, status, duration_minutes, notes, series_id, properties(address, lat, lng, clients(name)), job_assignments(cleaner_id, profiles(full_name))';
 
 // Sanity cap against a mistake (e.g. daily "forever") generating an
 // unbounded number of jobs in one go.
@@ -120,6 +120,7 @@ export default function AdminRota() {
 
   const [jobTasks, setJobTasks] = useState([]);
   const [newTaskText, setNewTaskText] = useState('');
+  const [jobCheckins, setJobCheckins] = useState([]);
 
   const [editDate, setEditDate] = useState('');
   const [editHour, setEditHour] = useState('');
@@ -161,6 +162,11 @@ export default function AdminRota() {
   useEffect(() => {
     if (selectedJob) loadTasks(selectedJob.id);
     else setJobTasks([]);
+  }, [selectedJob?.id]);
+
+  useEffect(() => {
+    if (selectedJob) loadCheckins(selectedJob.id);
+    else setJobCheckins([]);
   }, [selectedJob?.id]);
 
   useEffect(() => {
@@ -220,6 +226,16 @@ export default function AdminRota() {
       .order('completed_at', { ascending: true, nullsFirst: true });
 
     setJobTasks(data || []);
+  };
+
+  const loadCheckins = async (jobId) => {
+    const { data } = await supabase
+      .from('checkins')
+      .select('id, cleaner_id, checked_in_at, checked_out_at, lat, lng, profiles(full_name)')
+      .eq('job_id', jobId)
+      .order('checked_in_at', { ascending: true });
+
+    setJobCheckins(data || []);
   };
 
   const addTask = async (e) => {
@@ -1070,6 +1086,31 @@ export default function AdminRota() {
               </div>
             )}
           </div>
+
+          {jobCheckins.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <label>Check-ins</label>
+              {jobCheckins.map((c) => {
+                // Only flag a missing location as "unverified" when the
+                // property actually has coordinates to check against -
+                // otherwise geofencing was never attempted for this job.
+                const propertyHasCoords = selectedJob.properties?.lat != null && selectedJob.properties?.lng != null;
+                const unverified = propertyHasCoords && (c.lat == null || c.lng == null);
+                return (
+                  <div key={c.id} className="task-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ fontSize: 14 }}>{c.profiles?.full_name || 'Unknown'}</span>
+                      {unverified && <span className="badge scheduled">location unverified</span>}
+                    </div>
+                    <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>
+                      Checked in {new Date(c.checked_in_at).toLocaleTimeString()}
+                      {c.checked_out_at && ` – out ${new Date(c.checked_out_at).toLocaleTimeString()}`}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           <div style={{ marginTop: 16 }}>
             <label>To-do list</label>

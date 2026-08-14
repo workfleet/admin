@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { supabase } from '../../../../lib/supabaseClient';
 import { notify } from '../../../../lib/notify';
+import { distanceMeters, GEOFENCE_RADIUS_METERS } from '../../../../lib/geo';
 
 // Leaflet touches `window` at load time, so it can't run during SSR.
 const PropertyMap = dynamic(() => import('../../../components/PropertyMap'), { ssr: false });
@@ -23,6 +24,8 @@ export default function JobDetailPage() {
   const [requestMinutes, setRequestMinutes] = useState('');
   const [requestReason, setRequestReason] = useState('');
   const [submittingExtension, setSubmittingExtension] = useState(false);
+  const [checkInError, setCheckInError] = useState('');
+  const [checkingIn, setCheckingIn] = useState(false);
 
   useEffect(() => {
     loadJob();
@@ -128,13 +131,32 @@ export default function JobDetailPage() {
   // completed only once everyone has checked out), so it's re-read after
   // each check-in/out rather than guessed at client-side.
   const handleCheckIn = async () => {
+    setCheckInError('');
+    setCheckingIn(true);
     const { lat, lng } = await getLocation();
+
+    // Only enforce the geofence when both the property and this check-in
+    // have real coordinates - properties added before geolocation existed
+    // (or a check-in with GPS unavailable) fall back to the old
+    // no-verification behaviour rather than blocking someone from working.
+    const propertyLat = job.properties?.lat;
+    const propertyLng = job.properties?.lng;
+    if (propertyLat != null && propertyLng != null && lat != null && lng != null) {
+      const distance = distanceMeters(lat, lng, propertyLat, propertyLng);
+      if (distance > GEOFENCE_RADIUS_METERS) {
+        setCheckInError(`You're too far from this property to check in (about ${Math.round(distance)}m away). Move closer and try again.`);
+        setCheckingIn(false);
+        return;
+      }
+    }
+
     const { data, error } = await supabase
       .from('checkins')
       .insert({ job_id: id, cleaner_id: userId, checked_in_at: new Date().toISOString(), lat, lng })
       .select()
       .single();
 
+    setCheckingIn(false);
     if (!error) {
       setCheckin(data);
       const { data: jobRow } = await supabase.from('jobs').select('status').eq('id', id).single();
@@ -254,8 +276,13 @@ export default function JobDetailPage() {
 
       <div className="card">
         <h2>Check In / Out</h2>
-        {!checkin && !isHistory && <button onClick={handleCheckIn}>Check In</button>}
+        {!checkin && !isHistory && (
+          <button onClick={handleCheckIn} disabled={checkingIn}>
+            {checkingIn ? 'Checking location...' : 'Check In'}
+          </button>
+        )}
         {!checkin && isHistory && <p style={{ fontSize: 14, color: 'var(--muted)' }}>No check-in was recorded.</p>}
+        {checkInError && <p style={{ color: 'crimson', fontSize: 13, marginTop: 8 }}>{checkInError}</p>}
         {checkin && (
           <p style={{ fontSize: 14 }}>
             Checked in at {new Date(checkin.checked_in_at).toLocaleTimeString()}
