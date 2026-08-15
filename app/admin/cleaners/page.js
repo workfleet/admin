@@ -253,7 +253,12 @@ export default function AdminCleaners() {
           const cJobCount = jobCount(c.id, jobs);
 
           return (
-            <div key={c.id} className="card job-card" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+            <div
+              key={c.id}
+              className="card job-card"
+              style={{ flexDirection: 'column', alignItems: 'stretch', cursor: 'pointer' }}
+              onClick={() => router.push(`/admin/cleaners/${c.id}`)}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                 <div>
                   <h2>
@@ -273,7 +278,7 @@ export default function AdminCleaners() {
                     {' '}
                     <button
                       className="btn-secondary"
-                      onClick={() => (isEditingAdjustment ? setEditingAdjustmentId(null) : startEditAdjustment(c))}
+                      onClick={(e) => { e.stopPropagation(); isEditingAdjustment ? setEditingAdjustmentId(null) : startEditAdjustment(c); }}
                       style={{ padding: '2px 10px', fontSize: 12, marginLeft: 4 }}
                     >
                       {isEditingAdjustment ? 'Cancel' : 'Adjust'}
@@ -281,13 +286,20 @@ export default function AdminCleaners() {
                   </p>
                   {c.active === false && <span className="badge missed">deactivated</span>}
                 </div>
-                <button className="btn-secondary" onClick={() => toggleActive(c)} style={{ height: 'fit-content' }}>
+                <button
+                  className="btn-secondary"
+                  onClick={(e) => { e.stopPropagation(); toggleActive(c); }}
+                  style={{ height: 'fit-content' }}
+                >
                   {c.active === false ? 'Reactivate' : 'Deactivate'}
                 </button>
               </div>
 
               {isEditingAdjustment && (
-                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--hairline)', display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--hairline)', display: 'flex', gap: 8, alignItems: 'center' }}
+                >
                   <label style={{ margin: 0 }}>Manual adjustment (hours, +/-)</label>
                   <input
                     type="number"
