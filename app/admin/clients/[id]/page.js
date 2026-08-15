@@ -14,7 +14,7 @@ export default function ClientDetail() {
   const [client, setClient] = useState(null);
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('properties'); // properties | calls
+  const [tab, setTab] = useState('properties'); // properties | calls | hours
 
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState(null);
@@ -28,6 +28,9 @@ export default function ClientDetail() {
   const [callLogsLoading, setCallLogsLoading] = useState(false);
   const [newCallDirection, setNewCallDirection] = useState('outbound');
   const [newCallSummary, setNewCallSummary] = useState('');
+
+  const [monthlyHours, setMonthlyHours] = useState(null);
+  const [monthlyHoursLoading, setMonthlyHoursLoading] = useState(false);
 
   useEffect(() => {
     load();
@@ -71,6 +74,41 @@ export default function ClientDetail() {
       .order('called_at', { ascending: false });
     setCallLogs(data || []);
     setCallLogsLoading(false);
+  };
+
+  useEffect(() => {
+    if (tab === 'hours' && monthlyHours === null && properties.length > 0) {
+      loadMonthlyHours();
+    }
+  }, [tab, properties]);
+
+  const loadMonthlyHours = async () => {
+    setMonthlyHoursLoading(true);
+    const propertyIds = properties.map((p) => p.id);
+    const { data } = await supabase
+      .from('jobs')
+      .select('scheduled_at, duration_minutes')
+      .in('property_id', propertyIds)
+      .eq('status', 'completed');
+
+    // Hours delivered to the client, not payroll hours - a job worked by
+    // two cleaners at once is still one job's worth of service, so this
+    // doesn't split duration by assignee count the way payroll does.
+    const totals = {};
+    (data || []).forEach((job) => {
+      const d = new Date(job.scheduled_at);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!totals[key]) totals[key] = { minutes: 0, jobs: 0 };
+      totals[key].minutes += job.duration_minutes || 0;
+      totals[key].jobs += 1;
+    });
+
+    const rows = Object.entries(totals)
+      .map(([month, t]) => ({ month, ...t }))
+      .sort((a, b) => b.month.localeCompare(a.month));
+
+    setMonthlyHours(rows);
+    setMonthlyHoursLoading(false);
   };
 
   const startEdit = () => {
@@ -266,6 +304,9 @@ export default function ClientDetail() {
         <button className={tab === 'calls' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('calls')}>
           Call Log{callLogs ? ` (${callLogs.length})` : ''}
         </button>
+        <button className={tab === 'hours' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('hours')}>
+          Monthly Hours
+        </button>
       </div>
 
       {tab === 'properties' && (
@@ -348,6 +389,27 @@ export default function ClientDetail() {
                 </div>
               </div>
               <button className="btn-secondary" onClick={() => deleteCallLog(log.id)}>Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === 'hours' && (
+        <div className="card">
+          {monthlyHoursLoading && <p className="empty-state">Loading...</p>}
+          {!monthlyHoursLoading && (monthlyHours?.length || 0) === 0 && (
+            <p className="empty-state">No completed jobs yet.</p>
+          )}
+          {(monthlyHours || []).map((row) => (
+            <div key={row.month} className="task-row" style={{ justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 14 }}>
+                {new Date(`${row.month}-01`).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                {' '}
+                <span style={{ color: 'var(--muted)', fontSize: 12.5 }}>
+                  · {row.jobs} job{row.jobs !== 1 ? 's' : ''}
+                </span>
+              </span>
+              <strong style={{ fontSize: 14 }}>{(row.minutes / 60).toFixed(1)}h</strong>
             </div>
           ))}
         </div>
