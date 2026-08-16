@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Menu, X } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
 // Cleaners/Onboarding manage staff accounts directly (adding, deactivating,
@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/rota', label: 'Rota', icon: Calendar },
   { href: '/admin/clients', label: 'Clients', icon: Building2 },
+  { href: '/admin/quotes', label: 'Quotes', icon: PoundSterling },
   { href: '/admin/cleaners', label: 'Cleaners', icon: Users, adminOnly: true },
   { href: '/admin/onboarding', label: 'Onboarding', icon: ClipboardList, adminOnly: true },
   { href: '/admin/templates', label: 'Templates', icon: ListChecks },
