@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, CheckCircle2, Circle, Star } from 'lucide-react';
 import { supabase } from '../../../../lib/supabaseClient';
+import { COMPANY } from '../../../../lib/companyBranding';
 
 export default function ClientJobDetail() {
   const { id } = useParams();
@@ -242,6 +243,19 @@ export default function ClientJobDetail() {
                 ))}
               </div>
               {rating.comment && <p style={{ fontSize: 13.5, color: 'var(--muted)', margin: '6px 0 0' }}>{rating.comment}</p>}
+              {rating.rating >= 4 && COMPANY.googleReviewUrl && (
+                <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--hairline)' }}>
+                  <p style={{ fontSize: 14, margin: '0 0 8px' }}>Glad you're happy with the clean! Mind leaving us a quick public review?</p>
+                  <a href={COMPANY.googleReviewUrl} target="_blank" rel="noopener noreferrer">
+                    <button type="button">Leave a Review</button>
+                  </a>
+                </div>
+              )}
+              {rating.rating <= 3 && (
+                <p style={{ fontSize: 13.5, color: 'var(--muted)', marginTop: 10 }}>
+                  Thanks for letting us know - we've flagged this with the office so we can put it right.
+                </p>
+              )}
             </>
           ) : (
             <>

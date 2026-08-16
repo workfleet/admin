@@ -19,7 +19,7 @@ export default function AdminRequests() {
   const router = useRouter();
   const confirm = useConfirm();
   const toast = useToast();
-  const [section, setSection] = useState('requests'); // requests | timeoff | extensions | reschedules | clientRequests
+  const [section, setSection] = useState('requests'); // requests | timeoff | extensions | reschedules | clientRequests | pauses
   const [loading, setLoading] = useState(true);
   const [holidayBalances, setHolidayBalances] = useState({}); // cleanerId -> accrued hours
 
@@ -59,6 +59,12 @@ export default function AdminRequests() {
   const [resolvingClientRequestId, setResolvingClientRequestId] = useState(null);
   const [clientRequestNote, setClientRequestNote] = useState('');
 
+  // client pause requests
+  const [pauses, setPauses] = useState([]);
+  const [pauseFilter, setPauseFilter] = useState('pending'); // pending | decided | all
+  const [decidingPauseId, setDecidingPauseId] = useState(null);
+  const [pauseAdminNote, setPauseAdminNote] = useState('');
+
   useEffect(() => {
     load();
   }, []);
@@ -67,7 +73,7 @@ export default function AdminRequests() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/'); return; }
 
-    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, { data: assignmentsData }, { data: extensionsData }, { data: reschedulesData }, { data: clientRequestsData }] = await Promise.all([
+    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, { data: assignmentsData }, { data: extensionsData }, { data: reschedulesData }, { data: clientRequestsData }, { data: pausesData }] = await Promise.all([
       supabase
         .from('staff_requests')
         .select('id, type, description, status, created_at, resolved_at, resolution_note, resolved_by, cleaner_id, profiles!staff_requests_cleaner_id_fkey(full_name), resolver:profiles!staff_requests_resolved_by_fkey(full_name), jobs(scheduled_at, properties(address))')
@@ -89,6 +95,10 @@ export default function AdminRequests() {
       supabase
         .from('client_requests')
         .select('id, description, status, resolution_note, resolved_by, created_at, client_id, clients(name), resolver:profiles!client_requests_resolved_by_fkey(full_name)')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('client_pause_requests')
+        .select('id, start_date, end_date, reason, status, admin_note, created_at, client_id, clients(name), decider:profiles!client_pause_requests_decided_by_fkey(full_name)')
         .order('created_at', { ascending: false }),
     ]);
 
@@ -112,6 +122,7 @@ export default function AdminRequests() {
     setExtensions(extensionsData || []);
     setReschedules(reschedulesData || []);
     setClientRequests(clientRequestsData || []);
+    setPauses(pausesData || []);
     setLoading(false);
   };
 
@@ -183,6 +194,27 @@ export default function AdminRequests() {
     if (data) {
       setClientRequests((prev) => prev.map((r) => (r.id === id ? { ...r, ...data } : r)));
     }
+  };
+
+  const startDecidePause = (id) => {
+    setDecidingPauseId(id);
+    setPauseAdminNote('');
+  };
+
+  const confirmDecidePause = async (id, status) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data } = await supabase
+      .from('client_pause_requests')
+      .update({ status, admin_note: pauseAdminNote.trim() || null, decided_by: session.user.id, decided_at: new Date().toISOString() })
+      .eq('id', id)
+      .select('id, status, admin_note, decided_by, decider:profiles!client_pause_requests_decided_by_fkey(full_name)')
+      .single();
+
+    if (data) {
+      setPauses((prev) => prev.map((p) => (p.id === id ? { ...p, ...data } : p)));
+      toast.success(status === 'approved' ? 'Pause approved.' : 'Pause declined.');
+    }
+    setDecidingPauseId(null);
   };
 
   const startDecide = (id, status) => {
@@ -378,6 +410,13 @@ export default function AdminRequests() {
   const filteredClientRequests = clientRequests.filter((r) => clientRequestFilter === 'all' || r.status === clientRequestFilter);
   const openClientRequestCount = clientRequests.filter((r) => r.status === 'open').length;
 
+  const filteredPauses = pauses.filter((p) => {
+    if (pauseFilter === 'all') return true;
+    if (pauseFilter === 'pending') return p.status === 'pending';
+    return p.status !== 'pending';
+  });
+  const pendingPauseCount = pauses.filter((p) => p.status === 'pending').length;
+
   const filteredTimeOff = timeOff.filter((t) => timeOffFilter === 'all' || t.status === timeOffFilter);
   const pendingCount = timeOff.filter((t) => t.status === 'pending').length;
 
@@ -408,6 +447,9 @@ export default function AdminRequests() {
           </button>
           <button className={section === 'clientRequests' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('clientRequests')}>
             Client Requests ({openClientRequestCount})
+          </button>
+          <button className={section === 'pauses' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('pauses')}>
+            Pause Requests ({pendingPauseCount})
           </button>
         </div>
       </div>
@@ -765,6 +807,69 @@ export default function AdminRequests() {
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button className="btn-secondary" onClick={() => setResolvingClientRequestId(null)}>Cancel</button>
                       <button className="btn-primary" onClick={() => confirmResolveClientRequest(r.id)}>Confirm Resolved</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {section === 'pauses' && (
+        <>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <button className={pauseFilter === 'pending' ? 'btn-primary' : 'btn-secondary'} onClick={() => setPauseFilter('pending')}>Pending</button>
+            <button className={pauseFilter === 'decided' ? 'btn-primary' : 'btn-secondary'} onClick={() => setPauseFilter('decided')}>Decided</button>
+            <button className={pauseFilter === 'all' ? 'btn-primary' : 'btn-secondary'} onClick={() => setPauseFilter('all')}>All</button>
+          </div>
+
+          {filteredPauses.length === 0 && <p className="empty-state">Nothing here.</p>}
+
+          <div className="job-list">
+            {filteredPauses.map((p) => (
+              <div key={p.id} className="card job-card" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                  <div>
+                    <h2>{p.clients?.name || 'Unknown client'}</h2>
+                    <p style={{ fontSize: 14, margin: '4px 0', fontWeight: 600 }}>
+                      {new Date(p.start_date).toLocaleDateString()} – {new Date(p.end_date).toLocaleDateString()}
+                    </p>
+                    {p.reason && <p style={{ fontSize: 13.5, color: 'var(--muted)', margin: '0 0 4px' }}>{p.reason}</p>}
+                    <p className="job-time">{new Date(p.created_at).toLocaleString()}</p>
+                    <span className={`badge ${p.status === 'approved' ? 'completed' : p.status === 'declined' ? 'missed' : 'scheduled'}`}>{p.status}</span>
+                    {p.status !== 'pending' && (
+                      <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 4 }}>
+                        Decided by {p.decider?.full_name || 'Unknown'}
+                      </p>
+                    )}
+                    {p.status !== 'pending' && p.admin_note && (
+                      <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 6, fontStyle: 'italic' }}>"{p.admin_note}"</p>
+                    )}
+                  </div>
+                  {p.status === 'pending' && (
+                    <div style={{ display: 'flex', gap: 8, height: 'fit-content' }}>
+                      <button className="btn-secondary" onClick={() => startDecidePause(p.id)}>Decline</button>
+                      <button className="btn-primary" onClick={() => startDecidePause(p.id)}>Approve</button>
+                    </div>
+                  )}
+                </div>
+
+                {decidingPauseId === p.id && (
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--hairline)' }}>
+                    <label>Note (optional)</label>
+                    <textarea
+                      value={pauseAdminNote}
+                      onChange={(e) => setPauseAdminNote(e.target.value)}
+                      placeholder="e.g. No problem, enjoy your holiday"
+                      rows={2}
+                      autoFocus
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10, background: '#f8fafc', fontSize: 14, fontFamily: 'inherit', marginBottom: 8, resize: 'vertical' }}
+                    />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button className="btn-secondary" onClick={() => setDecidingPauseId(null)}>Cancel</button>
+                      <button className="btn-secondary" onClick={() => confirmDecidePause(p.id, 'declined')}>Confirm Decline</button>
+                      <button className="btn-primary" onClick={() => confirmDecidePause(p.id, 'approved')}>Confirm Approval</button>
                     </div>
                   </div>
                 )}

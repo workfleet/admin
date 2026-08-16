@@ -24,6 +24,13 @@ export default function ClientDashboard() {
   const [requestText, setRequestText] = useState('');
   const [submittingRequest, setSubmittingRequest] = useState(false);
 
+  const [myPauses, setMyPauses] = useState([]);
+  const [showPauseForm, setShowPauseForm] = useState(false);
+  const [pauseStart, setPauseStart] = useState('');
+  const [pauseEnd, setPauseEnd] = useState('');
+  const [pauseReason, setPauseReason] = useState('');
+  const [submittingPause, setSubmittingPause] = useState(false);
+
   useEffect(() => {
     load();
   }, []);
@@ -50,6 +57,7 @@ export default function ClientDashboard() {
       { data: reschedules },
       { data: ratings },
       { data: requests },
+      { data: pauses },
     ] = await Promise.all([
       supabase.from('jobs')
         .select('id, scheduled_at, status, properties(address), job_assignments(profiles(full_name))')
@@ -63,6 +71,10 @@ export default function ClientDashboard() {
       supabase.from('job_ratings').select('rating').eq('client_id', clientId),
       supabase.from('client_requests')
         .select('id, description, status, resolution_note, created_at')
+        .eq('client_id', clientId)
+        .order('created_at', { ascending: false }),
+      supabase.from('client_pause_requests')
+        .select('id, start_date, end_date, reason, status, admin_note, created_at')
         .eq('client_id', clientId)
         .order('created_at', { ascending: false }),
     ]);
@@ -79,8 +91,10 @@ export default function ClientDashboard() {
     setRecent(recentJobs);
     setCleansThisMonth(completedThisMonth);
     setMyRequests(requests || []);
+    setMyPauses(pauses || []);
     const openRequestCount = (requests || []).filter((r) => r.status === 'open').length;
-    setOpenReschedules((reschedules || []).length + openRequestCount);
+    const pendingPauseCount = (pauses || []).filter((p) => p.status === 'pending').length;
+    setOpenReschedules((reschedules || []).length + openRequestCount + pendingPauseCount);
 
     const { data: { user } } = await supabase.auth.getUser();
     const msg = (messages || [])[0];
@@ -111,6 +125,28 @@ export default function ClientDashboard() {
       setMyRequests((prev) => [data, ...prev]);
       setOpenReschedules((prev) => prev + 1);
       setRequestText('');
+    }
+  };
+
+  const submitPause = async (e) => {
+    e.preventDefault();
+    if (!clientId || !pauseStart || !pauseEnd) return;
+    setSubmittingPause(true);
+
+    const { data, error } = await supabase
+      .from('client_pause_requests')
+      .insert({ client_id: clientId, start_date: pauseStart, end_date: pauseEnd, reason: pauseReason.trim() || null })
+      .select('id, start_date, end_date, reason, status, admin_note, created_at')
+      .single();
+
+    setSubmittingPause(false);
+    if (!error && data) {
+      setMyPauses((prev) => [data, ...prev]);
+      setOpenReschedules((prev) => prev + 1);
+      setShowPauseForm(false);
+      setPauseStart('');
+      setPauseEnd('');
+      setPauseReason('');
     }
   };
 
@@ -191,6 +227,65 @@ export default function ClientDashboard() {
                 </div>
                 {r.status === 'resolved' && r.resolution_note && (
                   <div style={{ fontSize: 12.5, color: 'var(--muted)', fontStyle: 'italic', marginTop: 4 }}>"{r.resolution_note}"</div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="dash-panel-header">
+          <h2>Pause My Cleans</h2>
+        </div>
+        <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 12px' }}>
+          Going away, or having work done? Ask us to pause your cleans over a date range - no need to cancel altogether.
+        </p>
+
+        {showPauseForm ? (
+          <form onSubmit={submitPause}>
+            <div className="field-row">
+              <div className="field">
+                <label className="field-label">From</label>
+                <input type="date" value={pauseStart} onChange={(e) => setPauseStart(e.target.value)} required />
+              </div>
+              <div className="field">
+                <label className="field-label">To</label>
+                <input type="date" value={pauseEnd} onChange={(e) => setPauseEnd(e.target.value)} required />
+              </div>
+            </div>
+            <input
+              value={pauseReason}
+              onChange={(e) => setPauseReason(e.target.value)}
+              placeholder="Reason (optional)"
+              style={{ marginBottom: 10 }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" className="btn-secondary" onClick={() => setShowPauseForm(false)}>Cancel</button>
+              <button type="submit" disabled={submittingPause}>
+                {submittingPause ? 'Sending...' : 'Send Request'}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <button type="button" className="btn-secondary" onClick={() => setShowPauseForm(true)}>
+            + Request a Pause
+          </button>
+        )}
+
+        {myPauses.length > 0 && (
+          <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--hairline)' }}>
+            {myPauses.map((p) => (
+              <div key={p.id} className="task-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 13.5 }}>
+                    {new Date(p.start_date).toLocaleDateString()} – {new Date(p.end_date).toLocaleDateString()}
+                    {p.reason && <span style={{ color: 'var(--muted)' }}> · {p.reason}</span>}
+                  </span>
+                  <span className={`badge ${p.status === 'approved' ? 'completed' : p.status === 'declined' ? 'missed' : 'scheduled'}`}>{p.status}</span>
+                </div>
+                {p.status !== 'pending' && p.admin_note && (
+                  <div style={{ fontSize: 12.5, color: 'var(--muted)', fontStyle: 'italic', marginTop: 4 }}>"{p.admin_note}"</div>
                 )}
               </div>
             ))}
