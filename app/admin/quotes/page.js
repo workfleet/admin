@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../../../lib/supabaseClient';
+import AddressAutocomplete from '../../components/AddressAutocomplete';
 import {
   ROOM_TYPES, CONDITION_OPTIONS, CLEAN_TYPE_OPTIONS, FURNISHED_OPTIONS,
   PROPERTY_TYPES, PROPERTY_TYPE_DEFAULTS, ADDON_TYPES, OVEN_OPTIONS,
@@ -351,10 +352,11 @@ export default function AdminQuotes() {
                 <div style={{ border: '1px solid var(--hairline)', borderRadius: 12, padding: 14, marginTop: 4 }}>
                   <div className="field">
                     <label className="field-label">Property address</label>
-                    <input
+                    <AddressAutocomplete
                       value={calcInput.propertyAddress}
-                      onChange={(e) => setCalcInput((c) => ({ ...c, propertyAddress: e.target.value }))}
-                      placeholder="For the quote description"
+                      onChange={(text) => setCalcInput((c) => ({ ...c, propertyAddress: text }))}
+                      onSelect={({ address }) => setCalcInput((c) => ({ ...c, propertyAddress: address }))}
+                      placeholder="Start typing an address..."
                     />
                   </div>
                   <div className="field-row">
