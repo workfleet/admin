@@ -1,12 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Minus, Trash2 } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { KIT_PRODUCTS } from '../../../lib/kitProducts';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
+
+function formatQty(n) {
+  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+}
 
 export default function AdminInventory() {
   const router = useRouter();
@@ -15,10 +19,14 @@ export default function AdminInventory() {
 
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [newName, setNewName] = useState('');
   const [newStock, setNewStock] = useState(0);
   const [newThreshold, setNewThreshold] = useState(5);
+  const [newLocation, setNewLocation] = useState('');
+  const [newSupplier, setNewSupplier] = useState('');
+  const [newUnitPrice, setNewUnitPrice] = useState('');
 
   useEffect(() => {
     load();
@@ -28,7 +36,10 @@ export default function AdminInventory() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/'); return; }
 
-    const { data } = await supabase.from('products').select('id, name, stock_level, reorder_threshold').order('name');
+    const { data } = await supabase
+      .from('products')
+      .select('id, name, stock_level, reorder_threshold, location, supplier, unit_price')
+      .order('name');
     setProducts(data || []);
     setLoading(false);
   };
@@ -41,7 +52,7 @@ export default function AdminInventory() {
     let newLevel = product.stock_level;
     setProducts((prev) => prev.map((p) => {
       if (p.id !== product.id) return p;
-      newLevel = Math.max(0, p.stock_level + delta);
+      newLevel = Math.max(0, Math.round((p.stock_level + delta) * 100) / 100);
       return { ...p, stock_level: newLevel };
     }));
     const { error } = await supabase.from('products').update({ stock_level: newLevel }).eq('id', product.id);
@@ -54,7 +65,14 @@ export default function AdminInventory() {
 
     const { data, error } = await supabase
       .from('products')
-      .insert({ name: newName.trim(), stock_level: Number(newStock) || 0, reorder_threshold: Number(newThreshold) || 0 })
+      .insert({
+        name: newName.trim(),
+        stock_level: Number(newStock) || 0,
+        reorder_threshold: Number(newThreshold) || 0,
+        location: newLocation.trim() || null,
+        supplier: newSupplier.trim() || null,
+        unit_price: newUnitPrice === '' ? null : Number(newUnitPrice),
+      })
       .select()
       .single();
 
@@ -63,6 +81,9 @@ export default function AdminInventory() {
     setNewName('');
     setNewStock(0);
     setNewThreshold(5);
+    setNewLocation('');
+    setNewSupplier('');
+    setNewUnitPrice('');
     setShowAddForm(false);
     toast.success('Product added.');
   };
@@ -89,6 +110,14 @@ export default function AdminInventory() {
     setProducts((prev) => prev.filter((p) => p.id !== product.id));
     toast.success('Product removed.');
   };
+
+  const filteredProducts = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter((p) =>
+      [p.name, p.location, p.supplier].some((v) => v?.toLowerCase().includes(q))
+    );
+  }, [products, search]);
 
   if (loading) return <div className="page-inner">Loading...</div>;
 
@@ -123,12 +152,26 @@ export default function AdminInventory() {
               <div className="field-row">
                 <div className="field">
                   <label className="field-label">Starting stock</label>
-                  <input type="number" min="0" value={newStock} onChange={(e) => setNewStock(e.target.value)} />
+                  <input type="number" step="0.1" min="0" value={newStock} onChange={(e) => setNewStock(e.target.value)} />
                 </div>
                 <div className="field">
                   <label className="field-label">Reorder threshold</label>
-                  <input type="number" min="0" value={newThreshold} onChange={(e) => setNewThreshold(e.target.value)} />
+                  <input type="number" step="0.1" min="0" value={newThreshold} onChange={(e) => setNewThreshold(e.target.value)} />
                 </div>
+              </div>
+              <div className="field-row">
+                <div className="field">
+                  <label className="field-label">Location (optional)</label>
+                  <input value={newLocation} onChange={(e) => setNewLocation(e.target.value)} placeholder="e.g. Shelf 2" />
+                </div>
+                <div className="field">
+                  <label className="field-label">Supplier (optional)</label>
+                  <input value={newSupplier} onChange={(e) => setNewSupplier(e.target.value)} placeholder="e.g. Cotton & Sons" />
+                </div>
+              </div>
+              <div className="field">
+                <label className="field-label">Unit price (optional)</label>
+                <input type="number" step="0.01" min="0" value={newUnitPrice} onChange={(e) => setNewUnitPrice(e.target.value)} />
               </div>
             </div>
             <div className="job-form-actions">
@@ -141,22 +184,38 @@ export default function AdminInventory() {
 
       {products.length === 0 && <p className="empty-state">No products tracked yet - add one, or use "Add Kit List" to seed from your standard supplies.</p>}
 
+      {products.length > 0 && (
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by name, location, or supplier..."
+          style={{
+            width: '100%', padding: '10px 14px', border: '1px solid var(--hairline)', borderRadius: 'var(--radius-pill)',
+            background: 'white', fontSize: 14, fontFamily: 'inherit', marginBottom: 16,
+          }}
+        />
+      )}
+
       <div className="card">
-        {products.map((p) => {
+        {filteredProducts.length === 0 && products.length > 0 && <p className="empty-state">No products match your search.</p>}
+        {filteredProducts.map((p) => {
           const low = p.stock_level <= p.reorder_threshold;
           return (
             <div key={p.id} className="task-row" style={{ justifyContent: 'space-between' }}>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>{p.name}</div>
                 <div style={{ fontSize: 12, color: low ? 'crimson' : 'var(--muted)' }}>
-                  {low && 'Low stock · '}Reorder at {p.reorder_threshold}
+                  {low && 'Low stock · '}Reorder at {formatQty(p.reorder_threshold)}
+                  {p.location && ` · ${p.location}`}
+                  {p.supplier && ` · ${p.supplier}`}
+                  {p.unit_price != null && ` · £${Number(p.unit_price).toFixed(2)}`}
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <button type="button" className="btn-secondary" onClick={() => adjustStock(p, -1)} style={{ padding: '6px 8px' }} aria-label="Decrease">
                   <Minus size={14} />
                 </button>
-                <strong style={{ fontSize: 16, minWidth: 28, textAlign: 'center' }}>{p.stock_level}</strong>
+                <strong style={{ fontSize: 16, minWidth: 28, textAlign: 'center' }}>{formatQty(p.stock_level)}</strong>
                 <button type="button" className="btn-secondary" onClick={() => adjustStock(p, 1)} style={{ padding: '6px 8px' }} aria-label="Increase">
                   <Plus size={14} />
                 </button>
