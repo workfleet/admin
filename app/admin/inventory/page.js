@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Minus, Trash2 } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
-import { KIT_PRODUCTS } from '../../../lib/kitProducts';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
 
@@ -88,21 +87,6 @@ export default function AdminInventory() {
     toast.success('Product added.');
   };
 
-  const seedDefaults = async () => {
-    const existingNames = new Set(products.map((p) => p.name));
-    const missing = KIT_PRODUCTS.filter((name) => !existingNames.has(name));
-    if (missing.length === 0) { toast.error('All kit products are already in the list.'); return; }
-
-    const { data, error } = await supabase
-      .from('products')
-      .insert(missing.map((name) => ({ name, stock_level: 0, reorder_threshold: 5 })))
-      .select();
-
-    if (error) { toast.error('Could not seed products.'); return; }
-    setProducts((prev) => [...prev, ...(data || [])].sort((a, b) => a.name.localeCompare(b.name)));
-    toast.success(`Added ${data.length} product${data.length === 1 ? '' : 's'} from the kit list.`);
-  };
-
   const deleteProduct = async (product) => {
     if (!(await confirm(`Remove "${product.name}" from inventory tracking?`, { danger: true }))) return;
     const { error } = await supabase.from('products').delete().eq('id', product.id);
@@ -134,7 +118,6 @@ export default function AdminInventory() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn-secondary" onClick={seedDefaults}>Add Kit List</button>
           <button className="btn-primary" onClick={() => setShowAddForm((s) => !s)}>
             {showAddForm ? 'Cancel' : '+ Product'}
           </button>
@@ -182,7 +165,7 @@ export default function AdminInventory() {
         </div>
       )}
 
-      {products.length === 0 && <p className="empty-state">No products tracked yet - add one, or use "Add Kit List" to seed from your standard supplies.</p>}
+      {products.length === 0 && <p className="empty-state">No products tracked yet - add one to get started.</p>}
 
       {products.length > 0 && (
         <input
