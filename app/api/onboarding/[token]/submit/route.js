@@ -26,9 +26,10 @@ export async function POST(request, { params }) {
   const password = formData.get('password')?.toString() || '';
   const signedName = formData.get('signed_name')?.toString().trim();
   const contractText = formData.get('contract_text')?.toString();
+  const policiesAgreed = formData.get('policies_agreed')?.toString() === 'true';
   const idFile = formData.get('id_document');
 
-  if (!fullName || !signedName || !contractText || !email || password.length < 8) {
+  if (!fullName || !signedName || !contractText || !policiesAgreed || !email || password.length < 8) {
     return NextResponse.json({ error: 'missing_required_fields' }, { status: 400 });
   }
 
@@ -76,6 +77,7 @@ export async function POST(request, { params }) {
     emergency_contact_phone: formData.get('emergency_contact_phone')?.toString().trim() || null,
     id_document_path: idDocumentPath,
     contract_text: contractText,
+    policies_agreed: policiesAgreed,
     signed_name: signedName,
     signed_ip: signedIp,
   });

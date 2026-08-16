@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { POLICY_SECTIONS } from '../../../lib/companyPolicies';
 
 // PLACEHOLDER — replace with your actual reviewed employment contract text
 // before using this for real new starters. This is not legal advice and is
@@ -47,6 +48,7 @@ export default function OnboardPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [idFile, setIdFile] = useState(null);
+  const [policiesAgreed, setPoliciesAgreed] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [signedName, setSignedName] = useState('');
   const [formError, setFormError] = useState('');
@@ -80,7 +82,7 @@ export default function OnboardPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
-    if (!agreed || !signedName.trim()) return;
+    if (!policiesAgreed || !agreed || !signedName.trim()) return;
 
     if (password.length < 8) {
       setFormError('Password must be at least 8 characters.');
@@ -98,6 +100,7 @@ export default function OnboardPage() {
     body.append('password', password);
     body.append('contract_text', CONTRACT_TEXT);
     body.append('signed_name', signedName.trim());
+    body.append('policies_agreed', 'true');
     if (idFile) body.append('id_document', idFile);
 
     const res = await fetch(`/api/onboarding/${token}/submit`, { method: 'POST', body });
@@ -246,6 +249,46 @@ export default function OnboardPage() {
         </div>
 
         <div className="card">
+          <h2>Company Policies</h2>
+          <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: -6, marginBottom: 10 }}>
+            Please read through how we work at CrewConnect Cleaning before you get started.
+          </p>
+          <div
+            style={{
+              border: '1px solid var(--hairline)',
+              borderRadius: 10,
+              maxHeight: 260,
+              overflowY: 'auto',
+              marginBottom: 14,
+            }}
+          >
+            {POLICY_SECTIONS.map((policy, i) => (
+              <div
+                key={policy.title}
+                style={{
+                  padding: 14,
+                  borderTop: i === 0 ? 'none' : '1px solid var(--hairline)',
+                  background: '#f8fafc',
+                }}
+              >
+                <strong style={{ fontSize: 14 }}>{policy.title}</strong>
+                <p style={{ fontSize: 13.5, color: 'var(--ink-soft)', margin: '4px 0 0', lineHeight: 1.5 }}>{policy.body}</p>
+              </div>
+            ))}
+          </div>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, textTransform: 'none', fontWeight: 500, fontSize: 14, color: 'var(--ink)' }}>
+            <input
+              type="checkbox"
+              checked={policiesAgreed}
+              onChange={(e) => setPoliciesAgreed(e.target.checked)}
+              style={{ width: 'auto', margin: 0 }}
+            />
+            I have read and agree to follow these policies
+          </label>
+        </div>
+
+        <div className="card">
           <h2>Contract</h2>
           <div
             style={{
@@ -282,7 +325,7 @@ export default function OnboardPage() {
 
         {formError && <p style={{ color: 'crimson', fontSize: 14, marginBottom: 10 }}>{formError}</p>}
 
-        <button type="submit" disabled={submitting || !agreed || !signedName.trim()} style={{ width: '100%' }}>
+        <button type="submit" disabled={submitting || !policiesAgreed || !agreed || !signedName.trim()} style={{ width: '100%' }}>
           {submitting ? 'Submitting...' : 'Create Account & Submit'}
         </button>
       </form>

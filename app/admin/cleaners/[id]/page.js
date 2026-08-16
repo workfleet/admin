@@ -24,6 +24,9 @@ export default function CleanerProfile() {
   const [docUrl, setDocUrl] = useState(null);
   const [docLoading, setDocLoading] = useState(false);
 
+  const [removing, setRemoving] = useState(false);
+  const [removedEmail, setRemovedEmail] = useState(null);
+
   const [reminders, setReminders] = useState([]);
   const [isAddingReminder, setIsAddingReminder] = useState(false);
   const [newReminderDate, setNewReminderDate] = useState('');
@@ -154,6 +157,29 @@ export default function CleanerProfile() {
     if (data) setCleaner((c) => ({ ...c, active: data.active }));
   };
 
+  const removeAccount = async () => {
+    if (!confirm(
+      `Remove ${cleaner.full_name || 'this account'}? This deactivates them and frees up their email so it can be reused ` +
+      `for a new starter, but keeps all their job history, photos, and reports intact. This can't be easily undone.`
+    )) return;
+
+    setRemoving(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch(`/api/admin/cleaners/${id}/remove`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    setRemoving(false);
+
+    if (res.ok) {
+      const body = await res.json();
+      setRemovedEmail(body.releasedEmail);
+      setCleaner((c) => ({ ...c, active: false }));
+    } else {
+      alert("Couldn't remove this account. Please try again.");
+    }
+  };
+
   const startEditAdjustment = () => {
     setAdjustmentInput(String(cleaner.holiday_adjustment_hours));
     setEditingAdjustment(true);
@@ -212,10 +238,22 @@ export default function CleanerProfile() {
             </h1>
             <p className="job-time" style={{ marginTop: 4 }}>Joined {new Date(cleaner.created_at).toLocaleDateString()}</p>
           </div>
-          <button className="btn-secondary" onClick={toggleActive}>
-            {cleaner.active === false ? 'Reactivate' : 'Deactivate'}
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn-secondary" onClick={toggleActive}>
+              {cleaner.active === false ? 'Reactivate' : 'Deactivate'}
+            </button>
+            {cleaner.active !== false && (
+              <button className="btn-secondary" onClick={removeAccount} disabled={removing}>
+                {removing ? 'Removing...' : 'Remove Account'}
+              </button>
+            )}
+          </div>
         </div>
+        {removedEmail && (
+          <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 10 }}>
+            Removed — <strong>{removedEmail}</strong> is now free to use for a new onboarding invite.
+          </p>
+        )}
       </div>
 
       {submission && (
