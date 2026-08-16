@@ -7,6 +7,7 @@ import { ArrowLeft } from 'lucide-react';
 import { supabase } from '../../../../lib/supabaseClient';
 import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
+import { lateMinutes } from '../../../../lib/clockIn';
 
 const HOLIDAY_ACCRUAL_RATE = 0.1207; // UK statutory: 5.6 weeks / 46.4 working weeks
 
@@ -18,6 +19,8 @@ export default function CleanerProfile() {
 
   const [cleaner, setCleaner] = useState(null);
   const [jobs, setJobs] = useState([]);
+  const [checkins, setCheckins] = useState(null);
+  const [showClockIns, setShowClockIns] = useState(false);
   const [timeOffRequests, setTimeOffRequests] = useState([]);
   const [submission, setSubmission] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -40,6 +43,19 @@ export default function CleanerProfile() {
   useEffect(() => {
     load();
   }, [id]);
+
+  useEffect(() => {
+    if (showClockIns && checkins === null && id) loadClockIns();
+  }, [showClockIns, id]);
+
+  const loadClockIns = async () => {
+    const { data } = await supabase
+      .from('checkins')
+      .select('id, job_id, checked_in_at, checked_out_at, jobs(scheduled_at, properties(address))')
+      .eq('cleaner_id', id)
+      .order('checked_in_at', { ascending: false });
+    setCheckins(data || []);
+  };
 
   const load = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -399,6 +415,39 @@ export default function CleanerProfile() {
             <span className={`badge ${job.status}`}>{job.status.replace('_', ' ')}</span>
           </div>
         ))}
+      </div>
+
+      <div className="card" style={{ cursor: 'pointer' }} onClick={() => setShowClockIns((s) => !s)}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ margin: 0 }}>Clock-in Summary</h2>
+          <span style={{ fontSize: 13, color: 'var(--brand-primary)', fontWeight: 600 }}>{showClockIns ? 'Hide' : 'Show'}</span>
+        </div>
+        {showClockIns && (
+          <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 10 }}>
+            {checkins === null && <p className="empty-state">Loading...</p>}
+            {checkins?.length === 0 && <p className="empty-state">No check-ins yet.</p>}
+            {checkins?.map((c) => {
+              const late = lateMinutes(c.checked_in_at, c.jobs?.scheduled_at);
+              return (
+                <div key={c.id} className="task-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 14 }}>{c.jobs?.properties?.address || 'Unknown property'}</div>
+                      <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                        Scheduled {c.jobs?.scheduled_at ? new Date(c.jobs.scheduled_at).toLocaleString() : '—'}
+                      </div>
+                    </div>
+                    {late > 0 && <span className="badge missed">{late}m late</span>}
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+                    Clocked in {new Date(c.checked_in_at).toLocaleTimeString()}
+                    {c.checked_out_at ? ` · out ${new Date(c.checked_out_at).toLocaleTimeString()}` : ' · still on site'}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

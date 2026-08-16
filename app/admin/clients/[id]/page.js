@@ -9,6 +9,7 @@ import AddressAutocomplete from '../../../components/AddressAutocomplete';
 import { INDUSTRY_OPTIONS } from '../../../../lib/clientIndustries';
 import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
+import { lateMinutes } from '../../../../lib/clockIn';
 
 export default function ClientDetail() {
   const router = useRouter();
@@ -19,7 +20,7 @@ export default function ClientDetail() {
   const [client, setClient] = useState(null);
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('properties'); // properties | calls | hours | reviews
+  const [tab, setTab] = useState('properties'); // properties | calls | hours | reviews | clockins
 
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState(null);
@@ -43,6 +44,9 @@ export default function ClientDetail() {
   const [newReminderDate, setNewReminderDate] = useState('');
   const [newReminderRecurs, setNewReminderRecurs] = useState(false);
   const [newReminderNotes, setNewReminderNotes] = useState('');
+
+  const [clockIns, setClockIns] = useState(null);
+  const [clockInsLoading, setClockInsLoading] = useState(false);
 
   useEffect(() => {
     load();
@@ -138,6 +142,35 @@ export default function ClientDetail() {
       .order('due_date', { ascending: true });
     setReminders(data || []);
     setRemindersLoading(false);
+  };
+
+  useEffect(() => {
+    if (tab === 'clockins' && clockIns === null && properties.length > 0) {
+      loadClockIns();
+    }
+  }, [tab, properties]);
+
+  const loadClockIns = async () => {
+    setClockInsLoading(true);
+    const propertyIds = properties.map((p) => p.id);
+    const { data: jobRows } = await supabase
+      .from('jobs')
+      .select('id, scheduled_at, properties(address)')
+      .in('property_id', propertyIds);
+
+    const jobMap = Object.fromEntries((jobRows || []).map((j) => [j.id, j]));
+    const jobIds = (jobRows || []).map((j) => j.id);
+
+    const { data } = jobIds.length > 0
+      ? await supabase
+          .from('checkins')
+          .select('id, job_id, checked_in_at, checked_out_at, profiles(full_name)')
+          .in('job_id', jobIds)
+          .order('checked_in_at', { ascending: false })
+      : { data: [] };
+
+    setClockIns((data || []).map((c) => ({ ...c, job: jobMap[c.job_id] })));
+    setClockInsLoading(false);
   };
 
   const addReminder = async (e) => {
@@ -407,6 +440,9 @@ export default function ClientDetail() {
         <button className={tab === 'reviews' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('reviews')}>
           Reviews{reminders ? ` (${reminders.length})` : ''}
         </button>
+        <button className={tab === 'clockins' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('clockins')}>
+          Clock-ins{clockIns ? ` (${clockIns.length})` : ''}
+        </button>
       </div>
 
       {tab === 'properties' && (
@@ -574,6 +610,33 @@ export default function ClientDetail() {
               + Reminder
             </button>
           )}
+        </div>
+      )}
+
+      {tab === 'clockins' && (
+        <div className="card">
+          {clockInsLoading && <p className="empty-state">Loading...</p>}
+          {!clockInsLoading && (clockIns?.length || 0) === 0 && <p className="empty-state">No check-ins yet.</p>}
+          {(clockIns || []).map((c) => {
+            const late = lateMinutes(c.checked_in_at, c.job?.scheduled_at);
+            return (
+              <div key={c.id} className="task-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 14 }}>{c.job?.properties?.address || 'Unknown property'}</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                      {c.profiles?.full_name || 'Unknown cleaner'} · scheduled {c.job?.scheduled_at ? new Date(c.job.scheduled_at).toLocaleString() : '—'}
+                    </div>
+                  </div>
+                  {late > 0 && <span className="badge missed">{late}m late</span>}
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+                  Clocked in {new Date(c.checked_in_at).toLocaleTimeString()}
+                  {c.checked_out_at ? ` · out ${new Date(c.checked_out_at).toLocaleTimeString()}` : ' · still on site'}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
