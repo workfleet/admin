@@ -81,7 +81,8 @@ export default function AdminDashboard() {
   const [upcomingJobs, setUpcomingJobs] = useState([]);
   const [attention, setAttention] = useState([]);
   const [detailItem, setDetailItem] = useState(null);
-  const [staffGlance, setStaffGlance] = useState({ working: 0, holiday: 0, off: 0, total: 0 });
+  const [staffGlance, setStaffGlance] = useState({ working: [], holiday: [], off: [], total: 0 });
+  const [glanceDetail, setGlanceDetail] = useState(null);
 
   const [payrollPeriod, setPayrollPeriod] = useState('this_week');
   const [payrollLoading, setPayrollLoading] = useState(true);
@@ -222,11 +223,12 @@ export default function AdminDashboard() {
 
     const workingIds = new Set((openCheckins || []).map((c) => c.cleaner_id));
     const holidayIds = new Set((todaysTimeOff || []).map((t) => t.cleaner_id));
-    let working = 0, holiday = 0, off = 0;
+    const working = [], holiday = [], off = [];
     (activeCleaners || []).forEach((c) => {
-      if (workingIds.has(c.id)) working += 1;
-      else if (holidayIds.has(c.id)) holiday += 1;
-      else off += 1;
+      const name = c.full_name || 'Unknown';
+      if (workingIds.has(c.id)) working.push(name);
+      else if (holidayIds.has(c.id)) holiday.push(name);
+      else off.push(name);
     });
     setStaffGlance({ working, holiday, off, total: (activeCleaners || []).length });
 
@@ -467,17 +469,29 @@ export default function AdminDashboard() {
           <div className="dash-panel-header">
             <h2>Staff at a Glance</h2>
           </div>
-          <div className="dash-glance-row">
+          <div
+            className="dash-glance-row"
+            style={{ cursor: staffGlance.working.length > 0 ? 'pointer' : 'default' }}
+            onClick={() => staffGlance.working.length > 0 && setGlanceDetail({ title: 'Working now', names: staffGlance.working })}
+          >
             <span className="dash-glance-dot" style={{ background: '#22c55e' }} />
-            <strong>{staffGlance.working}</strong> Working now
+            <strong>{staffGlance.working.length}</strong> Working now
           </div>
-          <div className="dash-glance-row">
+          <div
+            className="dash-glance-row"
+            style={{ cursor: staffGlance.holiday.length > 0 ? 'pointer' : 'default' }}
+            onClick={() => staffGlance.holiday.length > 0 && setGlanceDetail({ title: 'On holiday / leave', names: staffGlance.holiday })}
+          >
             <span className="dash-glance-dot" style={{ background: '#f59e0b' }} />
-            <strong>{staffGlance.holiday}</strong> On holiday / leave
+            <strong>{staffGlance.holiday.length}</strong> On holiday / leave
           </div>
-          <div className="dash-glance-row">
+          <div
+            className="dash-glance-row"
+            style={{ cursor: staffGlance.off.length > 0 ? 'pointer' : 'default' }}
+            onClick={() => staffGlance.off.length > 0 && setGlanceDetail({ title: 'Not working today', names: staffGlance.off })}
+          >
             <span className="dash-glance-dot" style={{ background: '#cbd5e1' }} />
-            <strong>{staffGlance.off}</strong> Not working today
+            <strong>{staffGlance.off.length}</strong> Not working today
           </div>
           <Link href="/admin/cleaners" className="dash-panel-link" style={{ display: 'inline-block', marginTop: 8 }}>
             View staff &rarr;
@@ -541,6 +555,23 @@ export default function AdminDashboard() {
               >
                 Mark Resolved
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {glanceDetail && (
+        <div className="confirm-overlay" onClick={() => setGlanceDetail(null)}>
+          <div className="confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>{glanceDetail.title}</h2>
+            <p style={{ margin: '0 0 4px' }}>{glanceDetail.names.length} cleaner{glanceDetail.names.length === 1 ? '' : 's'}</p>
+            <div style={{ margin: '12px 0 20px' }}>
+              {glanceDetail.names.map((name) => (
+                <div key={name} style={{ fontSize: 14.5, padding: '6px 0', borderBottom: '1px solid var(--hairline)' }}>{name}</div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button type="button" className="btn-secondary" onClick={() => setGlanceDetail(null)}>Close</button>
             </div>
           </div>
         </div>
