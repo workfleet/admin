@@ -43,7 +43,7 @@ export default function JobDetailPage() {
 
     const { data: jobData } = await supabase
       .from('jobs')
-      .select('id, scheduled_at, status, duration_minutes, property_id, properties(address, notes, lat, lng)')
+      .select('id, scheduled_at, status, duration_minutes, property_id, properties(address, notes, client_access_notes, lat, lng)')
       .eq('id', id)
       .single();
 
@@ -287,6 +287,11 @@ export default function JobDetailPage() {
       <p style={{ color: 'var(--muted)' }}>{new Date(job.scheduled_at).toLocaleString()}</p>
       {isHistory && <span className="badge completed">completed</span>}
       {job.properties?.notes && <p className="card">{job.properties.notes}</p>}
+      {job.properties?.client_access_notes && (
+        <p className="card" style={{ borderLeft: '3px solid var(--brand-primary)' }}>
+          <strong>Access notes from client:</strong> {job.properties.client_access_notes}
+        </p>
+      )}
 
       {job.properties?.lat != null && job.properties?.lng != null && (
         <div className="card">

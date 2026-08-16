@@ -76,7 +76,7 @@ export default function ClientDetail() {
 
     const { data: propertiesData } = await supabase
       .from('properties')
-      .select('id, client_id, address, notes, lat, lng')
+      .select('id, client_id, address, notes, client_access_notes, lat, lng')
       .eq('client_id', id)
       .order('address');
 
@@ -627,6 +627,11 @@ export default function ClientDetail() {
                 <div style={{ flex: 1 }}>
                   <div>{p.address}</div>
                   {p.notes && <div style={{ fontSize: 12, color: 'var(--muted)' }}>{p.notes}</div>}
+                  {p.client_access_notes && (
+                    <div style={{ fontSize: 12, color: 'var(--brand-primary)', marginTop: 2 }}>
+                      Client-provided access notes: {p.client_access_notes}
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   <button className="btn-secondary" onClick={() => toggleChecklist(p.id)}>
