@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Download, Menu, X } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { signOutAndClearPresence } from '../../lib/signOut';
 import PresenceIndicator from '../components/PresenceIndicator';
@@ -21,6 +21,7 @@ const NAV_ITEMS = [
   { href: '/admin/templates', label: 'Templates', icon: ListChecks },
   { href: '/admin/tasks', label: 'Team Tasks', icon: ListTodo },
   { href: '/admin/reports', label: 'Reports', icon: FileText },
+  { href: '/admin/data-reports', label: 'Data Reports', icon: Download },
   { href: '/admin/requests', label: 'Requests', icon: MessageSquareWarning },
   { href: '/admin/messages', label: 'Messages', icon: MessageCircle },
   { href: '/admin/help', label: 'Help', icon: HelpCircle },
