@@ -385,6 +385,8 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
   flex-direction: column;
   gap: 2px;
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .sidebar-link {
