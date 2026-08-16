@@ -92,8 +92,11 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => {
-    loadPayroll();
-  }, [payrollPeriod]);
+    // Payroll hours are admin-only, same as before this redesign - wait
+    // until we know the caller's own role before deciding whether to load
+    // it at all, since supervisors shouldn't see it even loading.
+    if (role === 'admin') loadPayroll();
+  }, [payrollPeriod, role]);
 
   const loadPayroll = async () => {
     setPayrollLoading(true);
@@ -230,9 +233,10 @@ export default function AdminDashboard() {
     const attentionItems = [
       ...(openRequests || []).map((r) => ({
         id: `req-${r.id}`,
+        kind: 'request',
+        rawId: r.id,
         title: r.type === 'kit_topup' ? 'Kit top-up requested' : 'Issue reported',
         subtitle: `${r.description} · ${r.profiles?.full_name || 'A cleaner'}`,
-        href: '/admin/requests',
         urgent: false,
         at: r.created_at,
       })),
@@ -241,15 +245,20 @@ export default function AdminDashboard() {
         const name = isClient ? r.clients?.name : r.staff?.full_name;
         return {
           id: `rem-${r.id}`,
+          kind: 'reminder',
+          rawId: r.id,
+          recursYearly: r.recurs_yearly,
           title: isClient ? 'Client review due' : '1:1 review due',
-          subtitle: `${name || 'Unknown'} · due ${new Date(r.due_date).toLocaleDateString()}`,
+          name: name || 'Unknown',
           href: isClient ? `/admin/clients/${r.client_id}` : `/admin/cleaners/${r.staff_id}`,
+          subtitle: `due ${new Date(r.due_date).toLocaleDateString()}`,
           urgent: new Date(r.due_date) < startOfDay,
           at: r.due_date,
         };
       }),
       ...unassignedNearTerm.map((j) => ({
         id: `unassigned-${j.id}`,
+        kind: 'unassigned',
         title: 'Job has no cleaner assigned',
         subtitle: `${j.properties?.address || 'Unknown property'} · ${new Date(j.scheduled_at).toLocaleString()}`,
         href: '/admin/rota',
@@ -260,6 +269,26 @@ export default function AdminDashboard() {
     setAttention(attentionItems);
 
     setLoading(false);
+  };
+
+  const completeTodo = async (rawId) => {
+    setAttention((prev) => prev.filter((a) => a.id !== `req-${rawId}`));
+    await supabase
+      .from('staff_requests')
+      .update({ status: 'resolved', resolved_at: new Date().toISOString() })
+      .eq('id', rawId);
+  };
+
+  const completeReminder = async (item) => {
+    setAttention((prev) => prev.filter((a) => a.id !== item.id));
+    if (item.recursYearly) {
+      const next = new Date(item.at);
+      next.setFullYear(next.getFullYear() + 1);
+      const nextDate = next.toISOString().slice(0, 10);
+      await supabase.from('reminders').update({ due_date: nextDate }).eq('id', item.rawId);
+    } else {
+      await supabase.from('reminders').delete().eq('id', item.rawId);
+    }
   };
 
   if (loading) return <div className="page-inner">Loading...</div>;
@@ -350,49 +379,81 @@ export default function AdminDashboard() {
             <h2>Needs Attention</h2>
           </div>
           {attention.length === 0 && <p className="empty-state">Nothing needs attention right now.</p>}
-          {attention.slice(0, 6).map((item) => (
-            <Link key={item.id} href={item.href} className="dash-row">
-              <div>
-                <div className="dash-row-title" style={item.urgent ? { color: '#991b1b' } : undefined}>{item.title}</div>
-                <div className="dash-row-subtitle">{item.subtitle}</div>
-              </div>
-            </Link>
-          ))}
+          {attention.slice(0, 6).map((item) => {
+            if (item.kind === 'request') {
+              return (
+                <label key={item.id} className="dash-row" style={{ cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    onChange={() => completeTodo(item.rawId)}
+                    style={{ width: 18, height: 18, marginRight: 10, flexShrink: 0 }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div className="dash-row-title">{item.title}</div>
+                    <div className="dash-row-subtitle">{item.subtitle}</div>
+                  </div>
+                </label>
+              );
+            }
+            if (item.kind === 'reminder') {
+              return (
+                <div key={item.id} className="dash-row" style={{ cursor: 'default' }}>
+                  <div>
+                    <div className="dash-row-title" style={item.urgent ? { color: '#991b1b' } : undefined}>
+                      {item.title} — <Link href={item.href} style={{ color: 'var(--brand-primary)', textDecoration: 'none' }}>{item.name}</Link>
+                    </div>
+                    <div className="dash-row-subtitle">{item.subtitle}</div>
+                  </div>
+                  <button className="btn-secondary" onClick={() => completeReminder(item)}>Done</button>
+                </div>
+              );
+            }
+            return (
+              <Link key={item.id} href={item.href} className="dash-row">
+                <div>
+                  <div className="dash-row-title" style={item.urgent ? { color: '#991b1b' } : undefined}>{item.title}</div>
+                  <div className="dash-row-subtitle">{item.subtitle}</div>
+                </div>
+              </Link>
+            );
+          })}
           {attention.length > 6 && (
             <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '8px 0 0' }}>+{attention.length - 6} more</p>
           )}
         </div>
       </div>
 
-      <div className="dash-grid-3">
-        <div className="card">
-          <div className="dash-panel-header">
-            <h2>Staff Hours</h2>
-            <select
-              value={payrollPeriod}
-              onChange={(e) => setPayrollPeriod(e.target.value)}
-              style={{ width: 'auto', margin: 0, padding: '6px 10px', fontSize: 13 }}
-            >
-              {Object.entries(PAYROLL_PERIODS).map(([key, p]) => (
-                <option key={key} value={key}>{p.label}</option>
-              ))}
-            </select>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'center', margin: '4px 0 12px' }}>
-            <HoursRing completedHours={payrollTotals.completedHours} totalHours={payrollTotals.totalHours} />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-around', fontSize: 12.5, color: 'var(--muted)', textAlign: 'center', marginBottom: payrollRows.length > 0 ? 12 : 0 }}>
-            <div><strong style={{ display: 'block', color: 'var(--ink)', fontSize: 14 }}>{payrollTotals.completedHours.toFixed(1)}h</strong>Completed</div>
-            <div><strong style={{ display: 'block', color: 'var(--ink)', fontSize: 14 }}>{payrollTotals.totalHours.toFixed(1)}h</strong>Scheduled</div>
-            <div><strong style={{ display: 'block', color: 'var(--ink)', fontSize: 14 }}>{Math.max(payrollTotals.totalHours - payrollTotals.completedHours, 0).toFixed(1)}h</strong>Remaining</div>
-          </div>
-          {!payrollLoading && role === 'admin' && payrollRows.slice(0, 4).map((r) => (
-            <div key={r.name} className="dash-row" style={{ cursor: 'default', padding: '6px 0' }}>
-              <span style={{ fontSize: 13 }}>{r.name}</span>
-              <strong style={{ fontSize: 13 }}>{(r.minutes / 60).toFixed(1)}h</strong>
+      <div className="dash-grid-3" style={role === 'admin' ? undefined : { gridTemplateColumns: 'repeat(2, 1fr)' }}>
+        {role === 'admin' && (
+          <div className="card">
+            <div className="dash-panel-header">
+              <h2>Staff Hours</h2>
+              <select
+                value={payrollPeriod}
+                onChange={(e) => setPayrollPeriod(e.target.value)}
+                style={{ width: 'auto', margin: 0, padding: '6px 10px', fontSize: 13 }}
+              >
+                {Object.entries(PAYROLL_PERIODS).map(([key, p]) => (
+                  <option key={key} value={key}>{p.label}</option>
+                ))}
+              </select>
             </div>
-          ))}
-        </div>
+            <div style={{ display: 'flex', justifyContent: 'center', margin: '4px 0 12px' }}>
+              <HoursRing completedHours={payrollTotals.completedHours} totalHours={payrollTotals.totalHours} />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-around', fontSize: 12.5, color: 'var(--muted)', textAlign: 'center', marginBottom: payrollRows.length > 0 ? 12 : 0 }}>
+              <div><strong style={{ display: 'block', color: 'var(--ink)', fontSize: 14 }}>{payrollTotals.completedHours.toFixed(1)}h</strong>Completed</div>
+              <div><strong style={{ display: 'block', color: 'var(--ink)', fontSize: 14 }}>{payrollTotals.totalHours.toFixed(1)}h</strong>Scheduled</div>
+              <div><strong style={{ display: 'block', color: 'var(--ink)', fontSize: 14 }}>{Math.max(payrollTotals.totalHours - payrollTotals.completedHours, 0).toFixed(1)}h</strong>Remaining</div>
+            </div>
+            {!payrollLoading && payrollRows.slice(0, 4).map((r) => (
+              <div key={r.name} className="dash-row" style={{ cursor: 'default', padding: '6px 0' }}>
+                <span style={{ fontSize: 13 }}>{r.name}</span>
+                <strong style={{ fontSize: 13 }}>{(r.minutes / 60).toFixed(1)}h</strong>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="card">
           <div className="dash-panel-header">
