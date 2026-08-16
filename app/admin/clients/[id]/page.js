@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { supabase } from '../../../../lib/supabaseClient';
 import AddressAutocomplete from '../../../components/AddressAutocomplete';
+import { INDUSTRY_OPTIONS } from '../../../../lib/clientIndustries';
 import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 
@@ -53,7 +54,7 @@ export default function ClientDetail() {
 
     const { data: clientData } = await supabase
       .from('clients')
-      .select('id, name, contact_name, email, phone, billing_address, notes')
+      .select('id, name, contact_name, email, phone, billing_address, notes, industry')
       .eq('id', id)
       .single();
 
@@ -194,6 +195,7 @@ export default function ClientDetail() {
       phone: client.phone || '',
       billing_address: client.billing_address || '',
       notes: client.notes || '',
+      industry: client.industry || '',
     });
     setIsEditing(true);
   };
@@ -209,11 +211,12 @@ export default function ClientDetail() {
       phone: editForm.phone.trim() || null,
       billing_address: editForm.billing_address.trim() || null,
       notes: editForm.notes.trim() || null,
+      industry: editForm.industry || null,
     };
 
     const { data } = await supabase
       .from('clients').update(payload).eq('id', id)
-      .select('id, name, contact_name, email, phone, billing_address, notes')
+      .select('id, name, contact_name, email, phone, billing_address, notes, industry')
       .single();
 
     if (data) setClient(data);
@@ -352,6 +355,18 @@ export default function ClientDetail() {
                 />
               </div>
               <div className="field">
+                <label className="field-label">Industry</label>
+                <select
+                  value={editForm.industry}
+                  onChange={(e) => setEditForm((f) => ({ ...f, industry: e.target.value }))}
+                >
+                  <option value="">Not set</option>
+                  {INDUSTRY_OPTIONS.map((i) => (
+                    <option key={i} value={i}>{i}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
                 <label className="field-label">Notes</label>
                 <input
                   value={editForm.notes}
@@ -365,13 +380,14 @@ export default function ClientDetail() {
             </div>
           </form>
         ) : (
-          (client.contact_name || client.email || client.phone || client.billing_address || client.notes) && (
+          (client.contact_name || client.email || client.phone || client.billing_address || client.notes || client.industry) && (
             <div style={{ fontSize: 14, color: 'var(--muted)', marginTop: 10, lineHeight: 1.7 }}>
               {client.contact_name && <div>{client.contact_name}</div>}
               {(client.email || client.phone) && (
                 <div>{[client.email, client.phone].filter(Boolean).join(' · ')}</div>
               )}
               {client.billing_address && <div>{client.billing_address}</div>}
+              {client.industry && <span className="badge scheduled">{client.industry}</span>}
               {client.notes && <div style={{ fontStyle: 'italic' }}>{client.notes}</div>}
             </div>
           )
