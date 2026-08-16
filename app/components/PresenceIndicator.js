@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Users } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
@@ -12,6 +13,7 @@ const REFRESH_INTERVAL_MS = 20000;
 const ONLINE_WINDOW_MS = 60000;
 
 const ROLE_LABELS = { admin: 'admin', supervisor: 'supervisor', cleaner: 'cleaner' };
+const MENU_WIDTH = 240;
 
 // Reports the signed-in user's presence via a heartbeat row, refreshed
 // every ~20s while this component is mounted (no explicit "gone offline"
@@ -24,7 +26,10 @@ export default function PresenceIndicator({ iconColor = 'var(--muted)' }) {
   const [profile, setProfile] = useState(null);
   const [online, setOnline] = useState([]);
   const [open, setOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const wrapperRef = useRef(null);
+  const buttonRef = useRef(null);
+  const panelRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -76,7 +81,9 @@ export default function PresenceIndicator({ iconColor = 'var(--muted)' }) {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setOpen(false);
+      if (wrapperRef.current?.contains(e.target)) return;
+      if (panelRef.current?.contains(e.target)) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -91,8 +98,19 @@ export default function PresenceIndicator({ iconColor = 'var(--muted)' }) {
   return (
     <div ref={wrapperRef} style={{ position: 'relative' }}>
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          if (!open && buttonRef.current) {
+            const rect = buttonRef.current.getBoundingClientRect();
+            const left = Math.min(
+              Math.max(rect.right - MENU_WIDTH, 10),
+              window.innerWidth - MENU_WIDTH - 10
+            );
+            setMenuPos({ top: rect.bottom + 8, left });
+          }
+          setOpen((o) => !o);
+        }}
         aria-label="Who's online"
         style={{
           background: 'transparent', border: 'none', padding: 6, cursor: 'pointer',
@@ -110,10 +128,11 @@ export default function PresenceIndicator({ iconColor = 'var(--muted)' }) {
         )}
       </button>
 
-      {open && (
+      {open && typeof document !== 'undefined' && createPortal(
         <div
+          ref={panelRef}
           style={{
-            position: 'absolute', top: '100%', right: 0, marginTop: 8, width: 240,
+            position: 'fixed', top: menuPos.top, left: menuPos.left, width: MENU_WIDTH,
             background: 'white', border: '1px solid var(--hairline)', borderRadius: 12,
             boxShadow: '0 8px 20px rgba(0,0,0,0.12)', zIndex: 300, padding: 10,
           }}
@@ -133,7 +152,8 @@ export default function PresenceIndicator({ iconColor = 'var(--muted)' }) {
               )}
             </div>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
