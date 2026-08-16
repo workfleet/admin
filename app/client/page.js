@@ -19,6 +19,11 @@ export default function ClientDashboard() {
   const [cleansThisMonth, setCleansThisMonth] = useState(0);
   const [avgRating, setAvgRating] = useState(null);
 
+  const [clientId, setClientId] = useState(null);
+  const [myRequests, setMyRequests] = useState([]);
+  const [requestText, setRequestText] = useState('');
+  const [submittingRequest, setSubmittingRequest] = useState(false);
+
   useEffect(() => {
     load();
   }, []);
@@ -30,6 +35,7 @@ export default function ClientDashboard() {
     const { data: profile } = await supabase.from('profiles').select('client_id').eq('id', session.user.id).single();
     if (!profile?.client_id) { setLoading(false); return; }
     const clientId = profile.client_id;
+    setClientId(clientId);
 
     const { data: clientRow } = await supabase.from('clients').select('name').eq('id', clientId).single();
     setClientName(clientRow?.name || 'there');
@@ -43,6 +49,7 @@ export default function ClientDashboard() {
       { data: messages },
       { data: reschedules },
       { data: ratings },
+      { data: requests },
     ] = await Promise.all([
       supabase.from('jobs')
         .select('id, scheduled_at, status, properties(address), job_assignments(profiles(full_name))')
@@ -54,6 +61,10 @@ export default function ClientDashboard() {
         .limit(1),
       supabase.from('reschedule_requests').select('id').eq('client_id', clientId).eq('status', 'pending'),
       supabase.from('job_ratings').select('rating').eq('client_id', clientId),
+      supabase.from('client_requests')
+        .select('id, description, status, resolution_note, created_at')
+        .eq('client_id', clientId)
+        .order('created_at', { ascending: false }),
     ]);
 
     const allJobs = jobs || [];
@@ -67,7 +78,9 @@ export default function ClientDashboard() {
     setUpcoming(upcomingJobs);
     setRecent(recentJobs);
     setCleansThisMonth(completedThisMonth);
-    setOpenReschedules((reschedules || []).length);
+    setMyRequests(requests || []);
+    const openRequestCount = (requests || []).filter((r) => r.status === 'open').length;
+    setOpenReschedules((reschedules || []).length + openRequestCount);
 
     const { data: { user } } = await supabase.auth.getUser();
     const msg = (messages || [])[0];
@@ -79,6 +92,26 @@ export default function ClientDashboard() {
     }
 
     setLoading(false);
+  };
+
+  const submitRequest = async (e) => {
+    e.preventDefault();
+    if (!requestText.trim() || !clientId) return;
+    setSubmittingRequest(true);
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data, error } = await supabase
+      .from('client_requests')
+      .insert({ client_id: clientId, description: requestText.trim(), created_by: session.user.id })
+      .select('id, description, status, resolution_note, created_at')
+      .single();
+
+    setSubmittingRequest(false);
+    if (!error && data) {
+      setMyRequests((prev) => [data, ...prev]);
+      setOpenReschedules((prev) => prev + 1);
+      setRequestText('');
+    }
   };
 
   if (loading) return <div>Loading...</div>;
@@ -125,6 +158,44 @@ export default function ClientDashboard() {
           <div className="stat-number">{avgRating ? avgRating.toFixed(1) : '—'}</div>
           <div className="stat-label">Average Rating Given</div>
         </div>
+      </div>
+
+      <div className="card">
+        <h2>Need Something?</h2>
+        <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 12px' }}>
+          Anything you'd like us to know - an extra job, a change to your clean, anything at all.
+        </p>
+        <form onSubmit={submitRequest}>
+          <textarea
+            value={requestText}
+            onChange={(e) => setRequestText(e.target.value)}
+            placeholder="e.g. Could you also do the windows this time?"
+            rows={3}
+            style={{
+              width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10,
+              background: '#f8fafc', fontSize: 14, fontFamily: 'inherit', marginBottom: 10, resize: 'vertical',
+            }}
+          />
+          <button type="submit" disabled={submittingRequest || !requestText.trim()}>
+            {submittingRequest ? 'Sending...' : 'Send Request'}
+          </button>
+        </form>
+
+        {myRequests.length > 0 && (
+          <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--hairline)' }}>
+            {myRequests.map((r) => (
+              <div key={r.id} className="task-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 13.5 }}>{r.description}</span>
+                  <span className={`badge ${r.status === 'resolved' ? 'completed' : 'scheduled'}`}>{r.status}</span>
+                </div>
+                {r.status === 'resolved' && r.resolution_note && (
+                  <div style={{ fontSize: 12.5, color: 'var(--muted)', fontStyle: 'italic', marginTop: 4 }}>"{r.resolution_note}"</div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="dash-grid-2">

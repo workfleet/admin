@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, FileText, Download, Trash2 } from 'lucide-react';
 import { supabase } from '../../../../lib/supabaseClient';
 import AddressAutocomplete from '../../../components/AddressAutocomplete';
 import { INDUSTRY_OPTIONS } from '../../../../lib/clientIndustries';
@@ -20,7 +20,7 @@ export default function ClientDetail() {
   const [client, setClient] = useState(null);
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('properties'); // properties | calls | hours | reviews | clockins
+  const [tab, setTab] = useState('properties'); // properties | calls | hours | reviews | clockins | documents
 
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState(null);
@@ -52,6 +52,11 @@ export default function ClientDetail() {
 
   const [clockIns, setClockIns] = useState(null);
   const [clockInsLoading, setClockInsLoading] = useState(false);
+
+  const [clientDocs, setClientDocs] = useState(null);
+  const [docsLoading, setDocsLoading] = useState(false);
+  const [docCategory, setDocCategory] = useState('health_safety');
+  const [uploadingDoc, setUploadingDoc] = useState(false);
 
   useEffect(() => {
     load();
@@ -176,6 +181,72 @@ export default function ClientDetail() {
 
     setClockIns((data || []).map((c) => ({ ...c, job: jobMap[c.job_id] })));
     setClockInsLoading(false);
+  };
+
+  useEffect(() => {
+    if (tab === 'documents' && clientDocs === null) loadClientDocs();
+  }, [tab]);
+
+  const loadClientDocs = async () => {
+    setDocsLoading(true);
+    const { data } = await supabase
+      .from('company_documents')
+      .select('id, title, category, storage_path, file_name, file_size, created_at')
+      .eq('client_id', id)
+      .order('created_at', { ascending: false });
+    setClientDocs(data || []);
+    setDocsLoading(false);
+  };
+
+  const uploadClientDoc = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setUploadingDoc(true);
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const newRows = [];
+    for (const file of files) {
+      const storagePath = `${docCategory}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
+      const { error: uploadError } = await supabase.storage.from('company-documents').upload(storagePath, file);
+      if (uploadError) { toast.error(`Could not upload ${file.name}.`); continue; }
+
+      const { data, error } = await supabase
+        .from('company_documents')
+        .insert({
+          title: file.name.replace(/\.[^.]+$/, ''),
+          category: docCategory,
+          storage_path: storagePath,
+          file_name: file.name,
+          file_size: file.size,
+          uploaded_by: session.user.id,
+          client_id: id,
+        })
+        .select('id, title, category, storage_path, file_name, file_size, created_at')
+        .single();
+
+      if (error) { toast.error(`Uploaded ${file.name} but couldn't save it - try again.`); continue; }
+      if (data) newRows.push(data);
+    }
+
+    setClientDocs((prev) => [...newRows, ...(prev || [])]);
+    setUploadingDoc(false);
+    e.target.value = '';
+    if (newRows.length > 0) toast.success(`Uploaded ${newRows.length} document${newRows.length === 1 ? '' : 's'}.`);
+  };
+
+  const downloadClientDoc = async (doc) => {
+    const { data, error } = await supabase.storage.from('company-documents').createSignedUrl(doc.storage_path, 3600);
+    if (error || !data) { toast.error('Could not open this document.'); return; }
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const deleteClientDoc = async (doc) => {
+    if (!(await confirm(`Delete "${doc.title}"? This client will no longer be able to see or download it.`, { title: 'Delete document', danger: true }))) return;
+    await supabase.storage.from('company-documents').remove([doc.storage_path]);
+    const { error } = await supabase.from('company_documents').delete().eq('id', doc.id);
+    if (error) { toast.error('Could not delete the document.'); return; }
+    setClientDocs((prev) => prev.filter((d) => d.id !== doc.id));
+    toast.success('Document deleted.');
   };
 
   const addReminder = async (e) => {
@@ -542,6 +613,9 @@ export default function ClientDetail() {
         <button className={tab === 'clockins' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('clockins')}>
           Clock-ins{clockIns ? ` (${clockIns.length})` : ''}
         </button>
+        <button className={tab === 'documents' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('documents')}>
+          Documents{clientDocs ? ` (${clientDocs.length})` : ''}
+        </button>
       </div>
 
       {tab === 'properties' && (
@@ -788,6 +862,62 @@ export default function ClientDetail() {
             );
           })}
         </div>
+      )}
+
+      {tab === 'documents' && (
+        <>
+          <div className="card" style={{ marginBottom: 16 }}>
+            <h2>Upload</h2>
+            <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 12px' }}>
+              Files uploaded here are only visible to {client.name} in their client portal - not to other clients or to staff.
+            </p>
+            <div className="field-row">
+              <div className="field">
+                <label className="field-label">Category</label>
+                <select value={docCategory} onChange={(e) => setDocCategory(e.target.value)}>
+                  <option value="health_safety">Health &amp; Safety</option>
+                  <option value="contract">Contract</option>
+                  <option value="policy">Policy</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div className="field">
+                <label className="field-label">Files</label>
+                <input type="file" multiple accept=".pdf,.doc,.docx" onChange={uploadClientDoc} disabled={uploadingDoc} />
+              </div>
+            </div>
+            {uploadingDoc && <p style={{ fontSize: 13, color: 'var(--muted)', margin: '8px 0 0' }}>Uploading...</p>}
+          </div>
+
+          {docsLoading && <p className="empty-state">Loading...</p>}
+          {!docsLoading && (clientDocs?.length || 0) === 0 && <p className="empty-state">No documents shared with this client yet.</p>}
+
+          {(clientDocs?.length || 0) > 0 && (
+            <div className="card">
+              {clientDocs.map((doc) => (
+                <div key={doc.id} className="task-row" style={{ justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <FileText size={18} color="var(--muted)" style={{ flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>{doc.title}</div>
+                      <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                        {doc.category.replace('_', ' & ')} · {new Date(doc.created_at).toLocaleDateString()}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    <button type="button" className="btn-secondary" onClick={() => downloadClientDoc(doc)} aria-label="Download" style={{ padding: '8px 10px' }}>
+                      <Download size={16} />
+                    </button>
+                    <button type="button" className="btn-secondary" onClick={() => deleteClientDoc(doc)} aria-label="Delete" style={{ padding: '8px 10px' }}>
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

@@ -21,6 +21,8 @@ export default function ClientJobDetail() {
   const [ratingComment, setRatingComment] = useState('');
   const [submittingRating, setSubmittingRating] = useState(false);
 
+  const [report, setReport] = useState(null);
+
   const [myReschedule, setMyReschedule] = useState(null);
   const [showRescheduleForm, setShowRescheduleForm] = useState(false);
   const [rescheduleDate, setRescheduleDate] = useState('');
@@ -47,6 +49,14 @@ export default function ClientJobDetail() {
       supabase.from('job_ratings').select('rating, comment').eq('job_id', id).maybeSingle(),
       supabase.from('reschedule_requests').select('id, status, requested_scheduled_at').eq('job_id', id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
     ]);
+
+    const { data: reportData } = await supabase
+      .from('job_reports')
+      .select('summary, issues, suggestions, created_at')
+      .eq('job_id', id)
+      .eq('visible_to_client', true)
+      .maybeSingle();
+    setReport(reportData || null);
 
     const photosWithUrls = await Promise.all(
       (photoData || []).map(async (p) => {
@@ -116,6 +126,30 @@ export default function ClientJobDetail() {
         </p>
         <span className={`badge ${job.status}`}>{job.status.replace('_', ' ')}</span>
       </div>
+
+      {report && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h2>Clean Report</h2>
+          {report.summary && (
+            <div style={{ marginBottom: 10 }}>
+              <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Summary</strong>
+              <p style={{ margin: '4px 0 0', fontSize: 14 }}>{report.summary}</p>
+            </div>
+          )}
+          {report.issues && (
+            <div style={{ marginBottom: 10 }}>
+              <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Issues Found</strong>
+              <p style={{ margin: '4px 0 0', fontSize: 14 }}>{report.issues}</p>
+            </div>
+          )}
+          {report.suggestions && (
+            <div>
+              <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Suggestions</strong>
+              <p style={{ margin: '4px 0 0', fontSize: 14 }}>{report.suggestions}</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {checkins.length > 0 && (
         <div className="card" style={{ marginBottom: 16 }}>

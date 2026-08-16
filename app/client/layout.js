@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, History, MessageCircle, LogOut } from 'lucide-react';
+import { LayoutDashboard, History, MessageCircle, FileText, LogOut } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { signOutAndClearPresence } from '../../lib/signOut';
 
 const NAV_ITEMS = [
   { href: '/client', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/client/history', label: 'History', icon: History },
+  { href: '/client/documents', label: 'Documents', icon: FileText },
   { href: '/client/messages', label: 'Messages', icon: MessageCircle },
 ];
 

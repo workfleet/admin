@@ -31,7 +31,7 @@ export default function AdminReports() {
 
     const { data } = await supabase
       .from('jobs')
-      .select('id, scheduled_at, status, properties(address), job_reports(id, summary, issues, suggestions, input_notes, template, created_at)')
+      .select('id, scheduled_at, status, properties(address), job_reports(id, summary, issues, suggestions, input_notes, template, created_at, visible_to_client)')
       .order('scheduled_at', { ascending: false })
       .limit(100);
 
@@ -90,6 +90,14 @@ export default function AdminReports() {
       const body = await res.json().catch(() => ({}));
       setError(body.detail || body.error || 'Something went wrong generating the report.');
     }
+  };
+
+  const toggleClientVisibility = async (job, report, visible) => {
+    const { error } = await supabase.from('job_reports').update({ visible_to_client: visible }).eq('id', report.id);
+    if (error) return;
+    setJobs((prev) => prev.map((j) => (
+      j.id === job.id ? { ...j, job_reports: [{ ...report, visible_to_client: visible }] } : j
+    )));
   };
 
   const toggleRecording = () => {
@@ -212,6 +220,15 @@ export default function AdminReports() {
                       </strong>
                       <p style={{ margin: '4px 0 0' }}>{report.suggestions}</p>
                     </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 400, fontSize: 13.5, margin: '12px 0' }}>
+                      <input
+                        type="checkbox"
+                        checked={!!report.visible_to_client}
+                        onChange={(e) => toggleClientVisibility(job, report, e.target.checked)}
+                        style={{ width: 'auto' }}
+                      />
+                      Add to client portal
+                    </label>
                     <button className="btn-secondary" onClick={() => setEditingReport(true)}>
                       Regenerate
                     </button>

@@ -19,7 +19,7 @@ export default function AdminRequests() {
   const router = useRouter();
   const confirm = useConfirm();
   const toast = useToast();
-  const [section, setSection] = useState('requests'); // requests | timeoff | extensions | reschedules
+  const [section, setSection] = useState('requests'); // requests | timeoff | extensions | reschedules | clientRequests
   const [loading, setLoading] = useState(true);
   const [holidayBalances, setHolidayBalances] = useState({}); // cleanerId -> accrued hours
 
@@ -53,6 +53,12 @@ export default function AdminRequests() {
   const [decidingRescheduleId, setDecidingRescheduleId] = useState(null);
   const [rescheduleAdminNote, setRescheduleAdminNote] = useState('');
 
+  // client requests (free-text)
+  const [clientRequests, setClientRequests] = useState([]);
+  const [clientRequestFilter, setClientRequestFilter] = useState('open'); // open | resolved | all
+  const [resolvingClientRequestId, setResolvingClientRequestId] = useState(null);
+  const [clientRequestNote, setClientRequestNote] = useState('');
+
   useEffect(() => {
     load();
   }, []);
@@ -61,7 +67,7 @@ export default function AdminRequests() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/'); return; }
 
-    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, { data: assignmentsData }, { data: extensionsData }, { data: reschedulesData }] = await Promise.all([
+    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, { data: assignmentsData }, { data: extensionsData }, { data: reschedulesData }, { data: clientRequestsData }] = await Promise.all([
       supabase
         .from('staff_requests')
         .select('id, type, description, status, created_at, resolved_at, resolution_note, resolved_by, cleaner_id, profiles!staff_requests_cleaner_id_fkey(full_name), resolver:profiles!staff_requests_resolved_by_fkey(full_name), jobs(scheduled_at, properties(address))')
@@ -79,6 +85,10 @@ export default function AdminRequests() {
       supabase
         .from('reschedule_requests')
         .select('id, job_id, requested_scheduled_at, reason, status, admin_note, created_at, client_id, clients(name), decider:profiles!reschedule_requests_decided_by_fkey(full_name), jobs(scheduled_at, duration_minutes, status, properties(address), job_assignments(cleaner_id, profiles(full_name)))')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('client_requests')
+        .select('id, description, status, resolution_note, resolved_by, created_at, client_id, clients(name), resolver:profiles!client_requests_resolved_by_fkey(full_name)')
         .order('created_at', { ascending: false }),
     ]);
 
@@ -101,6 +111,7 @@ export default function AdminRequests() {
     setTimeOff(timeOffData || []);
     setExtensions(extensionsData || []);
     setReschedules(reschedulesData || []);
+    setClientRequests(clientRequestsData || []);
     setLoading(false);
   };
 
@@ -138,6 +149,39 @@ export default function AdminRequests() {
 
     if (data) {
       setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, ...data } : r)));
+    }
+  };
+
+  const startResolveClientRequest = (id) => {
+    setResolvingClientRequestId(id);
+    setClientRequestNote('');
+  };
+
+  const confirmResolveClientRequest = async (id) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data } = await supabase
+      .from('client_requests')
+      .update({ status: 'resolved', resolved_at: new Date().toISOString(), resolved_by: session.user.id, resolution_note: clientRequestNote.trim() || null })
+      .eq('id', id)
+      .select('id, status, resolved_at, resolution_note, resolved_by, resolver:profiles!client_requests_resolved_by_fkey(full_name)')
+      .single();
+
+    if (data) {
+      setClientRequests((prev) => prev.map((r) => (r.id === id ? { ...r, ...data } : r)));
+    }
+    setResolvingClientRequestId(null);
+  };
+
+  const reopenClientRequest = async (id) => {
+    const { data } = await supabase
+      .from('client_requests')
+      .update({ status: 'open', resolved_at: null, resolution_note: null, resolved_by: null })
+      .eq('id', id)
+      .select('id, status, resolved_at, resolution_note, resolved_by, resolver:profiles!client_requests_resolved_by_fkey(full_name)')
+      .single();
+
+    if (data) {
+      setClientRequests((prev) => prev.map((r) => (r.id === id ? { ...r, ...data } : r)));
     }
   };
 
@@ -331,6 +375,9 @@ export default function AdminRequests() {
   const filteredRequests = requests.filter((r) => filter === 'all' || r.status === filter);
   const openCount = requests.filter((r) => r.status === 'open').length;
 
+  const filteredClientRequests = clientRequests.filter((r) => clientRequestFilter === 'all' || r.status === clientRequestFilter);
+  const openClientRequestCount = clientRequests.filter((r) => r.status === 'open').length;
+
   const filteredTimeOff = timeOff.filter((t) => timeOffFilter === 'all' || t.status === timeOffFilter);
   const pendingCount = timeOff.filter((t) => t.status === 'pending').length;
 
@@ -358,6 +405,9 @@ export default function AdminRequests() {
           </button>
           <button className={section === 'reschedules' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('reschedules')}>
             Reschedules ({pendingRescheduleCount})
+          </button>
+          <button className={section === 'clientRequests' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('clientRequests')}>
+            Client Requests ({openClientRequestCount})
           </button>
         </div>
       </div>
@@ -662,6 +712,64 @@ export default function AdminRequests() {
                 </div>
               );
             })}
+          </div>
+        </>
+      )}
+
+      {section === 'clientRequests' && (
+        <>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <button className={clientRequestFilter === 'open' ? 'btn-primary' : 'btn-secondary'} onClick={() => setClientRequestFilter('open')}>Open</button>
+            <button className={clientRequestFilter === 'resolved' ? 'btn-primary' : 'btn-secondary'} onClick={() => setClientRequestFilter('resolved')}>Resolved</button>
+            <button className={clientRequestFilter === 'all' ? 'btn-primary' : 'btn-secondary'} onClick={() => setClientRequestFilter('all')}>All</button>
+          </div>
+
+          {filteredClientRequests.length === 0 && <p className="empty-state">Nothing here.</p>}
+
+          <div className="job-list">
+            {filteredClientRequests.map((r) => (
+              <div key={r.id} className="card job-card" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                  <div>
+                    <h2>{r.clients?.name || 'Unknown client'}</h2>
+                    <p style={{ fontSize: 14, margin: '4px 0' }}>{r.description}</p>
+                    <p className="job-time">{new Date(r.created_at).toLocaleString()}</p>
+                    <span className={`badge ${r.status === 'resolved' ? 'completed' : 'scheduled'}`}>{r.status}</span>
+                    {r.status === 'resolved' && (
+                      <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 4 }}>
+                        Resolved by {r.resolver?.full_name || 'Unknown'}
+                      </p>
+                    )}
+                    {r.status === 'resolved' && r.resolution_note && (
+                      <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 6, fontStyle: 'italic' }}>"{r.resolution_note}"</p>
+                    )}
+                  </div>
+                  {r.status === 'resolved' ? (
+                    <button className="btn-secondary" onClick={() => reopenClientRequest(r.id)} style={{ height: 'fit-content' }}>Reopen</button>
+                  ) : (
+                    <button className="btn-secondary" onClick={() => startResolveClientRequest(r.id)} style={{ height: 'fit-content' }}>Mark Resolved</button>
+                  )}
+                </div>
+
+                {resolvingClientRequestId === r.id && (
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--hairline)' }}>
+                    <label>Resolution note (optional)</label>
+                    <textarea
+                      value={clientRequestNote}
+                      onChange={(e) => setClientRequestNote(e.target.value)}
+                      placeholder="e.g. Added to Friday's clean"
+                      rows={2}
+                      autoFocus
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10, background: '#f8fafc', fontSize: 14, fontFamily: 'inherit', marginBottom: 8, resize: 'vertical' }}
+                    />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button className="btn-secondary" onClick={() => setResolvingClientRequestId(null)}>Cancel</button>
+                      <button className="btn-primary" onClick={() => confirmResolveClientRequest(r.id)}>Confirm Resolved</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </>
       )}
