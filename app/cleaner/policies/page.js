@@ -1,7 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { FileText, Download } from 'lucide-react';
 import { POLICY_SECTIONS } from '../../../lib/companyPolicies';
+import { supabase } from '../../../lib/supabaseClient';
+
+const CATEGORY_LABELS = { policy: 'Policy', contract: 'Contract', other: 'Other' };
+const CATEGORY_ORDER = ['policy', 'contract', 'other'];
+
+function formatBytes(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 const HELP_SECTIONS = [
   {
@@ -36,7 +48,25 @@ const HELP_SECTIONS = [
 
 export default function CleanerHelp() {
   const [section, setSection] = useState('guide');
-  const sections = section === 'guide' ? HELP_SECTIONS : POLICY_SECTIONS;
+  const [documents, setDocuments] = useState(null);
+  const sections = section === 'guide' ? HELP_SECTIONS : section === 'policies' ? POLICY_SECTIONS : null;
+
+  useEffect(() => {
+    if (section === 'documents' && documents === null) loadDocuments();
+  }, [section]);
+
+  const loadDocuments = async () => {
+    const { data } = await supabase
+      .from('company_documents')
+      .select('id, title, category, storage_path, file_name, file_size, created_at')
+      .order('created_at', { ascending: false });
+    setDocuments(data || []);
+  };
+
+  const handleDownload = async (doc) => {
+    const { data } = await supabase.storage.from('company-documents').createSignedUrl(doc.storage_path, 3600);
+    if (data?.signedUrl) window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+  };
 
   return (
     <div className="container">
@@ -60,14 +90,54 @@ export default function CleanerHelp() {
         >
           Company Policies
         </button>
+        <button
+          type="button"
+          className={section === 'documents' ? 'btn-primary' : 'btn-secondary'}
+          onClick={() => setSection('documents')}
+        >
+          Documents
+        </button>
       </div>
 
-      {sections.map((s) => (
+      {sections && sections.map((s) => (
         <div key={s.title} className="card" style={{ marginBottom: 12 }}>
           <h2>{s.title}</h2>
           <p style={{ fontSize: 14, margin: '6px 0 0', lineHeight: 1.5 }}>{s.body}</p>
         </div>
       ))}
+
+      {section === 'documents' && (
+        <>
+          {documents === null && <p className="empty-state">Loading...</p>}
+          {documents?.length === 0 && <p className="empty-state">No documents have been shared yet.</p>}
+          {CATEGORY_ORDER.map((cat) => {
+            const docsInCategory = (documents || []).filter((d) => d.category === cat);
+            if (docsInCategory.length === 0) return null;
+            return (
+              <div key={cat} className="card" style={{ marginBottom: 12 }}>
+                <h2>{CATEGORY_LABELS[cat]}</h2>
+                {docsInCategory.map((doc) => (
+                  <div
+                    key={doc.id}
+                    className="task-row"
+                    style={{ justifyContent: 'space-between', cursor: 'pointer' }}
+                    onClick={() => handleDownload(doc)}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <FileText size={18} color="var(--muted)" style={{ flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 600 }}>{doc.title}</div>
+                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>{formatBytes(doc.file_size)}</div>
+                      </div>
+                    </div>
+                    <Download size={18} color="var(--brand-primary)" style={{ flexShrink: 0 }} />
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </>
+      )}
     </div>
   );
 }
