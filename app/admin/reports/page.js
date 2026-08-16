@@ -13,6 +13,7 @@ export default function AdminReports() {
   const [search, setSearch] = useState('');
 
   const [expandedJobId, setExpandedJobId] = useState(null);
+  const [jobPhotos, setJobPhotos] = useState([]);
   const [editingReport, setEditingReport] = useState(false);
   const [notes, setNotes] = useState('');
   const [template, setTemplate] = useState(DEFAULT_TEMPLATE);
@@ -40,7 +41,7 @@ export default function AdminReports() {
 
   const reportFor = (job) => (Array.isArray(job.job_reports) ? job.job_reports[0] : job.job_reports) || null;
 
-  const toggleExpand = (job) => {
+  const toggleExpand = async (job) => {
     const isOpen = expandedJobId === job.id;
     const existing = reportFor(job);
     setExpandedJobId(isOpen ? null : job.id);
@@ -48,6 +49,25 @@ export default function AdminReports() {
     setNotes(isOpen ? '' : existing?.input_notes || '');
     setTemplate(isOpen ? DEFAULT_TEMPLATE : existing?.template || DEFAULT_TEMPLATE);
     setError('');
+    setJobPhotos([]);
+
+    if (!isOpen) {
+      const { data } = await supabase
+        .from('photos')
+        .select('id, url, caption')
+        .eq('job_id', job.id)
+        .order('created_at', { ascending: false });
+
+      // photos.url stores the job-photos storage path, not a public URL -
+      // the bucket is private, so each photo needs a freshly signed URL.
+      const withUrls = await Promise.all(
+        (data || []).map(async (p) => {
+          const { data: signed } = await supabase.storage.from('job-photos').createSignedUrl(p.url, 3600);
+          return { ...p, signedUrl: signed?.signedUrl };
+        })
+      );
+      setJobPhotos(withUrls);
+    }
   };
 
   const generateReport = async (jobId) => {
@@ -148,6 +168,25 @@ export default function AdminReports() {
                   {isExpanded ? 'Close' : report ? 'View Report' : 'Generate Report'}
                 </button>
               </div>
+
+              {isExpanded && jobPhotos.length > 0 && (
+                <div style={{ marginBottom: 14 }}>
+                  <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Photos
+                  </strong>
+                  <div className="photo-grid">
+                    {jobPhotos.map((p) => (
+                      <img
+                        key={p.id}
+                        src={p.signedUrl}
+                        alt={p.caption || 'job photo'}
+                        onClick={() => window.open(p.signedUrl, '_blank', 'noopener,noreferrer')}
+                        style={{ cursor: 'pointer' }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {isExpanded && (
                 report && !editingReport ? (

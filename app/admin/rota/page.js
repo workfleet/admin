@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { supabase } from '../../../lib/supabaseClient';
 import { notify } from '../../../lib/notify';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
@@ -121,6 +122,7 @@ export default function AdminRota() {
   const [jobTasks, setJobTasks] = useState([]);
   const [newTaskText, setNewTaskText] = useState('');
   const [jobCheckins, setJobCheckins] = useState([]);
+  const [jobPhotos, setJobPhotos] = useState([]);
 
   const [editDate, setEditDate] = useState('');
   const [editHour, setEditHour] = useState('');
@@ -167,6 +169,11 @@ export default function AdminRota() {
   useEffect(() => {
     if (selectedJob) loadCheckins(selectedJob.id);
     else setJobCheckins([]);
+  }, [selectedJob?.id]);
+
+  useEffect(() => {
+    if (selectedJob) loadPhotos(selectedJob.id);
+    else setJobPhotos([]);
   }, [selectedJob?.id]);
 
   useEffect(() => {
@@ -236,6 +243,25 @@ export default function AdminRota() {
       .order('checked_in_at', { ascending: true });
 
     setJobCheckins(data || []);
+  };
+
+  const loadPhotos = async (jobId) => {
+    const { data } = await supabase
+      .from('photos')
+      .select('id, url, caption')
+      .eq('job_id', jobId)
+      .order('created_at', { ascending: false });
+
+    // photos.url stores the job-photos storage path, not a public URL -
+    // the bucket is private, so each photo needs a freshly signed URL.
+    const withUrls = await Promise.all(
+      (data || []).map(async (p) => {
+        const { data: signed } = await supabase.storage.from('job-photos').createSignedUrl(p.url, 3600);
+        return { ...p, signedUrl: signed?.signedUrl };
+      })
+    );
+
+    setJobPhotos(withUrls);
   };
 
   const addTask = async (e) => {
@@ -669,6 +695,9 @@ export default function AdminRota() {
           <button className="btn-secondary" onClick={() => setWeekStart(addDays(weekStart, -7))}>‹ Prev</button>
           <button className="btn-secondary" onClick={() => setWeekStart(getMonday(new Date()))}>Today</button>
           <button className="btn-secondary" onClick={() => setWeekStart(addDays(weekStart, 7))}>Next ›</button>
+          <Link href="/admin/rota/history" className="btn-secondary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+            History
+          </Link>
           <button className="btn-primary" onClick={() => setShowForm((s) => !s)}>
             {showForm ? 'Cancel' : '+ New Job'}
           </button>
@@ -952,7 +981,8 @@ export default function AdminRota() {
       </div>
 
       {selectedJob && (
-        <div className="card job-detail-panel">
+        <div className="job-modal-overlay" onClick={() => setSelectedJob(null)}>
+        <div className="card job-modal" onClick={(e) => e.stopPropagation()}>
           <div className="page-header-row" style={{ marginBottom: 8 }}>
             <h2 style={{ margin: 0 }}>{selectedJob.properties?.address}</h2>
             <button className="btn-secondary" onClick={() => setSelectedJob(null)}>Close</button>
@@ -1112,6 +1142,23 @@ export default function AdminRota() {
             </div>
           )}
 
+          {jobPhotos.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <label>Photos</label>
+              <div className="photo-grid">
+                {jobPhotos.map((p) => (
+                  <img
+                    key={p.id}
+                    src={p.signedUrl}
+                    alt={p.caption || 'job photo'}
+                    onClick={() => window.open(p.signedUrl, '_blank', 'noopener,noreferrer')}
+                    style={{ cursor: 'pointer' }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
           <div style={{ marginTop: 16 }}>
             <label>To-do list</label>
             {templates.length > 0 && (
@@ -1148,6 +1195,7 @@ export default function AdminRota() {
               <button type="submit" className="btn-primary">Add</button>
             </form>
           </div>
+        </div>
         </div>
       )}
     </div>
