@@ -15,7 +15,7 @@ function groupByDate(jobs) {
   return groups;
 }
 
-function DayGroup({ date, jobs, router, dim }) {
+function DayGroup({ date, jobs, router, dim, jobsMissingPhotos }) {
   return (
     <div style={{ marginBottom: 16 }}>
       <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 8px' }}>
@@ -33,6 +33,9 @@ function DayGroup({ date, jobs, router, dim }) {
             {new Date(job.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
           </p>
           <span className={`badge ${job.status}`}>{job.status.replace('_', ' ')}</span>
+          {jobsMissingPhotos?.has(job.id) && (
+            <span className="badge scheduled" style={{ marginLeft: 6 }}>📷 photos needed</span>
+          )}
         </div>
       ))}
     </div>
@@ -67,6 +70,7 @@ function holidayHoursPending(timeOffRequests) {
 export default function CleanerRota() {
   const router = useRouter();
   const [jobs, setJobs] = useState([]);
+  const [jobsMissingPhotos, setJobsMissingPhotos] = useState(new Set());
   const [assigneeCounts, setAssigneeCounts] = useState({});
   const [timeOff, setTimeOff] = useState([]);
   const [adjustmentHours, setAdjustmentHours] = useState(0);
@@ -112,6 +116,15 @@ export default function CleanerRota() {
     (allAssignments || []).forEach((row) => {
       counts[row.job_id] = (counts[row.job_id] || 0) + 1;
     });
+
+    const inProgressIds = jobsData.filter((j) => j.status === 'in_progress').map((j) => j.id);
+    if (inProgressIds.length > 0) {
+      const { data: photoRows } = await supabase.from('photos').select('job_id').in('job_id', inProgressIds);
+      const hasPhotos = new Set((photoRows || []).map((p) => p.job_id));
+      setJobsMissingPhotos(new Set(inProgressIds.filter((jid) => !hasPhotos.has(jid))));
+    } else {
+      setJobsMissingPhotos(new Set());
+    }
 
     setJobs(jobsData);
     setAssigneeCounts(counts);
@@ -181,9 +194,11 @@ export default function CleanerRota() {
 
   if (loading) return <div className="container">Loading...</div>;
 
-  const upcoming = jobs.filter((j) => j.status !== 'completed');
+  const upcoming = jobs.filter((j) => j.status === 'scheduled' || j.status === 'in_progress');
+  const missed = jobs.filter((j) => j.status === 'missed');
   const past = jobs.filter((j) => j.status === 'completed');
   const upcomingGroups = groupByDate(upcoming);
+  const missedGroups = groupByDate(missed);
   const pastGroups = groupByDate(past);
 
   const worked = hoursWorked(jobs, assigneeCounts);
@@ -289,9 +304,25 @@ export default function CleanerRota() {
 
       {jobs.length === 0 && <p className="empty-state">No jobs scheduled.</p>}
 
+      {upcoming.length === 0 && (missed.length > 0 || past.length > 0) && (
+        <p className="empty-state">No current or upcoming jobs.</p>
+      )}
+
       {Object.entries(upcomingGroups).map(([date, dayJobs]) => (
-        <DayGroup key={date} date={date} jobs={dayJobs} router={router} />
+        <DayGroup key={date} date={date} jobs={dayJobs} router={router} jobsMissingPhotos={jobsMissingPhotos} />
       ))}
+
+      {missed.length > 0 && (
+        <>
+          <h2 style={{ marginTop: 24, marginBottom: 4 }}>Missed</h2>
+          <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
+            {missed.length} job{missed.length === 1 ? '' : 's'} missed
+          </p>
+          {Object.entries(missedGroups).map(([date, dayJobs]) => (
+            <DayGroup key={date} date={date} jobs={dayJobs} router={router} dim />
+          ))}
+        </>
+      )}
 
       {past.length > 0 && (
         <>

@@ -13,7 +13,6 @@ import { KIT_PRODUCTS } from '../../lib/kitProducts';
 export default function CleanerDashboard() {
   const router = useRouter();
   const [jobs, setJobs] = useState([]);
-  const [jobsMissingPhotos, setJobsMissingPhotos] = useState(new Set());
   const [notifications, setNotifications] = useState([]);
   const [myRequests, setMyRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -68,15 +67,6 @@ export default function CleanerDashboard() {
       .select('id, type, description, status, created_at, resolution_note')
       .order('created_at', { ascending: false })
       .limit(10);
-
-    const inProgressIds = (jobsData || []).filter((j) => j.status === 'in_progress').map((j) => j.id);
-    if (inProgressIds.length > 0) {
-      const { data: photoRows } = await supabase.from('photos').select('job_id').in('job_id', inProgressIds);
-      const hasPhotos = new Set((photoRows || []).map((p) => p.job_id));
-      setJobsMissingPhotos(new Set(inProgressIds.filter((jid) => !hasPhotos.has(jid))));
-    } else {
-      setJobsMissingPhotos(new Set());
-    }
 
     setJobs(jobsData || []);
     setNotifications(notifData || []);
@@ -147,15 +137,11 @@ export default function CleanerDashboard() {
 
   if (loading) return <div className="container">Loading...</div>;
 
-  // Completed jobs move to the Rota's History section instead of
-  // cluttering the active list here once they're done.
-  const activeJobs = jobs.filter((j) => j.status !== 'completed');
-
   return (
     <div className="container">
       {anniversary && <WorkAnniversaryPopup name={anniversary.name} years={anniversary.years} />}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1>My Jobs</h1>
+        <h1>Home</h1>
         <Link href="/cleaner/notifications" style={{ fontSize: 13, fontWeight: 600, color: 'var(--brand-primary)', textDecoration: 'none' }}>
           Notifications
         </Link>
@@ -178,34 +164,6 @@ export default function CleanerDashboard() {
             </div>
           ))}
         </div>
-      )}
-
-      {activeJobs.length === 0 && <p>No jobs scheduled yet.</p>}
-
-      {activeJobs.map((job) => (
-        <div
-          key={job.id}
-          className="card"
-          onClick={() => router.push(`/cleaner/jobs/${job.id}`)}
-          style={{ cursor: 'pointer' }}
-        >
-          <h2>{job.properties?.address}</h2>
-          <p style={{ margin: '4px 0', fontSize: 14 }}>
-            {new Date(job.scheduled_at).toLocaleString()}
-          </p>
-          <span className={`badge ${job.status}`}>{job.status.replace('_', ' ')}</span>
-          {jobsMissingPhotos.has(job.id) && (
-            <span className="badge scheduled" style={{ marginLeft: 6 }}>📷 photos needed</span>
-          )}
-        </div>
-      ))}
-
-      {jobs.some((j) => j.status === 'completed') && (
-        <p style={{ fontSize: 13, textAlign: 'center', margin: '-4px 0 16px' }}>
-          <Link href="/cleaner/rota" style={{ color: 'var(--brand-primary)', fontWeight: 600, textDecoration: 'none' }}>
-            Completed jobs have moved to your Rota's History →
-          </Link>
-        </p>
       )}
 
       <div className="card">
