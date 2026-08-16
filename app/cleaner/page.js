@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { X } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { purgeOldNotifications } from '../../lib/notifications';
+import { getWorkAnniversaryYears } from '../../lib/workAnniversary';
+import WorkAnniversaryPopup from '../components/WorkAnniversaryPopup';
 
 export default function CleanerDashboard() {
   const router = useRouter();
@@ -14,6 +16,7 @@ export default function CleanerDashboard() {
   const [notifications, setNotifications] = useState([]);
   const [myRequests, setMyRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [anniversary, setAnniversary] = useState(null);
 
   const [requestType, setRequestType] = useState(null); // null | 'kit_topup' | 'issue'
   const [requestJobId, setRequestJobId] = useState('');
@@ -30,6 +33,11 @@ export default function CleanerDashboard() {
       router.push('/');
       return;
     }
+
+    const { data: ownProfile } = await supabase
+      .from('profiles').select('full_name, created_at').eq('id', session.user.id).single();
+    const years = getWorkAnniversaryYears(ownProfile?.created_at);
+    if (years) setAnniversary({ name: ownProfile.full_name || 'there', years });
 
     const { data: assignmentRows } = await supabase
       .from('job_assignments')
@@ -118,6 +126,7 @@ export default function CleanerDashboard() {
 
   return (
     <div className="container">
+      {anniversary && <WorkAnniversaryPopup name={anniversary.name} years={anniversary.years} />}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>My Jobs</h1>
         <Link href="/cleaner/notifications" style={{ fontSize: 13, fontWeight: 600, color: 'var(--brand-primary)', textDecoration: 'none' }}>

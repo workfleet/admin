@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabaseClient';
+import { getWorkAnniversaryYears } from '../../lib/workAnniversary';
+import WorkAnniversaryPopup from '../components/WorkAnniversaryPopup';
 
 function formatDuration(mins) {
   const h = Math.floor(mins / 60);
@@ -51,6 +53,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
 
   const [role, setRole] = useState(null);
+  const [anniversary, setAnniversary] = useState(null);
   const [payrollPeriod, setPayrollPeriod] = useState('this_week');
   const [payrollRows, setPayrollRows] = useState([]);
   const [payrollLoading, setPayrollLoading] = useState(true);
@@ -100,8 +103,10 @@ export default function AdminDashboard() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/'); return; }
 
-    const { data: ownProfile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+    const { data: ownProfile } = await supabase.from('profiles').select('role, full_name, created_at').eq('id', session.user.id).single();
     setRole(ownProfile?.role || null);
+    const years = getWorkAnniversaryYears(ownProfile?.created_at);
+    if (years) setAnniversary({ name: ownProfile.full_name || 'there', years });
 
     // Auto-marks overdue jobs missed/completed based on elapsed time,
     // same as the Rota page, so Today's Jobs stays consistent with it.
@@ -169,6 +174,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="page-inner">
+      {anniversary && <WorkAnniversaryPopup name={anniversary.name} years={anniversary.years} />}
       <div className="page-header-row">
         <div>
           <h1>Dashboard</h1>
