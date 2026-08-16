@@ -3,7 +3,7 @@ import path from 'path';
 import { NextResponse } from 'next/server';
 import { Document, Page, View, Text, Image, StyleSheet, Font, renderToBuffer } from '@react-pdf/renderer';
 import { supabaseAdmin } from '../../../../../lib/supabaseAdmin';
-import { COMPANY, QUOTE_NOTES, formatPriceGBP, quoteReference, quoteRecipientName } from '../../../../../lib/companyBranding';
+import { COMPANY, QUOTE_NOTES, formatPriceGBP, quoteReference, quoteRecipientName, clientSafeBreakdown } from '../../../../../lib/companyBranding';
 
 // @react-pdf/renderer needs real Node APIs (fs, fontkit) - not the edge runtime.
 export const runtime = 'nodejs';
@@ -38,11 +38,26 @@ const styles = StyleSheet.create({
   notesList: { marginTop: 8 },
   noteItem: { fontSize: 9.5, color: '#444', marginBottom: 3 },
   footer: { position: 'absolute', bottom: 30, left: 40, right: 40, fontSize: 8.5, color: '#888', textAlign: 'center', borderTopWidth: 1, borderTopColor: '#e5e5e5', paddingTop: 8 },
+  breakdownBox: { backgroundColor: '#f8fafc', borderRadius: 8, padding: 12 },
+  breakdownRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3, fontSize: 9.5 },
+  breakdownLabel: { color: '#555' },
+  breakdownValue: { color: '#1e2526' },
+  breakdownDivider: { borderTopWidth: 1, borderTopColor: '#e2e8f0', marginVertical: 6 },
 });
+
+function BreakdownRow({ label, value }) {
+  return (
+    <View style={styles.breakdownRow}>
+      <Text style={styles.breakdownLabel}>{label}</Text>
+      <Text style={styles.breakdownValue}>{value}</Text>
+    </View>
+  );
+}
 
 function QuotePdf({ quote, logoBase64 }) {
   const recipient = quoteRecipientName(quote);
   const reference = quoteReference(quote);
+  const breakdown = clientSafeBreakdown(quote);
 
   return (
     <Document>
@@ -79,6 +94,17 @@ function QuotePdf({ quote, logoBase64 }) {
           <Text style={styles.priceValue}>{formatPriceGBP(quote.price)}</Text>
         </View>
 
+        {breakdown && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>What's Included</Text>
+            <View style={styles.breakdownBox}>
+              {breakdown.map((item, i) => (
+                <BreakdownRow key={i} label={item.label} value={item.value} />
+              ))}
+            </View>
+          </View>
+        )}
+
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Notes</Text>
           <View style={styles.notesList}>
@@ -102,7 +128,7 @@ export async function GET(request, { params }) {
 
   const { data: quote } = await supabaseAdmin
     .from('quotes')
-    .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, valid_until, created_at, clients(name)')
+    .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, valid_until, created_at, calculator_input, calculator_breakdown, clients(name)')
     .eq('id', params.id)
     .single();
 

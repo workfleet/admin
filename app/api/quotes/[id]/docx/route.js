@@ -3,7 +3,7 @@ import path from 'path';
 import { NextResponse } from 'next/server';
 import { Document, Packer, Paragraph, TextRun, ImageRun, AlignmentType, HeadingLevel, BorderStyle } from 'docx';
 import { supabaseAdmin } from '../../../../../lib/supabaseAdmin';
-import { COMPANY, QUOTE_NOTES, formatPriceGBP, quoteReference, quoteRecipientName } from '../../../../../lib/companyBranding';
+import { COMPANY, QUOTE_NOTES, formatPriceGBP, quoteReference, quoteRecipientName, clientSafeBreakdown } from '../../../../../lib/companyBranding';
 
 export const runtime = 'nodejs';
 
@@ -28,7 +28,7 @@ export async function GET(request, { params }) {
 
   const { data: quote } = await supabaseAdmin
     .from('quotes')
-    .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, valid_until, created_at, clients(name)')
+    .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, valid_until, created_at, calculator_input, calculator_breakdown, clients(name)')
     .eq('id', params.id)
     .single();
 
@@ -36,6 +36,7 @@ export async function GET(request, { params }) {
 
   const recipient = quoteRecipientName(quote);
   const reference = quoteReference(quote);
+  const breakdown = clientSafeBreakdown(quote);
 
   const logoPath = path.join(process.cwd(), 'public', 'icon-512.png');
   const logoBuffer = fs.existsSync(logoPath) ? fs.readFileSync(logoPath) : null;
@@ -110,6 +111,20 @@ export async function GET(request, { params }) {
       children: [new TextRun({ text: formatPriceGBP(quote.price), bold: true, size: 48, color: BRAND_COLOR })],
       spacing: { after: 300 },
     }),
+    ...(breakdown ? [
+      new Paragraph({
+        children: [new TextRun({ text: "WHAT'S INCLUDED", bold: true, size: 16, color: '888888' })],
+        spacing: { before: 100, after: 60 },
+      }),
+      ...breakdown.map((item) => new Paragraph({
+        children: [
+          new TextRun({ text: `${item.label}: `, bold: true, size: 18 }),
+          new TextRun({ text: item.value, size: 18 }),
+        ],
+        spacing: { after: 40 },
+      })),
+      new Paragraph({ spacing: { after: 160 } }),
+    ] : []),
     new Paragraph({
       children: [new TextRun({ text: 'NOTES', bold: true, size: 16, color: '888888' })],
       spacing: { before: 100, after: 60 },
