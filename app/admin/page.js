@@ -188,7 +188,7 @@ export default function AdminDashboard() {
         .order('scheduled_at', { ascending: true })
         .limit(6),
       supabase.from('staff_requests')
-        .select('id, type, description, created_at, profiles(full_name), jobs(scheduled_at, properties(address))')
+        .select('id, type, description, created_at, profiles!staff_requests_cleaner_id_fkey(full_name), jobs(scheduled_at, properties(address))')
         .eq('status', 'open')
         .order('created_at', { ascending: true }),
       supabase.from('reminders')
@@ -279,9 +279,10 @@ export default function AdminDashboard() {
 
   const completeTodo = async (rawId) => {
     setAttention((prev) => prev.filter((a) => a.id !== `req-${rawId}`));
+    const { data: { session } } = await supabase.auth.getSession();
     await supabase
       .from('staff_requests')
-      .update({ status: 'resolved', resolved_at: new Date().toISOString() })
+      .update({ status: 'resolved', resolved_at: new Date().toISOString(), resolved_by: session.user.id })
       .eq('id', rawId);
   };
 

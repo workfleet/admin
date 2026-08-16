@@ -58,17 +58,17 @@ export default function AdminRequests() {
     const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, { data: assignmentsData }, { data: extensionsData }] = await Promise.all([
       supabase
         .from('staff_requests')
-        .select('id, type, description, status, created_at, resolved_at, resolution_note, cleaner_id, profiles(full_name), jobs(scheduled_at, properties(address))')
+        .select('id, type, description, status, created_at, resolved_at, resolution_note, resolved_by, cleaner_id, profiles!staff_requests_cleaner_id_fkey(full_name), resolver:profiles!staff_requests_resolved_by_fkey(full_name), jobs(scheduled_at, properties(address))')
         .order('created_at', { ascending: false }),
       supabase
         .from('time_off_requests')
-        .select('id, type, start_date, end_date, hours, reason, status, admin_note, created_at, cleaner_id, profiles(full_name)')
+        .select('id, type, start_date, end_date, hours, reason, status, admin_note, created_at, cleaner_id, decided_by, profiles!time_off_requests_cleaner_id_fkey(full_name), decider:profiles!time_off_requests_decided_by_fkey(full_name)')
         .order('created_at', { ascending: false }),
       supabase.from('profiles').select('id, holiday_adjustment_hours').eq('role', 'cleaner'),
       supabase.from('job_assignments').select('cleaner_id, jobs(id, status, duration_minutes)'),
       supabase
         .from('time_extension_requests')
-        .select('id, job_id, requested_minutes, reason, status, admin_note, suggested_scheduled_at, suggested_duration_minutes, created_at, cleaner_id, profiles!time_extension_requests_cleaner_id_fkey(full_name), jobs(scheduled_at, duration_minutes, properties(address))')
+        .select('id, job_id, requested_minutes, reason, status, admin_note, suggested_scheduled_at, suggested_duration_minutes, created_at, cleaner_id, decided_by, profiles!time_extension_requests_cleaner_id_fkey(full_name), decider:profiles!time_extension_requests_decided_by_fkey(full_name), jobs(scheduled_at, duration_minutes, properties(address))')
         .order('created_at', { ascending: false }),
     ]);
 
@@ -100,11 +100,12 @@ export default function AdminRequests() {
 
   const confirmResolve = async (id) => {
     const target = requests.find((r) => r.id === id);
+    const { data: { session } } = await supabase.auth.getSession();
     const { data } = await supabase
       .from('staff_requests')
-      .update({ status: 'resolved', resolved_at: new Date().toISOString(), resolution_note: resolutionNote.trim() || null })
+      .update({ status: 'resolved', resolved_at: new Date().toISOString(), resolved_by: session.user.id, resolution_note: resolutionNote.trim() || null })
       .eq('id', id)
-      .select('id, status, resolved_at, resolution_note')
+      .select('id, status, resolved_at, resolution_note, resolved_by, resolver:profiles!staff_requests_resolved_by_fkey(full_name)')
       .single();
 
     if (data) {
@@ -119,9 +120,9 @@ export default function AdminRequests() {
   const reopen = async (id) => {
     const { data } = await supabase
       .from('staff_requests')
-      .update({ status: 'open', resolved_at: null, resolution_note: null })
+      .update({ status: 'open', resolved_at: null, resolution_note: null, resolved_by: null })
       .eq('id', id)
-      .select('id, status, resolved_at, resolution_note')
+      .select('id, status, resolved_at, resolution_note, resolved_by, resolver:profiles!staff_requests_resolved_by_fkey(full_name)')
       .single();
 
     if (data) {
@@ -166,7 +167,7 @@ export default function AdminRequests() {
       .from('time_off_requests')
       .update({ status: decidingStatus, admin_note: adminNote.trim() || null, decided_by: session.user.id, decided_at: new Date().toISOString() })
       .eq('id', id)
-      .select('id, status, admin_note')
+      .select('id, status, admin_note, decided_by, decider:profiles!time_off_requests_decided_by_fkey(full_name)')
       .single();
 
     if (data) {
@@ -219,7 +220,7 @@ export default function AdminRequests() {
       .from('time_extension_requests')
       .update(updates)
       .eq('id', id)
-      .select('id, status, admin_note, suggested_scheduled_at, suggested_duration_minutes')
+      .select('id, status, admin_note, suggested_scheduled_at, suggested_duration_minutes, decided_by, decider:profiles!time_extension_requests_decided_by_fkey(full_name)')
       .single();
 
     if (!data) { setDecidingExtensionId(null); return; }
@@ -301,6 +302,11 @@ export default function AdminRequests() {
                       {' · '}{new Date(r.created_at).toLocaleString()}
                     </p>
                     <span className={`badge ${r.status === 'resolved' ? 'completed' : 'scheduled'}`}>{r.status}</span>
+                    {r.status === 'resolved' && (
+                      <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 4 }}>
+                        Resolved by {r.resolver?.full_name || 'Unknown'}{r.resolved_at && ` · ${new Date(r.resolved_at).toLocaleString()}`}
+                      </p>
+                    )}
                     {r.status === 'resolved' && r.resolution_note && (
                       <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 6, fontStyle: 'italic' }}>"{r.resolution_note}"</p>
                     )}
@@ -364,6 +370,11 @@ export default function AdminRequests() {
                       )}
                     </p>
                     <span className={`badge ${t.status === 'approved' ? 'completed' : t.status === 'declined' ? 'missed' : 'scheduled'}`}>{t.status}</span>
+                    {t.status !== 'pending' && (
+                      <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 4 }}>
+                        {t.status === 'approved' ? 'Approved' : 'Declined'} by {t.decider?.full_name || 'Unknown'}
+                      </p>
+                    )}
                     {t.status !== 'pending' && t.admin_note && (
                       <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 6, fontStyle: 'italic' }}>"{t.admin_note}"</p>
                     )}
@@ -431,6 +442,11 @@ export default function AdminRequests() {
                     {r.status === 'alternative_suggested' && r.suggested_scheduled_at && (
                       <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 6 }}>
                         Suggested: {new Date(r.suggested_scheduled_at).toLocaleString()} · {r.suggested_duration_minutes} min
+                      </p>
+                    )}
+                    {r.status !== 'pending' && (
+                      <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 4 }}>
+                        Decided by {r.decider?.full_name || 'Unknown'}
                       </p>
                     )}
                     {r.status !== 'pending' && r.admin_note && (
