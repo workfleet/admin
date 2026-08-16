@@ -11,6 +11,38 @@ import { lateMinutes } from '../../../../lib/clockIn';
 
 const HOLIDAY_ACCRUAL_RATE = 0.1207; // UK statutory: 5.6 weeks / 46.4 working weeks
 
+// Each sub-score is 0-100; components with no underlying data (e.g. no
+// ratings yet) are left out of the average entirely rather than counted
+// as 0, so a new cleaner isn't unfairly penalised before there's enough
+// history to judge them on.
+function computeReliability(pastJobs, completedJobIds, checkins, photoRows, ratingRows) {
+  const parts = [];
+
+  if (checkins.length > 0) {
+    const onTimeCount = checkins.filter((c) => (lateMinutes(c.checked_in_at, c.jobs?.scheduled_at) ?? 0) <= 0).length;
+    parts.push({ key: 'punctuality', label: 'Punctuality', score: (onTimeCount / checkins.length) * 100 });
+  }
+
+  if (pastJobs.length > 0) {
+    const completedCount = pastJobs.filter((j) => j.status === 'completed').length;
+    parts.push({ key: 'completion', label: 'Completion Rate', score: (completedCount / pastJobs.length) * 100 });
+  }
+
+  if (completedJobIds.length > 0) {
+    const jobsWithPhotos = new Set(photoRows.map((p) => p.job_id));
+    const withPhotos = completedJobIds.filter((jid) => jobsWithPhotos.has(jid)).length;
+    parts.push({ key: 'photos', label: 'Photo Compliance', score: (withPhotos / completedJobIds.length) * 100 });
+  }
+
+  if (ratingRows.length > 0) {
+    const avgRating = ratingRows.reduce((sum, r) => sum + r.rating, 0) / ratingRows.length;
+    parts.push({ key: 'rating', label: 'Client Rating', score: (avgRating / 5) * 100, avgRating });
+  }
+
+  const overall = parts.length > 0 ? parts.reduce((sum, p) => sum + p.score, 0) / parts.length : null;
+  return { overall, parts };
+}
+
 export default function CleanerProfile() {
   const router = useRouter();
   const { id } = useParams();
@@ -34,6 +66,14 @@ export default function CleanerProfile() {
   const [removing, setRemoving] = useState(false);
   const [removedEmail, setRemovedEmail] = useState(null);
 
+  const [certifications, setCertifications] = useState([]);
+  const [isAddingCert, setIsAddingCert] = useState(false);
+  const [newCertName, setNewCertName] = useState('');
+  const [newCertExpiry, setNewCertExpiry] = useState('');
+  const [newCertNotes, setNewCertNotes] = useState('');
+
+  const [reliability, setReliability] = useState(null);
+
   const [reminders, setReminders] = useState([]);
   const [isAddingReminder, setIsAddingReminder] = useState(false);
   const [newReminderDate, setNewReminderDate] = useState('');
@@ -43,19 +83,6 @@ export default function CleanerProfile() {
   useEffect(() => {
     load();
   }, [id]);
-
-  useEffect(() => {
-    if (showClockIns && checkins === null && id) loadClockIns();
-  }, [showClockIns, id]);
-
-  const loadClockIns = async () => {
-    const { data } = await supabase
-      .from('checkins')
-      .select('id, job_id, checked_in_at, checked_out_at, jobs(scheduled_at, properties(address))')
-      .eq('cleaner_id', id)
-      .order('checked_in_at', { ascending: false });
-    setCheckins(data || []);
-  };
 
   const load = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -113,8 +140,35 @@ export default function CleanerProfile() {
       .eq('staff_id', id)
       .order('due_date', { ascending: true });
 
+    const { data: certsData } = await supabase
+      .from('staff_certifications')
+      .select('id, name, expiry_date, notes')
+      .eq('staff_id', id)
+      .order('expiry_date', { ascending: true, nullsFirst: false });
+
+    const { data: checkinsData } = await supabase
+      .from('checkins')
+      .select('id, job_id, checked_in_at, checked_out_at, jobs(scheduled_at, properties(address))')
+      .eq('cleaner_id', id)
+      .order('checked_in_at', { ascending: false });
+
+    const pastJobs = jobsData.filter((j) => j.status === 'completed' || j.status === 'missed');
+    const completedJobIds = jobsData.filter((j) => j.status === 'completed').map((j) => j.id);
+
+    const [{ data: photoRows }, { data: ratingRows }] = await Promise.all([
+      completedJobIds.length > 0
+        ? supabase.from('photos').select('job_id').in('job_id', completedJobIds)
+        : Promise.resolve({ data: [] }),
+      jobIds.length > 0
+        ? supabase.from('job_ratings').select('rating, job_id').in('job_id', jobIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
     setCleaner(cleanerData);
     setJobs(jobsData);
+    setCheckins(checkinsData || []);
+    setCertifications(certsData || []);
+    setReliability(computeReliability(pastJobs, completedJobIds, checkinsData || [], photoRows || [], ratingRows || []));
     setTimeOffRequests(timeOffData || []);
     setSubmission(submissionData || null);
     setReminders(remindersData || []);
@@ -143,6 +197,40 @@ export default function CleanerProfile() {
     setNewReminderRecurs(true);
     setNewReminderNotes('');
     setIsAddingReminder(false);
+  };
+
+  const addCertification = async (e) => {
+    e.preventDefault();
+    if (!newCertName.trim()) return;
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data } = await supabase
+      .from('staff_certifications')
+      .insert({
+        staff_id: id,
+        name: newCertName.trim(),
+        expiry_date: newCertExpiry || null,
+        notes: newCertNotes.trim() || null,
+        created_by: session.user.id,
+      })
+      .select('id, name, expiry_date, notes')
+      .single();
+
+    if (data) {
+      setCertifications((prev) => [...prev, data].sort((a, b) => (a.expiry_date || '9999').localeCompare(b.expiry_date || '9999')));
+    }
+    setNewCertName('');
+    setNewCertExpiry('');
+    setNewCertNotes('');
+    setIsAddingCert(false);
+  };
+
+  const deleteCertification = async (certId) => {
+    if (!(await confirm('Delete this certification?', { danger: true }))) return;
+    const { error } = await supabase.from('staff_certifications').delete().eq('id', certId);
+    if (error) { toast.error('Could not delete the certification.'); return; }
+    setCertifications((prev) => prev.filter((c) => c.id !== certId));
+    toast.success('Certification deleted.');
   };
 
   const completeReminder = async (reminder) => {
@@ -316,6 +404,70 @@ export default function CleanerProfile() {
           )}
         </div>
       )}
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h2>Reliability Score</h2>
+        {reliability?.overall === null || !reliability ? (
+          <p className="empty-state">Not enough history yet to score this cleaner.</p>
+        ) : (
+          <>
+            <p style={{ fontSize: 28, fontWeight: 800, margin: '4px 0 10px', color: 'var(--brand-primary)' }}>
+              {reliability.overall.toFixed(0)}<span style={{ fontSize: 15, color: 'var(--muted)', fontWeight: 600 }}> / 100</span>
+            </p>
+            {reliability.parts.map((p) => (
+              <div key={p.key} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0' }}>
+                <span style={{ color: 'var(--muted)' }}>
+                  {p.label}{p.key === 'rating' && ` (${p.avgRating.toFixed(1)}★ avg)`}
+                </span>
+                <strong>{p.score.toFixed(0)}</strong>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h2>Certifications</h2>
+        {certifications.length === 0 && !isAddingCert && <p className="empty-state">No certifications on file.</p>}
+
+        {certifications.map((c) => {
+          const expired = c.expiry_date && new Date(c.expiry_date) < new Date(new Date().toDateString());
+          const soon = c.expiry_date && !expired && new Date(c.expiry_date) < new Date(Date.now() + 30 * 86400000);
+          return (
+            <div key={c.id} className="task-row" style={{ justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{c.name}</div>
+                {c.expiry_date && (
+                  <div style={{ fontSize: 12.5, color: expired ? 'crimson' : soon ? '#b45309' : 'var(--muted)' }}>
+                    {expired ? 'Expired' : 'Expires'} {new Date(c.expiry_date).toLocaleDateString()}
+                  </div>
+                )}
+                {c.notes && <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>{c.notes}</div>}
+              </div>
+              <button className="btn-secondary" onClick={() => deleteCertification(c.id)}>Delete</button>
+            </div>
+          );
+        })}
+
+        {isAddingCert ? (
+          <form onSubmit={addCertification} style={{ marginTop: 12 }}>
+            <label>Name</label>
+            <input value={newCertName} onChange={(e) => setNewCertName(e.target.value)} placeholder="e.g. DBS Check" required autoFocus />
+            <label>Expiry date (optional)</label>
+            <input type="date" value={newCertExpiry} onChange={(e) => setNewCertExpiry(e.target.value)} />
+            <label>Notes (optional)</label>
+            <input value={newCertNotes} onChange={(e) => setNewCertNotes(e.target.value)} placeholder="e.g. Reference number, issuing body" />
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <button type="button" className="btn-secondary" onClick={() => setIsAddingCert(false)}>Cancel</button>
+              <button type="submit" className="btn-primary">Add Certification</button>
+            </div>
+          </form>
+        ) : (
+          <button className="btn-secondary" onClick={() => setIsAddingCert(true)} style={{ marginTop: certifications.length ? 12 : 0 }}>
+            + Certification
+          </button>
+        )}
+      </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="page-header-row" style={{ marginBottom: editingAdjustment ? 12 : 0 }}>

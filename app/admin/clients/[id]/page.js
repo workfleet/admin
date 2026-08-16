@@ -30,6 +30,11 @@ export default function ClientDetail() {
   const [newAddressCoords, setNewAddressCoords] = useState(null);
   const [newNotes, setNewNotes] = useState('');
 
+  const [expandedPropertyId, setExpandedPropertyId] = useState(null);
+  const [checklistItems, setChecklistItems] = useState({}); // propertyId -> items[]
+  const [newChecklistRoom, setNewChecklistRoom] = useState('');
+  const [newChecklistTask, setNewChecklistTask] = useState('');
+
   const [callLogs, setCallLogs] = useState(null);
   const [callLogsLoading, setCallLogsLoading] = useState(false);
   const [newCallDirection, setNewCallDirection] = useState('outbound');
@@ -58,7 +63,7 @@ export default function ClientDetail() {
 
     const { data: clientData } = await supabase
       .from('clients')
-      .select('id, name, contact_name, email, phone, billing_address, notes, industry')
+      .select('id, name, contact_name, email, phone, billing_address, notes, industry, contract_value, contract_renewal_date, contract_notice_days')
       .eq('id', id)
       .single();
 
@@ -229,6 +234,9 @@ export default function ClientDetail() {
       billing_address: client.billing_address || '',
       notes: client.notes || '',
       industry: client.industry || '',
+      contract_value: client.contract_value ?? '',
+      contract_renewal_date: client.contract_renewal_date || '',
+      contract_notice_days: client.contract_notice_days ?? '',
     });
     setIsEditing(true);
   };
@@ -245,11 +253,14 @@ export default function ClientDetail() {
       billing_address: editForm.billing_address.trim() || null,
       notes: editForm.notes.trim() || null,
       industry: editForm.industry || null,
+      contract_value: editForm.contract_value === '' ? null : Number(editForm.contract_value),
+      contract_renewal_date: editForm.contract_renewal_date || null,
+      contract_notice_days: editForm.contract_notice_days === '' ? null : Number(editForm.contract_notice_days),
     };
 
     const { data } = await supabase
       .from('clients').update(payload).eq('id', id)
-      .select('id, name, contact_name, email, phone, billing_address, notes, industry')
+      .select('id, name, contact_name, email, phone, billing_address, notes, industry, contract_value, contract_renewal_date, contract_notice_days')
       .single();
 
     if (data) setClient(data);
@@ -293,6 +304,50 @@ export default function ClientDetail() {
     if (error) { toast.error('Could not delete the property.'); return; }
     setProperties((prev) => prev.filter((p) => p.id !== propertyId));
     toast.success('Property deleted.');
+  };
+
+  const toggleChecklist = async (propertyId) => {
+    if (expandedPropertyId === propertyId) { setExpandedPropertyId(null); return; }
+    setExpandedPropertyId(propertyId);
+    setNewChecklistRoom('');
+    setNewChecklistTask('');
+
+    if (!checklistItems[propertyId]) {
+      const { data } = await supabase
+        .from('property_checklist_items')
+        .select('id, room, task, sort_order')
+        .eq('property_id', propertyId)
+        .order('sort_order', { ascending: true });
+      setChecklistItems((prev) => ({ ...prev, [propertyId]: data || [] }));
+    }
+  };
+
+  const addChecklistItem = async (e, propertyId) => {
+    e.preventDefault();
+    if (!newChecklistRoom.trim() || !newChecklistTask.trim()) return;
+
+    const existing = checklistItems[propertyId] || [];
+    const { data, error } = await supabase
+      .from('property_checklist_items')
+      .insert({
+        property_id: propertyId,
+        room: newChecklistRoom.trim(),
+        task: newChecklistTask.trim(),
+        sort_order: existing.length,
+      })
+      .select('id, room, task, sort_order')
+      .single();
+
+    if (error) { toast.error('Could not add checklist item.'); return; }
+    setChecklistItems((prev) => ({ ...prev, [propertyId]: [...existing, data] }));
+    setNewChecklistTask('');
+  };
+
+  const deleteChecklistItem = async (propertyId, itemId) => {
+    if (!(await confirm('Delete this checklist item?', { danger: true }))) return;
+    const { error } = await supabase.from('property_checklist_items').delete().eq('id', itemId);
+    if (error) { toast.error('Could not delete checklist item.'); return; }
+    setChecklistItems((prev) => ({ ...prev, [propertyId]: prev[propertyId].filter((i) => i.id !== itemId) }));
   };
 
   const addCallLog = async (e) => {
@@ -399,6 +454,33 @@ export default function ClientDetail() {
                   ))}
                 </select>
               </div>
+              <div className="field-row">
+                <div className="field">
+                  <label className="field-label">Contract value (£/year)</label>
+                  <input
+                    type="number" step="0.01" min="0"
+                    value={editForm.contract_value}
+                    onChange={(e) => setEditForm((f) => ({ ...f, contract_value: e.target.value }))}
+                  />
+                </div>
+                <div className="field">
+                  <label className="field-label">Renewal date</label>
+                  <input
+                    type="date"
+                    value={editForm.contract_renewal_date}
+                    onChange={(e) => setEditForm((f) => ({ ...f, contract_renewal_date: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="field">
+                <label className="field-label">Notice period before renewal (days)</label>
+                <input
+                  type="number" min="0"
+                  value={editForm.contract_notice_days}
+                  onChange={(e) => setEditForm((f) => ({ ...f, contract_notice_days: e.target.value }))}
+                  placeholder="e.g. 30"
+                />
+              </div>
               <div className="field">
                 <label className="field-label">Notes</label>
                 <input
@@ -413,7 +495,7 @@ export default function ClientDetail() {
             </div>
           </form>
         ) : (
-          (client.contact_name || client.email || client.phone || client.billing_address || client.notes || client.industry) && (
+          (client.contact_name || client.email || client.phone || client.billing_address || client.notes || client.industry || client.contract_value || client.contract_renewal_date) && (
             <div style={{ fontSize: 14, color: 'var(--muted)', marginTop: 10, lineHeight: 1.7 }}>
               {client.contact_name && <div>{client.contact_name}</div>}
               {(client.email || client.phone) && (
@@ -421,6 +503,23 @@ export default function ClientDetail() {
               )}
               {client.billing_address && <div>{client.billing_address}</div>}
               {client.industry && <span className="badge scheduled">{client.industry}</span>}
+              {(client.contract_value || client.contract_renewal_date) && (
+                <div style={{ marginTop: 6 }}>
+                  {client.contract_value != null && <span>£{Number(client.contract_value).toLocaleString()}/year</span>}
+                  {client.contract_value != null && client.contract_renewal_date && ' · '}
+                  {client.contract_renewal_date && (() => {
+                    const renewal = new Date(client.contract_renewal_date);
+                    const noticeStart = new Date(renewal);
+                    noticeStart.setDate(noticeStart.getDate() - (client.contract_notice_days || 0));
+                    const dueForAttention = new Date() >= noticeStart;
+                    return (
+                      <span style={dueForAttention ? { color: 'crimson', fontWeight: 600 } : undefined}>
+                        Renews {renewal.toLocaleDateString()}
+                      </span>
+                    );
+                  })()}
+                </div>
+              )}
               {client.notes && <div style={{ fontStyle: 'italic' }}>{client.notes}</div>}
             </div>
           )
@@ -449,12 +548,63 @@ export default function ClientDetail() {
         <div className="card">
           {properties.length === 0 && <p className="empty-state">No properties yet.</p>}
           {properties.map((p) => (
-            <div key={p.id} className="task-row">
-              <div style={{ flex: 1 }}>
-                <div>{p.address}</div>
-                {p.notes && <div style={{ fontSize: 12, color: 'var(--muted)' }}>{p.notes}</div>}
+            <div key={p.id} style={{ borderBottom: '1px solid var(--hairline)', padding: '10px 0' }}>
+              <div className="task-row" style={{ border: 'none', padding: 0 }}>
+                <div style={{ flex: 1 }}>
+                  <div>{p.address}</div>
+                  {p.notes && <div style={{ fontSize: 12, color: 'var(--muted)' }}>{p.notes}</div>}
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="btn-secondary" onClick={() => toggleChecklist(p.id)}>
+                    {expandedPropertyId === p.id ? 'Close' : 'Checklist'}
+                  </button>
+                  <button className="btn-secondary" onClick={() => deleteProperty(p.id)}>Remove</button>
+                </div>
               </div>
-              <button className="btn-secondary" onClick={() => deleteProperty(p.id)}>Remove</button>
+
+              {expandedPropertyId === p.id && (
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--hairline)' }}>
+                  <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '0 0 8px' }}>
+                    Room-by-room reference so any cleaner covering this property knows what "done" looks like here.
+                  </p>
+                  {(checklistItems[p.id] || []).length === 0 && (
+                    <p className="empty-state" style={{ padding: '4px 0' }}>No checklist items yet.</p>
+                  )}
+                  {Object.entries(
+                    (checklistItems[p.id] || []).reduce((acc, item) => {
+                      (acc[item.room] = acc[item.room] || []).push(item);
+                      return acc;
+                    }, {})
+                  ).map(([room, items]) => (
+                    <div key={room} style={{ marginBottom: 8 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{room}</div>
+                      {items.map((item) => (
+                        <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
+                          <span style={{ fontSize: 14 }}>{item.task}</span>
+                          <button className="btn-secondary" onClick={() => deleteChecklistItem(p.id, item.id)} style={{ padding: '4px 8px', fontSize: 12 }}>
+                            Delete
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                  <form onSubmit={(e) => addChecklistItem(e, p.id)} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <input
+                      value={newChecklistRoom}
+                      onChange={(e) => setNewChecklistRoom(e.target.value)}
+                      placeholder="Room (e.g. Kitchen)"
+                      style={{ flex: '0 0 140px', marginBottom: 0 }}
+                    />
+                    <input
+                      value={newChecklistTask}
+                      onChange={(e) => setNewChecklistTask(e.target.value)}
+                      placeholder="Task (e.g. Descale kettle)"
+                      style={{ flex: 1, marginBottom: 0 }}
+                    />
+                    <button type="submit" className="btn-primary">Add</button>
+                  </form>
+                </div>
+              )}
             </div>
           ))}
 

@@ -159,6 +159,8 @@ export default function AdminDashboard() {
     in48h.setHours(in48h.getHours() + 48);
     const sevenDaysOut = new Date(endOfDay);
     sevenDaysOut.setDate(sevenDaysOut.getDate() + 7);
+    const in30Days = new Date();
+    in30Days.setDate(in30Days.getDate() + 30);
 
     const [
       { count: clientsCount },
@@ -171,6 +173,9 @@ export default function AdminDashboard() {
       { data: dueReminders },
       { data: openCheckins },
       { data: todaysTimeOff },
+      { data: expiringCerts },
+      { data: contractClients },
+      { data: allProducts },
     ] = await Promise.all([
       supabase.from('clients').select('*', { count: 'exact', head: true }),
       supabase.from('properties').select('*', { count: 'exact', head: true }),
@@ -205,6 +210,14 @@ export default function AdminDashboard() {
         .eq('status', 'approved')
         .lte('start_date', startOfDay.toISOString().slice(0, 10))
         .gte('end_date', startOfDay.toISOString().slice(0, 10)),
+      supabase.from('staff_certifications')
+        .select('id, name, expiry_date, staff_id, profiles!staff_certifications_staff_id_fkey(full_name)')
+        .not('expiry_date', 'is', null)
+        .lte('expiry_date', in30Days.toISOString().slice(0, 10)),
+      supabase.from('clients')
+        .select('id, name, contract_renewal_date, contract_notice_days')
+        .not('contract_renewal_date', 'is', null),
+      supabase.from('products').select('id, name, stock_level, reorder_threshold'),
     ]);
 
     const todaysCompleted = (todaysJobsData || []).filter((j) => j.status === 'completed').length;
@@ -273,6 +286,44 @@ export default function AdminDashboard() {
         urgent: true,
         at: j.scheduled_at,
       })),
+      ...(expiringCerts || []).map((c) => {
+        const expired = new Date(c.expiry_date) < startOfDay;
+        return {
+          id: `cert-${c.id}`,
+          kind: 'cert',
+          title: expired ? 'Certification expired' : 'Certification expiring soon',
+          subtitle: `${c.name} · ${c.profiles?.full_name || 'Unknown'} · ${expired ? 'expired' : 'expires'} ${new Date(c.expiry_date).toLocaleDateString()}`,
+          href: `/admin/cleaners/${c.staff_id}`,
+          urgent: expired,
+          at: c.expiry_date,
+        };
+      }),
+      ...(contractClients || [])
+        .filter((c) => {
+          const noticeStart = new Date(c.contract_renewal_date);
+          noticeStart.setDate(noticeStart.getDate() - (c.contract_notice_days || 0));
+          return new Date() >= noticeStart;
+        })
+        .map((c) => ({
+          id: `contract-${c.id}`,
+          kind: 'contract',
+          title: 'Contract renewal due',
+          subtitle: `${c.name} · renews ${new Date(c.contract_renewal_date).toLocaleDateString()}`,
+          href: `/admin/clients/${c.id}`,
+          urgent: new Date(c.contract_renewal_date) < startOfDay,
+          at: c.contract_renewal_date,
+        })),
+      ...(allProducts || [])
+        .filter((p) => p.stock_level <= p.reorder_threshold)
+        .map((p) => ({
+          id: `stock-${p.id}`,
+          kind: 'stock',
+          title: 'Low stock',
+          subtitle: `${p.name} · ${p.stock_level} left (reorder at ${p.reorder_threshold})`,
+          href: '/admin/inventory',
+          urgent: p.stock_level === 0,
+          at: new Date().toISOString(),
+        })),
     ].sort((a, b) => (b.urgent - a.urgent) || (new Date(a.at) - new Date(b.at)));
     setAttention(attentionItems);
 

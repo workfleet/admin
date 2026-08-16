@@ -30,6 +30,7 @@ export default function JobDetailPage() {
   const [submittingExtension, setSubmittingExtension] = useState(false);
   const [checkInError, setCheckInError] = useState('');
   const [checkingIn, setCheckingIn] = useState(false);
+  const [checklistItems, setChecklistItems] = useState([]);
 
   useEffect(() => {
     loadJob();
@@ -42,9 +43,17 @@ export default function JobDetailPage() {
 
     const { data: jobData } = await supabase
       .from('jobs')
-      .select('id, scheduled_at, status, duration_minutes, properties(address, notes, lat, lng)')
+      .select('id, scheduled_at, status, duration_minutes, property_id, properties(address, notes, lat, lng)')
       .eq('id', id)
       .single();
+
+    const { data: checklistData } = jobData?.property_id
+      ? await supabase
+          .from('property_checklist_items')
+          .select('id, room, task')
+          .eq('property_id', jobData.property_id)
+          .order('sort_order', { ascending: true })
+      : { data: [] };
 
     const { data: extensionData } = await supabase
       .from('time_extension_requests')
@@ -76,6 +85,7 @@ export default function JobDetailPage() {
     setPhotos(await withSignedUrls(photoData || []));
     setCheckin(checkinData);
     setExtensionRequests(extensionData || []);
+    setChecklistItems(checklistData || []);
   };
 
   // photos.url stores the job-photos storage path (not a public URL) since
@@ -381,6 +391,28 @@ export default function JobDetailPage() {
           </div>
         ))}
       </div>
+
+      {checklistItems.length > 0 && (
+        <div className="card">
+          <h2>Property Checklist</h2>
+          <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '4px 0 10px' }}>
+            Reference for this property, room by room.
+          </p>
+          {Object.entries(
+            checklistItems.reduce((acc, item) => {
+              (acc[item.room] = acc[item.room] || []).push(item);
+              return acc;
+            }, {})
+          ).map(([room, items]) => (
+            <div key={room} style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{room}</div>
+              {items.map((item) => (
+                <div key={item.id} style={{ fontSize: 14, padding: '3px 0' }}>{item.task}</div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="card">
         <h2>Photos</h2>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CheckCircle2, Circle } from 'lucide-react';
+import { CheckCircle2, Circle, Star } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { notify } from '../../lib/notify';
 
@@ -16,6 +16,17 @@ export default function ClientPortal() {
 
   const [clientId, setClientId] = useState(null);
   const [clientName, setClientName] = useState('');
+  const [rating, setRating] = useState(null);
+  const [ratingHover, setRatingHover] = useState(0);
+  const [ratingComment, setRatingComment] = useState('');
+  const [submittingRating, setSubmittingRating] = useState(false);
+
+  const [myReschedules, setMyReschedules] = useState([]);
+  const [showRescheduleForm, setShowRescheduleForm] = useState(false);
+  const [rescheduleDate, setRescheduleDate] = useState('');
+  const [rescheduleTime, setRescheduleTime] = useState('09:00');
+  const [rescheduleReason, setRescheduleReason] = useState('');
+  const [submittingReschedule, setSubmittingReschedule] = useState(false);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
@@ -62,6 +73,12 @@ export default function ClientPortal() {
     if (unreadIds.length > 0) {
       await supabase.from('client_messages').update({ read_by_client: true }).in('id', unreadIds);
     }
+
+    const { data: reschedules } = await supabase
+      .from('reschedule_requests')
+      .select('id, job_id, status, requested_scheduled_at')
+      .eq('client_id', profile.client_id);
+    setMyReschedules(reschedules || []);
   };
 
   const sendMessage = async (e) => {
@@ -97,11 +114,14 @@ export default function ClientPortal() {
       return;
     }
     setExpandedJob(jobId);
+    setRatingHover(0);
+    setRatingComment('');
 
-    const [{ data: taskData }, { data: photoData }, { data: checkinData }] = await Promise.all([
+    const [{ data: taskData }, { data: photoData }, { data: checkinData }, { data: ratingData }] = await Promise.all([
       supabase.from('tasks').select('*').eq('job_id', jobId),
       supabase.from('photos').select('*').eq('job_id', jobId).order('created_at', { ascending: false }),
       supabase.from('checkins').select('*, profiles(full_name)').eq('job_id', jobId),
+      supabase.from('job_ratings').select('rating, comment').eq('job_id', jobId).maybeSingle(),
     ]);
 
     // photos.url stores the job-photos storage path, not a public URL —
@@ -115,7 +135,47 @@ export default function ClientPortal() {
 
     setTasks(taskData || []);
     setPhotos(photosWithUrls);
+    setRating(ratingData || null);
     setCheckins(checkinData || []);
+  };
+
+  const submitRating = async (jobId, stars) => {
+    if (!clientId) return;
+    setSubmittingRating(true);
+    const { data, error } = await supabase
+      .from('job_ratings')
+      .insert({ job_id: jobId, client_id: clientId, rating: stars, comment: ratingComment.trim() || null })
+      .select('rating, comment')
+      .single();
+    setSubmittingRating(false);
+    if (!error && data) setRating(data);
+  };
+
+  const submitReschedule = async (e, jobId) => {
+    e.preventDefault();
+    if (!clientId || !rescheduleDate) return;
+    setSubmittingReschedule(true);
+
+    const requestedAt = new Date(`${rescheduleDate}T${rescheduleTime}`).toISOString();
+    const { data, error } = await supabase
+      .from('reschedule_requests')
+      .insert({
+        job_id: jobId,
+        client_id: clientId,
+        requested_scheduled_at: requestedAt,
+        reason: rescheduleReason.trim() || null,
+      })
+      .select('id, job_id, status, requested_scheduled_at')
+      .single();
+
+    setSubmittingReschedule(false);
+    if (data) {
+      setMyReschedules((prev) => [...prev, data]);
+      setShowRescheduleForm(false);
+      setRescheduleDate('');
+      setRescheduleTime('09:00');
+      setRescheduleReason('');
+    }
   };
 
   return (
@@ -206,6 +266,90 @@ export default function ClientPortal() {
                   <img key={p.id} src={p.signedUrl} alt="job" />
                 ))}
               </div>
+
+              {job.status === 'scheduled' && (() => {
+                const existing = myReschedules.find((r) => r.job_id === job.id);
+                return (
+                  <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--hairline)' }}>
+                    <h2>Reschedule</h2>
+                    {existing ? (
+                      <p style={{ fontSize: 13.5, color: 'var(--muted)' }}>
+                        {existing.status === 'pending' && `Requested new time: ${new Date(existing.requested_scheduled_at).toLocaleString()} - waiting for us to confirm.`}
+                        {existing.status === 'approved' && 'Your reschedule request was approved.'}
+                        {existing.status === 'declined' && 'Your reschedule request was declined - message us if you\'d like to try a different time.'}
+                      </p>
+                    ) : showRescheduleForm ? (
+                      <form onSubmit={(e) => submitReschedule(e, job.id)}>
+                        <div className="field-row">
+                          <div className="field">
+                            <label className="field-label">New date</label>
+                            <input type="date" value={rescheduleDate} onChange={(e) => setRescheduleDate(e.target.value)} required />
+                          </div>
+                          <div className="field">
+                            <label className="field-label">New time</label>
+                            <input type="time" value={rescheduleTime} onChange={(e) => setRescheduleTime(e.target.value)} required />
+                          </div>
+                        </div>
+                        <input
+                          value={rescheduleReason}
+                          onChange={(e) => setRescheduleReason(e.target.value)}
+                          placeholder="Reason (optional)"
+                          style={{ marginBottom: 10 }}
+                        />
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button type="button" className="btn-secondary" onClick={() => setShowRescheduleForm(false)}>Cancel</button>
+                          <button type="submit" disabled={submittingReschedule}>
+                            {submittingReschedule ? 'Sending...' : 'Send Request'}
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <button type="button" className="btn-secondary" onClick={() => setShowRescheduleForm(true)}>
+                        Request a different time
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {job.status === 'completed' && (
+                <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--hairline)' }}>
+                  <h2>Rate This Clean</h2>
+                  {rating ? (
+                    <>
+                      <div style={{ display: 'flex', gap: 2 }}>
+                        {[1, 2, 3, 4, 5].map((n) => (
+                          <Star key={n} size={22} fill={n <= rating.rating ? '#f59e0b' : 'none'} color="#f59e0b" />
+                        ))}
+                      </div>
+                      {rating.comment && <p style={{ fontSize: 13.5, color: 'var(--muted)', margin: '6px 0 0' }}>{rating.comment}</p>}
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        {[1, 2, 3, 4, 5].map((n) => (
+                          <Star
+                            key={n}
+                            size={26}
+                            fill={n <= ratingHover ? '#f59e0b' : 'none'}
+                            color="#f59e0b"
+                            style={{ cursor: submittingRating ? 'default' : 'pointer' }}
+                            onMouseEnter={() => setRatingHover(n)}
+                            onMouseLeave={() => setRatingHover(0)}
+                            onClick={() => !submittingRating && submitRating(job.id, n)}
+                          />
+                        ))}
+                      </div>
+                      <input
+                        value={ratingComment}
+                        onChange={(e) => setRatingComment(e.target.value)}
+                        placeholder="Add a comment (optional) - tap a star to submit"
+                        style={{ marginTop: 8, marginBottom: 0 }}
+                      />
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
