@@ -24,6 +24,12 @@ export default function CleanerProfile() {
   const [docUrl, setDocUrl] = useState(null);
   const [docLoading, setDocLoading] = useState(false);
 
+  const [reminders, setReminders] = useState([]);
+  const [isAddingReminder, setIsAddingReminder] = useState(false);
+  const [newReminderDate, setNewReminderDate] = useState('');
+  const [newReminderRecurs, setNewReminderRecurs] = useState(true);
+  const [newReminderNotes, setNewReminderNotes] = useState('');
+
   useEffect(() => {
     load();
   }, [id]);
@@ -78,11 +84,63 @@ export default function CleanerProfile() {
       .eq('profile_id', id)
       .maybeSingle();
 
+    const { data: remindersData } = await supabase
+      .from('reminders')
+      .select('id, due_date, recurs_yearly, notes')
+      .eq('staff_id', id)
+      .order('due_date', { ascending: true });
+
     setCleaner(cleanerData);
     setJobs(jobsData);
     setTimeOffRequests(timeOffData || []);
     setSubmission(submissionData || null);
+    setReminders(remindersData || []);
     setLoading(false);
+  };
+
+  const addReminder = async (e) => {
+    e.preventDefault();
+    if (!newReminderDate) return;
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data } = await supabase
+      .from('reminders')
+      .insert({
+        staff_id: id,
+        due_date: newReminderDate,
+        recurs_yearly: newReminderRecurs,
+        notes: newReminderNotes.trim() || null,
+        created_by: session.user.id,
+      })
+      .select('id, due_date, recurs_yearly, notes')
+      .single();
+
+    if (data) setReminders((prev) => [...prev, data].sort((a, b) => a.due_date.localeCompare(b.due_date)));
+    setNewReminderDate('');
+    setNewReminderRecurs(true);
+    setNewReminderNotes('');
+    setIsAddingReminder(false);
+  };
+
+  const completeReminder = async (reminder) => {
+    if (reminder.recurs_yearly) {
+      const next = new Date(reminder.due_date);
+      next.setFullYear(next.getFullYear() + 1);
+      const nextDate = next.toISOString().slice(0, 10);
+      const { data } = await supabase
+        .from('reminders').update({ due_date: nextDate }).eq('id', reminder.id)
+        .select('id, due_date, recurs_yearly, notes').single();
+      if (data) setReminders((prev) => prev.map((r) => (r.id === reminder.id ? data : r)));
+    } else {
+      await supabase.from('reminders').delete().eq('id', reminder.id);
+      setReminders((prev) => prev.filter((r) => r.id !== reminder.id));
+    }
+  };
+
+  const deleteReminder = async (reminderId) => {
+    if (!confirm('Delete this reminder?')) return;
+    await supabase.from('reminders').delete().eq('id', reminderId);
+    setReminders((prev) => prev.filter((r) => r.id !== reminderId));
   };
 
   const toggleActive = async () => {
@@ -218,6 +276,64 @@ export default function CleanerProfile() {
             />
             <button className="btn-primary" onClick={saveAdjustment}>Save</button>
           </div>
+        )}
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h2>1:1 Reviews</h2>
+        {reminders.length === 0 && !isAddingReminder && <p className="empty-state">No reminders set.</p>}
+
+        {reminders.map((r) => {
+          const overdue = new Date(r.due_date) < new Date(new Date().toDateString());
+          return (
+            <div key={r.id} className="task-row" style={{ justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontSize: 14 }}>
+                  <span style={overdue ? { color: 'crimson', fontWeight: 600 } : { fontWeight: 600 }}>
+                    {new Date(r.due_date).toLocaleDateString()}
+                  </span>
+                  {r.recurs_yearly && <span style={{ color: 'var(--muted)', fontSize: 12.5 }}> · yearly</span>}
+                </div>
+                {r.notes && <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>{r.notes}</div>}
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="btn-secondary" onClick={() => completeReminder(r)}>
+                  {r.recurs_yearly ? 'Done (reset to next year)' : 'Done'}
+                </button>
+                <button className="btn-secondary" onClick={() => deleteReminder(r.id)}>Delete</button>
+              </div>
+            </div>
+          );
+        })}
+
+        {isAddingReminder ? (
+          <form onSubmit={addReminder} style={{ marginTop: 12 }}>
+            <label>Due date</label>
+            <input type="date" value={newReminderDate} onChange={(e) => setNewReminderDate(e.target.value)} required />
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 400 }}>
+              <input
+                type="checkbox"
+                checked={newReminderRecurs}
+                onChange={(e) => setNewReminderRecurs(e.target.checked)}
+                style={{ width: 'auto' }}
+              />
+              Repeats yearly
+            </label>
+            <label>Notes (optional)</label>
+            <input
+              value={newReminderNotes}
+              onChange={(e) => setNewReminderNotes(e.target.value)}
+              placeholder="e.g. Annual review and goal-setting"
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <button type="button" className="btn-secondary" onClick={() => setIsAddingReminder(false)}>Cancel</button>
+              <button type="submit" className="btn-primary">Add Reminder</button>
+            </div>
+          </form>
+        ) : (
+          <button className="btn-secondary" onClick={() => setIsAddingReminder(true)} style={{ marginTop: reminders.length ? 12 : 0 }}>
+            + Reminder
+          </button>
         )}
       </div>
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { supabase } from '../../lib/supabaseClient';
 import { getWorkAnniversaryYears } from '../../lib/workAnniversary';
 import WorkAnniversaryPopup from '../components/WorkAnniversaryPopup';
@@ -50,6 +51,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState({ clients: 0, properties: 0, cleaners: 0, jobsThisWeek: 0, unassigned: 0 });
   const [todaysJobs, setTodaysJobs] = useState([]);
   const [todos, setTodos] = useState([]);
+  const [dueReminders, setDueReminders] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [role, setRole] = useState(null);
@@ -119,6 +121,13 @@ export default function AdminDashboard() {
       .order('created_at', { ascending: true });
     setTodos(todoData || []);
 
+    const { data: reminderData } = await supabase
+      .from('reminders')
+      .select('id, client_id, staff_id, due_date, recurs_yearly, notes, clients(name), staff:profiles!reminders_staff_id_fkey(full_name)')
+      .lte('due_date', new Date().toISOString().slice(0, 10))
+      .order('due_date', { ascending: true });
+    setDueReminders(reminderData || []);
+
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(startOfDay);
@@ -162,6 +171,18 @@ export default function AdminDashboard() {
     setLoading(false);
   };
 
+  const completeReminder = async (reminder) => {
+    if (reminder.recurs_yearly) {
+      const next = new Date(reminder.due_date);
+      next.setFullYear(next.getFullYear() + 1);
+      const nextDate = next.toISOString().slice(0, 10);
+      await supabase.from('reminders').update({ due_date: nextDate }).eq('id', reminder.id);
+    } else {
+      await supabase.from('reminders').delete().eq('id', reminder.id);
+    }
+    setDueReminders((prev) => prev.filter((r) => r.id !== reminder.id));
+  };
+
   const completeTodo = async (id) => {
     setTodos((prev) => prev.filter((t) => t.id !== id));
     await supabase
@@ -203,6 +224,34 @@ export default function AdminDashboard() {
               </span>
             </label>
           ))}
+        </div>
+      )}
+
+      {dueReminders.length > 0 && (
+        <div className="card" style={{ background: '#fffbeb', marginBottom: 20 }}>
+          <h2>Reviews Due ({dueReminders.length})</h2>
+          {dueReminders.map((r) => {
+            const isClient = !!r.client_id;
+            const name = isClient ? r.clients?.name : r.staff?.full_name;
+            const href = isClient ? `/admin/clients/${r.client_id}` : `/admin/cleaners/${r.staff_id}`;
+            return (
+              <div key={r.id} className="task-row" style={{ justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 14 }}>
+                  <strong>{isClient ? 'Client review' : '1:1'}</strong>
+                  {' — '}
+                  <Link href={href} style={{ color: 'var(--brand-primary)', textDecoration: 'none' }}>
+                    {name || 'Unknown'}
+                  </Link>
+                  {r.notes && <span style={{ color: 'var(--muted)' }}> · {r.notes}</span>}
+                  <br />
+                  <span style={{ color: 'var(--muted)', fontSize: 12.5 }}>
+                    Due {new Date(r.due_date).toLocaleDateString()}
+                  </span>
+                </span>
+                <button className="btn-secondary" onClick={() => completeReminder(r)}>Done</button>
+              </div>
+            );
+          })}
         </div>
       )}
 
