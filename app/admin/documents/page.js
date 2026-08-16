@@ -24,8 +24,12 @@ export default function AdminDocuments() {
   const fileInputRef = useRef(null);
 
   const [documents, setDocuments] = useState([]);
+  const [recipientsByDoc, setRecipientsByDoc] = useState({});
+  const [cleaners, setCleaners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState('policy');
+  const [audience, setAudience] = useState('everyone'); // everyone | specific
+  const [selectedCleanerIds, setSelectedCleanerIds] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [userId, setUserId] = useState(null);
 
@@ -38,21 +42,43 @@ export default function AdminDocuments() {
     if (!session) { router.push('/'); return; }
     setUserId(session.user.id);
 
-    const { data } = await supabase
-      .from('company_documents')
-      .select('id, title, category, storage_path, file_name, file_size, created_at, profiles(full_name)')
-      .order('created_at', { ascending: false });
+    const [{ data: docs }, { data: recipientRows }, { data: cleanerRows }] = await Promise.all([
+      supabase
+        .from('company_documents')
+        .select('id, title, category, storage_path, file_name, file_size, created_at, profiles(full_name)')
+        .order('created_at', { ascending: false }),
+      supabase.from('company_document_recipients').select('document_id, profiles(full_name)'),
+      supabase.from('profiles').select('id, full_name').eq('role', 'cleaner').eq('active', true).order('full_name'),
+    ]);
 
-    setDocuments(data || []);
+    const byDoc = {};
+    (recipientRows || []).forEach((r) => {
+      if (!byDoc[r.document_id]) byDoc[r.document_id] = [];
+      byDoc[r.document_id].push(r.profiles?.full_name || 'Unknown');
+    });
+
+    setDocuments(docs || []);
+    setRecipientsByDoc(byDoc);
+    setCleaners(cleanerRows || []);
     setLoading(false);
+  };
+
+  const toggleCleaner = (id) => {
+    setSelectedCleanerIds((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
   };
 
   const handleUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
+    if (audience === 'specific' && selectedCleanerIds.length === 0) {
+      toast.error('Select at least one cleaner, or choose "Everyone".');
+      e.target.value = '';
+      return;
+    }
     setUploading(true);
 
     const newRows = [];
+    const newRecipients = {};
     for (const file of files) {
       const storagePath = `${category}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
       const { error: uploadError } = await supabase.storage
@@ -78,10 +104,23 @@ export default function AdminDocuments() {
         .single();
 
       if (error) { toast.error(`Uploaded ${file.name} but couldn't save it - try again.`); continue; }
-      if (data) newRows.push(data);
+      if (!data) continue;
+      newRows.push(data);
+
+      if (audience === 'specific') {
+        const { error: recipientError } = await supabase
+          .from('company_document_recipients')
+          .insert(selectedCleanerIds.map((profileId) => ({ document_id: data.id, profile_id: profileId })));
+        if (recipientError) {
+          toast.error(`Uploaded ${file.name} but couldn't restrict who sees it - it's currently visible to everyone.`);
+        } else {
+          newRecipients[data.id] = cleaners.filter((c) => selectedCleanerIds.includes(c.id)).map((c) => c.full_name);
+        }
+      }
     }
 
     setDocuments((prev) => [...newRows, ...prev]);
+    setRecipientsByDoc((prev) => ({ ...prev, ...newRecipients }));
     setUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (newRows.length > 0) toast.success(`Uploaded ${newRows.length} document${newRows.length === 1 ? '' : 's'}.`);
@@ -122,26 +161,70 @@ export default function AdminDocuments() {
         <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 12px' }}>
           Select one or more files - they'll all be uploaded under the category below.
         </p>
-        <div className="field-row">
-          <div className="field">
-            <label className="field-label">Category</label>
-            <select value={category} onChange={(e) => setCategory(e.target.value)}>
-              {CATEGORY_ORDER.map((c) => (
-                <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
-              ))}
-            </select>
+        <div className="field">
+          <label className="field-label">Category</label>
+          <select value={category} onChange={(e) => setCategory(e.target.value)}>
+            {CATEGORY_ORDER.map((c) => (
+              <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="field" style={{ marginBottom: audience === 'specific' ? 10 : 14 }}>
+          <label className="field-label">Share with</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className={audience === 'everyone' ? 'btn-primary' : 'btn-secondary'}
+              onClick={() => setAudience('everyone')}
+              style={{ flex: 1 }}
+            >
+              Everyone
+            </button>
+            <button
+              type="button"
+              className={audience === 'specific' ? 'btn-primary' : 'btn-secondary'}
+              onClick={() => setAudience('specific')}
+              style={{ flex: 1 }}
+            >
+              Certain cleaners
+            </button>
           </div>
-          <div className="field">
-            <label className="field-label">Files</label>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept=".pdf,.doc,.docx"
-              onChange={handleUpload}
-              disabled={uploading}
-            />
+        </div>
+
+        {audience === 'specific' && (
+          <div
+            style={{
+              display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px',
+              marginBottom: 14, maxHeight: 200, overflowY: 'auto',
+              border: '1px solid var(--hairline)', borderRadius: 10, padding: '10px 12px', background: '#f8fafc',
+            }}
+          >
+            {cleaners.length === 0 && <p style={{ fontSize: 13, color: 'var(--muted)', margin: 0 }}>No active cleaners found.</p>}
+            {cleaners.map((c) => (
+              <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 400, padding: '4px 0' }}>
+                <input
+                  type="checkbox"
+                  checked={selectedCleanerIds.includes(c.id)}
+                  onChange={() => toggleCleaner(c.id)}
+                  style={{ width: 'auto' }}
+                />
+                {c.full_name}
+              </label>
+            ))}
           </div>
+        )}
+
+        <div className="field" style={{ marginBottom: 0 }}>
+          <label className="field-label">Files</label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept=".pdf,.doc,.docx"
+            onChange={handleUpload}
+            disabled={uploading}
+          />
         </div>
         {uploading && <p style={{ fontSize: 13, color: 'var(--muted)', margin: '8px 0 0' }}>Uploading...</p>}
       </div>
@@ -162,6 +245,9 @@ export default function AdminDocuments() {
                     <div style={{ fontSize: 14, fontWeight: 600 }}>{doc.title}</div>
                     <div style={{ fontSize: 12, color: 'var(--muted)' }}>
                       {formatBytes(doc.file_size)} · uploaded by {doc.profiles?.full_name || 'Unknown'} · {new Date(doc.created_at).toLocaleDateString()}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                      Shared with: {recipientsByDoc[doc.id] ? recipientsByDoc[doc.id].join(', ') : 'Everyone'}
                     </div>
                   </div>
                 </div>
