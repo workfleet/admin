@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Menu, X } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
+import PresenceIndicator from '../components/PresenceIndicator';
 
 // Cleaners/Onboarding manage staff accounts directly (adding, deactivating,
 // reviewing onboarding ID documents) - kept admin-only, hidden from
@@ -73,9 +74,12 @@ export default function AdminLayout({ children }) {
           <div className="sidebar-logo">WF</div>
           <div className="sidebar-brand-name">Workfleet</div>
         </div>
-        <button type="button" className="admin-topbar-menu-btn" onClick={() => setDrawerOpen(true)} aria-label="Open menu">
-          <Menu size={20} />
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <PresenceIndicator iconColor="white" />
+          <button type="button" className="admin-topbar-menu-btn" onClick={() => setDrawerOpen(true)} aria-label="Open menu">
+            <Menu size={20} />
+          </button>
+        </div>
       </div>
 
       {drawerOpen && <div className="admin-drawer-overlay" onClick={() => setDrawerOpen(false)} />}
@@ -87,6 +91,7 @@ export default function AdminLayout({ children }) {
             <div className="sidebar-brand-name">Workfleet</div>
             <div className="sidebar-brand-sub">Operations</div>
           </div>
+          <PresenceIndicator />
           <button type="button" className="sidebar-close" onClick={() => setDrawerOpen(false)} aria-label="Close menu">
             <X size={18} />
           </button>

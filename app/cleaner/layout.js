@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Home, Calendar, User, HelpCircle, Settings, MessageCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
+import PresenceIndicator from '../components/PresenceIndicator';
 
 const NAV_ITEMS = [
   { href: '/cleaner', label: 'Home', icon: Home },
@@ -44,6 +45,7 @@ export default function CleanerLayout({ children }) {
 
   return (
     <div className="cleaner-shell">
+      <PresenceIndicator />
       {children}
       <nav className="bottom-nav">
         {NAV_ITEMS.map((item) => {
