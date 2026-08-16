@@ -1,12 +1,20 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { LogOut } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { LayoutDashboard, History, MessageCircle, LogOut } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { signOutAndClearPresence } from '../../lib/signOut';
 
+const NAV_ITEMS = [
+  { href: '/client', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/client/history', label: 'History', icon: History },
+  { href: '/client/messages', label: 'Messages', icon: MessageCircle },
+];
+
 export default function ClientLayout({ children }) {
+  const pathname = usePathname();
   const router = useRouter();
   const [authorized, setAuthorized] = useState(false);
 
@@ -38,22 +46,35 @@ export default function ClientLayout({ children }) {
   if (!authorized) return null;
 
   return (
-    <div className="client-shell">
-      <div className="client-topbar">
-        <div className="client-topbar-inner">
-          <div className="client-topbar-brand">
-            <div className="client-topbar-logo">CC</div>
-            <div>
-              <div className="client-topbar-name">CrewConnect Cleaning</div>
-              <div className="client-topbar-sub">Client Portal</div>
-            </div>
+    <div className="client-shell-layout">
+      <aside className="client-sidebar">
+        <div className="sidebar-brand">
+          <div className="sidebar-logo">CC</div>
+          <div>
+            <div className="sidebar-brand-name">CrewConnect</div>
+            <div className="sidebar-brand-sub">Client Portal</div>
           </div>
-          <button type="button" className="client-topbar-logout" onClick={logout} aria-label="Log out">
-            <LogOut size={16} />
-          </button>
         </div>
-      </div>
-      {children}
+
+        <nav className="sidebar-nav">
+          {NAV_ITEMS.map((item) => {
+            const active = pathname === item.href;
+            const Icon = item.icon;
+            return (
+              <Link key={item.href} href={item.href} className={`sidebar-link ${active ? 'active' : ''}`}>
+                <Icon className="sidebar-icon" size={18} strokeWidth={2} />
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <button className="sidebar-logout" onClick={logout} style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
+          <LogOut size={15} /> Log out
+        </button>
+      </aside>
+
+      <main className="client-main">{children}</main>
     </div>
   );
 }

@@ -77,72 +77,30 @@ body {
   color: var(--brand-primary);
 }
 
-.client-shell {
+/* ---- Client portal shell (desktop-only by design, no mobile
+   collapse - this portal is meant to be used on a laptop) ---- */
+.client-shell-layout {
+  display: flex;
   min-height: 100vh;
 }
 
-.client-topbar {
-  background: linear-gradient(135deg, #45c1c5, var(--brand-primary-dark));
-  padding: 18px 16px;
-}
-
-.client-topbar-inner {
-  max-width: 460px;
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.client-topbar-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.client-topbar-logo {
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.18);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  font-size: 13px;
+.client-sidebar {
+  width: 224px;
   flex-shrink: 0;
-}
-
-.client-topbar-name {
-  font-weight: 700;
-  font-size: 14.5px;
-  color: white;
-  line-height: 1.25;
-}
-
-.client-topbar-sub {
-  font-size: 12px;
-  color: white;
-  opacity: 0.85;
-}
-
-.client-topbar-logout {
-  background: rgba(255, 255, 255, 0.15);
-  border: none;
-  color: white;
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  flex-shrink: 0;
+  flex-direction: column;
+  padding: 20px 14px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
 }
 
-.client-topbar-logout:hover {
-  background: rgba(255, 255, 255, 0.28);
+.client-main {
+  flex: 1;
+  padding: 32px 40px;
+  max-width: 1000px;
 }
 
 .login-page {
