@@ -80,6 +80,7 @@ export default function AdminDashboard() {
   const [todaysJobs, setTodaysJobs] = useState([]);
   const [upcomingJobs, setUpcomingJobs] = useState([]);
   const [attention, setAttention] = useState([]);
+  const [detailItem, setDetailItem] = useState(null);
   const [staffGlance, setStaffGlance] = useState({ working: 0, holiday: 0, off: 0, total: 0 });
 
   const [payrollPeriod, setPayrollPeriod] = useState('this_week');
@@ -187,7 +188,7 @@ export default function AdminDashboard() {
         .order('scheduled_at', { ascending: true })
         .limit(6),
       supabase.from('staff_requests')
-        .select('id, type, description, created_at, profiles(full_name)')
+        .select('id, type, description, created_at, profiles(full_name), jobs(scheduled_at, properties(address))')
         .eq('status', 'open')
         .order('created_at', { ascending: true }),
       supabase.from('reminders')
@@ -235,8 +236,13 @@ export default function AdminDashboard() {
         id: `req-${r.id}`,
         kind: 'request',
         rawId: r.id,
+        requestType: r.type,
         title: r.type === 'kit_topup' ? 'Kit top-up requested' : 'Issue reported',
         subtitle: `${r.description} · ${r.profiles?.full_name || 'A cleaner'}`,
+        description: r.description,
+        cleanerName: r.profiles?.full_name || 'A cleaner',
+        jobAddress: r.jobs?.properties?.address || null,
+        jobTime: r.jobs?.scheduled_at || null,
         urgent: false,
         at: r.created_at,
       })),
@@ -382,9 +388,10 @@ export default function AdminDashboard() {
           {attention.slice(0, 6).map((item) => {
             if (item.kind === 'request') {
               return (
-                <label key={item.id} className="dash-row" style={{ cursor: 'pointer' }}>
+                <div key={item.id} className="dash-row" onClick={() => setDetailItem(item)}>
                   <input
                     type="checkbox"
+                    onClick={(e) => e.stopPropagation()}
                     onChange={() => completeTodo(item.rawId)}
                     style={{ width: 18, height: 18, marginRight: 10, flexShrink: 0 }}
                   />
@@ -392,7 +399,7 @@ export default function AdminDashboard() {
                     <div className="dash-row-title">{item.title}</div>
                     <div className="dash-row-subtitle">{item.subtitle}</div>
                   </div>
-                </label>
+                </div>
               );
             }
             if (item.kind === 'reminder') {
@@ -502,6 +509,41 @@ export default function AdminDashboard() {
           })}
         </div>
       </div>
+
+      {detailItem && (
+        <div className="job-modal-overlay" onClick={() => setDetailItem(null)}>
+          <div className="card job-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="dash-panel-header">
+              <h2>{detailItem.title}</h2>
+              <button type="button" className="job-form-close" onClick={() => setDetailItem(null)}>×</button>
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 4px' }}>
+              {detailItem.requestType === 'kit_topup' ? 'Kit top-up' : 'Issue'} · {detailItem.cleanerName}
+            </p>
+            <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 16px' }}>
+              Requested {new Date(detailItem.at).toLocaleString()}
+            </p>
+            <div className="card" style={{ background: '#f8fafc', boxShadow: 'none', margin: '0 0 16px' }}>
+              <p style={{ fontSize: 14.5, margin: 0, lineHeight: 1.5 }}>{detailItem.description}</p>
+            </div>
+            {detailItem.jobAddress && (
+              <p style={{ fontSize: 13.5, color: 'var(--muted)', margin: '0 0 16px' }}>
+                Related job: {detailItem.jobAddress}
+                {detailItem.jobTime && ` · ${new Date(detailItem.jobTime).toLocaleString()}`}
+              </p>
+            )}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button type="button" className="btn-secondary" onClick={() => setDetailItem(null)}>Close</button>
+              <button
+                type="button"
+                onClick={() => { completeTodo(detailItem.rawId); setDetailItem(null); }}
+              >
+                Mark Resolved
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
