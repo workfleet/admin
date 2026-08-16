@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Menu, X } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
+import { signOutAndClearPresence } from '../../lib/signOut';
 import PresenceIndicator from '../components/PresenceIndicator';
 
 // Cleaners/Onboarding manage staff accounts directly (adding, deactivating,
@@ -61,7 +62,7 @@ export default function AdminLayout({ children }) {
   const navItems = NAV_ITEMS.filter((item) => !item.adminOnly || role === 'admin');
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await signOutAndClearPresence();
     router.push('/');
   };
 

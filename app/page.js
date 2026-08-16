@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
+import { signOutAndClearPresence } from '../lib/signOut';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,7 +29,7 @@ export default function LoginPage() {
       .single();
 
     if (profile?.active === false) {
-      await supabase.auth.signOut();
+      await signOutAndClearPresence();
       setError('This account has been deactivated. Contact your admin.');
       return;
     }

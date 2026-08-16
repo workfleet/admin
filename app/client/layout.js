@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LogOut } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
+import { signOutAndClearPresence } from '../../lib/signOut';
 
 export default function ClientLayout({ children }) {
   const router = useRouter();
@@ -30,7 +31,7 @@ export default function ClientLayout({ children }) {
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    await signOutAndClearPresence();
     router.push('/');
   };
 

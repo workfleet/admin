@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
+import { signOutAndClearPresence } from '../../../lib/signOut';
 
 export default function CleanerSettings() {
   const router = useRouter();
@@ -40,7 +41,7 @@ export default function CleanerSettings() {
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    await signOutAndClearPresence();
     router.push('/');
   };
 
