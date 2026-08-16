@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, History, MessageCircle, FileText, LogOut } from 'lucide-react';
+import { LayoutDashboard, History, MessageCircle, FileText, HelpCircle, LogOut } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { signOutAndClearPresence } from '../../lib/signOut';
 
@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: '/client/history', label: 'History', icon: History },
   { href: '/client/documents', label: 'Documents', icon: FileText },
   { href: '/client/messages', label: 'Messages', icon: MessageCircle },
+  { href: '/client/help', label: 'Help', icon: HelpCircle },
 ];
 
 export default function ClientLayout({ children }) {
