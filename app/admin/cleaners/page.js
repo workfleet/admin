@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
+import { useConfirm } from '../../components/ConfirmProvider';
+import { useToast } from '../../components/ToastProvider';
 
 const HOLIDAY_ACCRUAL_RATE = 0.1207; // UK statutory: 5.6 weeks / 46.4 working weeks
 
@@ -42,6 +44,8 @@ function generatePassword() {
 
 export default function AdminCleaners() {
   const router = useRouter();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [cleaners, setCleaners] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [timeOffRequests, setTimeOffRequests] = useState([]);
@@ -107,14 +111,17 @@ export default function AdminCleaners() {
 
   const toggleActive = async (cleaner) => {
     const nextActive = !cleaner.active;
-    if (!nextActive && !confirm(`Deactivate ${cleaner.full_name || 'this cleaner'}? They won't be able to log in until reactivated.`)) return;
+    if (!nextActive && !(await confirm(`Deactivate ${cleaner.full_name || 'this cleaner'}? They won't be able to log in until reactivated.`, { danger: true, confirmLabel: 'Deactivate' }))) return;
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('profiles').update({ active: nextActive }).eq('id', cleaner.id)
       .select('id, active').single();
 
+    if (error) { toast.error('Could not update this account.'); return; }
+
     if (data) {
       setCleaners((prev) => prev.map((c) => (c.id === cleaner.id ? { ...c, active: data.active } : c)));
+      toast.success(nextActive ? 'Account reactivated.' : 'Account deactivated.');
     }
   };
 

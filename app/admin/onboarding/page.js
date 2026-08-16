@@ -4,9 +4,13 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { notify } from '../../../lib/notify';
+import { useConfirm } from '../../components/ConfirmProvider';
+import { useToast } from '../../components/ToastProvider';
 
 export default function AdminOnboarding() {
   const router = useRouter();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [invites, setInvites] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -71,11 +75,13 @@ export default function AdminOnboarding() {
   };
 
   const deleteInvite = async (id) => {
-    if (!confirm('Delete this invite? If it was already used, their submitted details will be deleted too.')) return;
-    await supabase.from('staff_invites').delete().eq('id', id);
+    if (!(await confirm('Delete this invite? If it was already used, their submitted details will be deleted too.', { danger: true }))) return;
+    const { error } = await supabase.from('staff_invites').delete().eq('id', id);
+    if (error) { toast.error('Could not delete the invite.'); return; }
     setInvites((prev) => prev.filter((i) => i.id !== id));
     setSubmissions((prev) => prev.filter((s) => s.invite_id !== id));
     if (justCreatedLink) setJustCreatedLink(null);
+    toast.success('Invite deleted.');
   };
 
   const copyLink = (token) => {

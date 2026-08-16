@@ -5,12 +5,16 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { supabase } from '../../../../lib/supabaseClient';
+import { useConfirm } from '../../../components/ConfirmProvider';
+import { useToast } from '../../../components/ToastProvider';
 
 const HOLIDAY_ACCRUAL_RATE = 0.1207; // UK statutory: 5.6 weeks / 46.4 working weeks
 
 export default function CleanerProfile() {
   const router = useRouter();
   const { id } = useParams();
+  const confirm = useConfirm();
+  const toast = useToast();
 
   const [cleaner, setCleaner] = useState(null);
   const [jobs, setJobs] = useState([]);
@@ -141,27 +145,34 @@ export default function CleanerProfile() {
   };
 
   const deleteReminder = async (reminderId) => {
-    if (!confirm('Delete this reminder?')) return;
-    await supabase.from('reminders').delete().eq('id', reminderId);
+    if (!(await confirm('Delete this reminder?', { danger: true }))) return;
+    const { error } = await supabase.from('reminders').delete().eq('id', reminderId);
+    if (error) { toast.error('Could not delete the reminder.'); return; }
     setReminders((prev) => prev.filter((r) => r.id !== reminderId));
+    toast.success('Reminder deleted.');
   };
 
   const toggleActive = async () => {
     const nextActive = !cleaner.active;
-    if (!nextActive && !confirm(`Deactivate ${cleaner.full_name || 'this cleaner'}? They won't be able to log in until reactivated.`)) return;
+    if (!nextActive && !(await confirm(`Deactivate ${cleaner.full_name || 'this cleaner'}? They won't be able to log in until reactivated.`, { danger: true, confirmLabel: 'Deactivate' }))) return;
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('profiles').update({ active: nextActive }).eq('id', id)
       .select('id, active').single();
 
-    if (data) setCleaner((c) => ({ ...c, active: data.active }));
+    if (error) { toast.error('Could not update this account.'); return; }
+    if (data) {
+      setCleaner((c) => ({ ...c, active: data.active }));
+      toast.success(nextActive ? 'Account reactivated.' : 'Account deactivated.');
+    }
   };
 
   const removeAccount = async () => {
-    if (!confirm(
+    if (!(await confirm(
       `Remove ${cleaner.full_name || 'this account'}? This deactivates them and frees up their email so it can be reused ` +
-      `for a new starter, but keeps all their job history, photos, and reports intact. This can't be easily undone.`
-    )) return;
+      `for a new starter, but keeps all their job history, photos, and reports intact. This can't be easily undone.`,
+      { title: 'Remove account', danger: true, confirmLabel: 'Remove' }
+    ))) return;
 
     setRemoving(true);
     const { data: { session } } = await supabase.auth.getSession();
@@ -175,8 +186,9 @@ export default function CleanerProfile() {
       const body = await res.json();
       setRemovedEmail(body.releasedEmail);
       setCleaner((c) => ({ ...c, active: false }));
+      toast.success('Account removed.');
     } else {
-      alert("Couldn't remove this account. Please try again.");
+      toast.error("Couldn't remove this account. Please try again.");
     }
   };
 

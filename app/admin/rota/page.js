@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { supabase } from '../../../lib/supabaseClient';
 import { notify } from '../../../lib/notify';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
+import { useConfirm } from '../../components/ConfirmProvider';
+import { useToast } from '../../components/ToastProvider';
 
 // Full 24hr range with scroll (CrewConnect crews run early mornings through
 // overnight), defaulting the scroll position to business hours on load.
@@ -91,6 +93,8 @@ function assignedNames(job) {
 
 export default function AdminRota() {
   const router = useRouter();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [weekStart, setWeekStart] = useState(getMonday(new Date()));
   const [jobs, setJobs] = useState([]);
   const [cleaners, setCleaners] = useState([]);
@@ -199,8 +203,9 @@ export default function AdminRota() {
     for (const a of selectedJob.job_assignments || []) {
       const conflict = await findConflict(a.cleaner_id, scheduledAtDate, editDuration, selectedJob.id);
       if (conflict) {
-        const proceed = confirm(
-          `${a.profiles?.full_name || 'This cleaner'} is already booked at ${conflict.properties?.address} around this time (${new Date(conflict.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}). Save anyway?`
+        const proceed = await confirm(
+          `${a.profiles?.full_name || 'This cleaner'} is already booked at ${conflict.properties?.address} around this time (${new Date(conflict.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}). Save anyway?`,
+          { title: 'Scheduling conflict', confirmLabel: 'Save anyway' }
         );
         if (!proceed) { setSavingJob(false); return; }
       }
@@ -387,7 +392,8 @@ export default function AdminRota() {
     const conflict = await findTimeOffConflict(cleanerId, date);
     if (!conflict) return true;
     return confirm(
-      `This cleaner has approved ${conflict.type === 'holiday' ? 'holiday' : 'unavailability'} covering ${new Date(conflict.start_date).toLocaleDateString()}–${new Date(conflict.end_date).toLocaleDateString()}. Schedule anyway?`
+      `This cleaner has approved ${conflict.type === 'holiday' ? 'holiday' : 'unavailability'} covering ${new Date(conflict.start_date).toLocaleDateString()}–${new Date(conflict.end_date).toLocaleDateString()}. Schedule anyway?`,
+      { title: 'Time off conflict', confirmLabel: 'Schedule anyway' }
     );
   };
 
@@ -398,15 +404,16 @@ export default function AdminRota() {
 
     const conflict = await findConflict(cleanerId, new Date(job.scheduled_at), job.duration_minutes || 120, jobId);
     if (conflict) {
-      const proceed = confirm(
-        `This cleaner is already booked at ${conflict.properties?.address} around this time (${new Date(conflict.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}). Assign anyway?`
+      const proceed = await confirm(
+        `This cleaner is already booked at ${conflict.properties?.address} around this time (${new Date(conflict.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}). Assign anyway?`,
+        { title: 'Scheduling conflict', confirmLabel: 'Assign anyway' }
       );
       if (!proceed) return;
     }
     if (!(await confirmTimeOffConflict(cleanerId, new Date(job.scheduled_at)))) return;
 
     const { error } = await supabase.from('job_assignments').insert({ job_id: jobId, cleaner_id: cleanerId });
-    if (error) return;
+    if (error) { toast.error('Could not assign this cleaner.'); return; }
 
     const newAssignment = { cleaner_id: cleanerId, profiles: { full_name: cleaners.find((c) => c.id === cleanerId)?.full_name } };
     const withNewAssignment = (j) => ({ ...j, job_assignments: [...(j.job_assignments || []), newAssignment] });
@@ -417,7 +424,10 @@ export default function AdminRota() {
   };
 
   const removeCleanerFromJob = async (jobId, cleanerId) => {
-    await supabase.from('job_assignments').delete().eq('job_id', jobId).eq('cleaner_id', cleanerId);
+    if (!(await confirm('Remove this cleaner from the job?', { danger: true, confirmLabel: 'Remove' }))) return;
+
+    const { error } = await supabase.from('job_assignments').delete().eq('job_id', jobId).eq('cleaner_id', cleanerId);
+    if (error) { toast.error('Could not remove this cleaner.'); return; }
 
     const withoutAssignment = (j) => ({ ...j, job_assignments: (j.job_assignments || []).filter((a) => a.cleaner_id !== cleanerId) });
     setJobs((prev) => prev.map((j) => (j.id === jobId ? withoutAssignment(j) : j)));
@@ -425,29 +435,34 @@ export default function AdminRota() {
   };
 
   const deleteJob = async (job) => {
-    if (!confirm(`Delete this job at ${job.properties?.address} on ${new Date(job.scheduled_at).toLocaleString()}? This can't be undone.`)) return;
+    if (!(await confirm(`Delete this job at ${job.properties?.address} on ${new Date(job.scheduled_at).toLocaleString()}? This can't be undone.`, { title: 'Delete job', danger: true }))) return;
 
-    await supabase.from('jobs').delete().eq('id', job.id);
+    const { error } = await supabase.from('jobs').delete().eq('id', job.id);
+    if (error) { toast.error('Could not delete the job.'); return; }
     setJobs((prev) => prev.filter((j) => j.id !== job.id));
     setSelectedJob(null);
+    toast.success('Job deleted.');
   };
 
   // Deletes this occurrence and every future one sharing the same
   // series_id - past occurrences (already happened) are left alone.
   const deleteFutureInSeries = async (job) => {
     if (!job.series_id) return;
-    if (!confirm('Delete this and every future job in this recurring series? Past occurrences will be kept.')) return;
+    if (!(await confirm('Delete this and every future job in this recurring series? Past occurrences will be kept.', { title: 'Delete series', danger: true }))) return;
 
-    const { data: deleted } = await supabase
+    const { data: deleted, error } = await supabase
       .from('jobs')
       .delete()
       .eq('series_id', job.series_id)
       .gte('scheduled_at', job.scheduled_at)
       .select('id');
 
+    if (error) { toast.error('Could not delete the series.'); return; }
+
     const deletedIds = new Set((deleted || []).map((d) => d.id));
     setJobs((prev) => prev.filter((j) => !deletedIds.has(j.id)));
     setSelectedJob(null);
+    toast.success(`${deletedIds.size} job${deletedIds.size === 1 ? '' : 's'} deleted.`);
   };
 
   const resetForm = () => {
@@ -503,8 +518,9 @@ export default function AdminRota() {
       const parts = [];
       if (conflictCount > 0) parts.push(`${conflictCount} double-booking${conflictCount === 1 ? '' : 's'}`);
       if (timeOffConflictCount > 0) parts.push(`${timeOffConflictCount} clash${timeOffConflictCount === 1 ? '' : 'es'} with approved time off`);
-      const proceed = confirm(
-        `This will create ${occurrenceDates.length} job${occurrenceDates.length === 1 ? '' : 's'}, including ${parts.join(' and ')}. Create anyway?`
+      const proceed = await confirm(
+        `This will create ${occurrenceDates.length} job${occurrenceDates.length === 1 ? '' : 's'}, including ${parts.join(' and ')}. Create anyway?`,
+        { title: 'Scheduling conflicts', confirmLabel: 'Create anyway' }
       );
       if (!proceed) return;
     }
@@ -651,8 +667,9 @@ export default function AdminRota() {
     for (const a of job.job_assignments || []) {
       const conflict = await findConflict(a.cleaner_id, newDate, job.duration_minutes || 120, job.id);
       if (conflict) {
-        const proceed = confirm(
-          `${a.profiles?.full_name || 'This cleaner'} is already booked at ${conflict.properties?.address} around this time (${new Date(conflict.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}). Move anyway?`
+        const proceed = await confirm(
+          `${a.profiles?.full_name || 'This cleaner'} is already booked at ${conflict.properties?.address} around this time (${new Date(conflict.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}). Move anyway?`,
+          { title: 'Scheduling conflict', confirmLabel: 'Move anyway' }
         );
         if (!proceed) return;
       }
@@ -666,7 +683,7 @@ export default function AdminRota() {
       .select(JOB_SELECT)
       .single();
 
-    if (error) return;
+    if (error) { toast.error('Could not move this job.'); return; }
 
     setJobs((prev) => prev.map((j) => (j.id === data.id ? { ...j, ...data } : j)));
     setSelectedJob((sj) => (sj && sj.id === data.id ? { ...sj, ...data } : sj));

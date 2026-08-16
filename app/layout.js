@@ -1,6 +1,8 @@
 import { Poppins } from 'next/font/google';
 import './globals.css';
 import RegisterSW from './components/RegisterSW';
+import { ConfirmProvider } from './components/ConfirmProvider';
+import { ToastProvider } from './components/ToastProvider';
 
 const poppins = Poppins({ subsets: ['latin'], weight: ['400', '500', '600', '700'], display: 'swap' });
 
@@ -28,7 +30,11 @@ export default function RootLayout({ children }) {
         <link rel="apple-touch-icon" href="/apple-icon.png" sizes="180x180" />
       </head>
       <body className={poppins.className}>
-        {children}
+        <ToastProvider>
+          <ConfirmProvider>
+            {children}
+          </ConfirmProvider>
+        </ToastProvider>
         <RegisterSW />
       </body>
     </html>

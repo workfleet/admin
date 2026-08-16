@@ -3,9 +3,13 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
+import { useConfirm } from '../../components/ConfirmProvider';
+import { useToast } from '../../components/ToastProvider';
 
 export default function AdminTemplates() {
   const router = useRouter();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
@@ -70,9 +74,11 @@ export default function AdminTemplates() {
   };
 
   const deleteTemplate = async (id) => {
-    if (!confirm('Delete this template? Jobs it was already applied to keep their tasks.')) return;
-    await supabase.from('job_templates').delete().eq('id', id);
+    if (!(await confirm('Delete this template? Jobs it was already applied to keep their tasks.', { danger: true }))) return;
+    const { error } = await supabase.from('job_templates').delete().eq('id', id);
+    if (error) { toast.error('Could not delete the template.'); return; }
     setTemplates((prev) => prev.filter((t) => t.id !== id));
+    toast.success('Template deleted.');
   };
 
   const addItem = async (templateId) => {

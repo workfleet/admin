@@ -6,6 +6,8 @@ import dynamic from 'next/dynamic';
 import { supabase } from '../../../../lib/supabaseClient';
 import { notify } from '../../../../lib/notify';
 import { distanceMeters, GEOFENCE_RADIUS_METERS } from '../../../../lib/geo';
+import { useConfirm } from '../../../components/ConfirmProvider';
+import { useToast } from '../../../components/ToastProvider';
 
 // Leaflet touches `window` at load time, so it can't run during SSR.
 const PropertyMap = dynamic(() => import('../../../components/PropertyMap'), { ssr: false });
@@ -13,6 +15,8 @@ const PropertyMap = dynamic(() => import('../../../components/PropertyMap'), { s
 export default function JobDetailPage() {
   const { id } = useParams();
   const router = useRouter();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [job, setJob] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [photos, setPhotos] = useState([]);
@@ -166,18 +170,24 @@ export default function JobDetailPage() {
 
   const handleCheckOut = async () => {
     if (photos.length === 0) {
-      const proceed = confirm("You haven't added any photos for this job. Once you check out you won't be able to add any later. Check out anyway?");
+      const proceed = await confirm(
+        "You haven't added any photos for this job. Once you check out you won't be able to add any later. Check out anyway?",
+        { title: 'No photos added', danger: true, confirmLabel: 'Check out anyway' }
+      );
       if (!proceed) return;
     }
 
-    await supabase
+    const { error } = await supabase
       .from('checkins')
       .update({ checked_out_at: new Date().toISOString() })
       .eq('id', checkin.id);
 
+    if (error) { toast.error('Could not check out. Please try again.'); return; }
+
     const { data: jobRow } = await supabase.from('jobs').select('status').eq('id', id).single();
     if (jobRow) setJob((j) => ({ ...j, status: jobRow.status }));
     setCheckin((c) => ({ ...c, checked_out_at: new Date().toISOString() }));
+    toast.success('Checked out.');
   };
 
   const submitExtensionRequest = async (e) => {

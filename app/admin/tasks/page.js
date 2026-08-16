@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
+import { useConfirm } from '../../components/ConfirmProvider';
+import { useToast } from '../../components/ToastProvider';
 
 const STATUS_LABELS = { to_do: 'To Do', in_progress: 'In Progress', done: 'Done' };
 // Reuses the job-status badge colours (scheduled/in_progress/completed)
@@ -15,6 +17,8 @@ function isOverdue(task) {
 
 export default function AdminTasks() {
   const router = useRouter();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [tasks, setTasks] = useState([]);
   const [staff, setStaff] = useState([]);
   const [ownId, setOwnId] = useState(null);
@@ -89,9 +93,11 @@ export default function AdminTasks() {
   };
 
   const deleteTask = async (taskId) => {
-    if (!confirm('Delete this task?')) return;
-    await supabase.from('internal_tasks').delete().eq('id', taskId);
+    if (!(await confirm('Delete this task?', { danger: true }))) return;
+    const { error } = await supabase.from('internal_tasks').delete().eq('id', taskId);
+    if (error) { toast.error('Could not delete the task.'); return; }
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    toast.success('Task deleted.');
   };
 
   const filteredTasks = useMemo(() => {

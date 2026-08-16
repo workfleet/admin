@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { notify } from '../../../lib/notify';
+import { useConfirm } from '../../components/ConfirmProvider';
+import { useToast } from '../../components/ToastProvider';
 
 const HOLIDAY_ACCRUAL_RATE = 0.1207; // UK statutory: 5.6 weeks / 46.4 working weeks
 
@@ -15,6 +17,8 @@ function holidayHoursUsed(cleanerId, timeOffRequests) {
 
 export default function AdminRequests() {
   const router = useRouter();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [section, setSection] = useState('requests'); // requests | timeoff | extensions
   const [loading, setLoading] = useState(true);
   const [holidayBalances, setHolidayBalances] = useState({}); // cleanerId -> accrued hours
@@ -148,8 +152,9 @@ export default function AdminRequests() {
       const existingJobs = (existingAssignments || []).map((row) => row.jobs).filter(Boolean);
 
       if (existingJobs.length > 0) {
-        const proceed = confirm(
-          `${target.profiles?.full_name || 'This cleaner'} already has ${existingJobs.length} job${existingJobs.length === 1 ? '' : 's'} scheduled during this period (first: ${existingJobs[0].properties?.address} on ${new Date(existingJobs[0].scheduled_at).toLocaleDateString()}). Approve anyway?`
+        const proceed = await confirm(
+          `${target.profiles?.full_name || 'This cleaner'} already has ${existingJobs.length} job${existingJobs.length === 1 ? '' : 's'} scheduled during this period (first: ${existingJobs[0].properties?.address} on ${new Date(existingJobs[0].scheduled_at).toLocaleDateString()}). Approve anyway?`,
+          { title: 'Scheduling conflict', confirmLabel: 'Approve anyway' }
         );
         if (!proceed) return;
       }

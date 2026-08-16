@@ -6,10 +6,14 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { supabase } from '../../../../lib/supabaseClient';
 import AddressAutocomplete from '../../../components/AddressAutocomplete';
+import { useConfirm } from '../../../components/ConfirmProvider';
+import { useToast } from '../../../components/ToastProvider';
 
 export default function ClientDetail() {
   const router = useRouter();
   const { id } = useParams();
+  const confirm = useConfirm();
+  const toast = useToast();
 
   const [client, setClient] = useState(null);
   const [properties, setProperties] = useState([]);
@@ -175,9 +179,11 @@ export default function ClientDetail() {
   };
 
   const deleteReminder = async (reminderId) => {
-    if (!confirm('Delete this reminder?')) return;
-    await supabase.from('reminders').delete().eq('id', reminderId);
+    if (!(await confirm('Delete this reminder?', { danger: true }))) return;
+    const { error } = await supabase.from('reminders').delete().eq('id', reminderId);
+    if (error) { toast.error('Could not delete the reminder.'); return; }
     setReminders((prev) => prev.filter((r) => r.id !== reminderId));
+    toast.success('Reminder deleted.');
   };
 
   const startEdit = () => {
@@ -215,8 +221,10 @@ export default function ClientDetail() {
   };
 
   const deleteClient = async () => {
-    if (!confirm('Delete this client and all their properties? This cannot be undone.')) return;
-    await supabase.from('clients').delete().eq('id', id);
+    if (!(await confirm('Delete this client and all their properties? This cannot be undone.', { title: 'Delete client', danger: true }))) return;
+    const { error } = await supabase.from('clients').delete().eq('id', id);
+    if (error) { toast.error('Could not delete the client.'); return; }
+    toast.success('Client deleted.');
     router.push('/admin/clients');
   };
 
@@ -244,9 +252,11 @@ export default function ClientDetail() {
   };
 
   const deleteProperty = async (propertyId) => {
-    if (!confirm('Delete this property?')) return;
-    await supabase.from('properties').delete().eq('id', propertyId);
+    if (!(await confirm('Delete this property?', { danger: true }))) return;
+    const { error } = await supabase.from('properties').delete().eq('id', propertyId);
+    if (error) { toast.error('Could not delete the property.'); return; }
     setProperties((prev) => prev.filter((p) => p.id !== propertyId));
+    toast.success('Property deleted.');
   };
 
   const addCallLog = async (e) => {
@@ -272,9 +282,11 @@ export default function ClientDetail() {
   };
 
   const deleteCallLog = async (logId) => {
-    if (!confirm('Delete this call log entry?')) return;
-    await supabase.from('client_call_logs').delete().eq('id', logId);
+    if (!(await confirm('Delete this call log entry?', { danger: true }))) return;
+    const { error } = await supabase.from('client_call_logs').delete().eq('id', logId);
+    if (error) { toast.error('Could not delete the call log entry.'); return; }
     setCallLogs((prev) => prev.filter((l) => l.id !== logId));
+    toast.success('Call log entry deleted.');
   };
 
   if (loading || !client) return <div className="page-inner">Loading...</div>;

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../../../lib/supabaseClient';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
+import { useConfirm } from '../../components/ConfirmProvider';
+import { useToast } from '../../components/ToastProvider';
 import {
   ROOM_TYPES, CONDITION_OPTIONS, CLEAN_TYPE_OPTIONS, FURNISHED_OPTIONS,
   PROPERTY_TYPES, PROPERTY_TYPE_DEFAULTS, ADDON_TYPES, OVEN_OPTIONS,
@@ -50,6 +52,8 @@ const PRICING_FIELDS = [
 
 export default function AdminQuotes() {
   const router = useRouter();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [role, setRole] = useState(null);
   const [quotes, setQuotes] = useState([]);
   const [clients, setClients] = useState([]);
@@ -229,9 +233,11 @@ export default function AdminQuotes() {
   };
 
   const deleteQuote = async (quoteId) => {
-    if (!confirm('Delete this quote?')) return;
-    await supabase.from('quotes').delete().eq('id', quoteId);
+    if (!(await confirm('Delete this quote?', { danger: true }))) return;
+    const { error } = await supabase.from('quotes').delete().eq('id', quoteId);
+    if (error) { toast.error('Could not delete the quote.'); return; }
     setQuotes((prev) => prev.filter((q) => q.id !== quoteId));
+    toast.success('Quote deleted.');
   };
 
   const filteredQuotes = useMemo(() => {
