@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabaseClient';
 import { purgeOldNotifications } from '../../lib/notifications';
 import { getWorkAnniversaryYears } from '../../lib/workAnniversary';
 import WorkAnniversaryPopup from '../components/WorkAnniversaryPopup';
+import { KIT_PRODUCTS } from '../../lib/kitProducts';
 
 export default function CleanerDashboard() {
   const router = useRouter();
@@ -21,6 +22,9 @@ export default function CleanerDashboard() {
   const [requestType, setRequestType] = useState(null); // null | 'kit_topup' | 'issue'
   const [requestJobId, setRequestJobId] = useState('');
   const [requestDescription, setRequestDescription] = useState('');
+  const [selectedProducts, setSelectedProducts] = useState([]);
+  const [otherChecked, setOtherChecked] = useState(false);
+  const [otherProductText, setOtherProductText] = useState('');
   const [submittingRequest, setSubmittingRequest] = useState(false);
 
   useEffect(() => {
@@ -89,11 +93,31 @@ export default function CleanerDashboard() {
     setRequestType(requestType === type ? null : type);
     setRequestJobId('');
     setRequestDescription('');
+    setSelectedProducts([]);
+    setOtherChecked(false);
+    setOtherProductText('');
+  };
+
+  const toggleProduct = (product) => {
+    setSelectedProducts((prev) =>
+      prev.includes(product) ? prev.filter((p) => p !== product) : [...prev, product]
+    );
   };
 
   const submitRequest = async (e) => {
     e.preventDefault();
-    if (!requestDescription.trim()) return;
+
+    let description;
+    if (requestType === 'kit_topup') {
+      const items = [...selectedProducts];
+      if (otherChecked && otherProductText.trim()) items.push(otherProductText.trim());
+      if (items.length === 0) return;
+      description = items.join(', ');
+    } else {
+      if (!requestDescription.trim()) return;
+      description = requestDescription.trim();
+    }
+
     setSubmittingRequest(true);
 
     const { data: { session } } = await supabase.auth.getSession();
@@ -104,7 +128,7 @@ export default function CleanerDashboard() {
         cleaner_id: session.user.id,
         job_id: requestJobId || null,
         type: requestType,
-        description: requestDescription.trim(),
+        description,
       })
       .select('id, type, description, status, created_at, resolution_note')
       .single();
@@ -115,6 +139,9 @@ export default function CleanerDashboard() {
       setRequestType(null);
       setRequestDescription('');
       setRequestJobId('');
+      setSelectedProducts([]);
+      setOtherChecked(false);
+      setOtherProductText('');
     }
   };
 
@@ -217,18 +244,62 @@ export default function CleanerDashboard() {
                 </select>
               </>
             )}
-            <label>{requestType === 'kit_topup' ? 'What do you need?' : "What's the issue?"}</label>
-            <textarea
-              value={requestDescription}
-              onChange={(e) => setRequestDescription(e.target.value)}
-              placeholder={requestType === 'kit_topup' ? 'e.g. Out of glass cleaner and microfibre cloths' : 'e.g. Hoover on the van is broken'}
-              rows={3}
-              required
-              style={{
-                width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10,
-                background: '#f8fafc', fontSize: 14, fontFamily: 'inherit', marginBottom: 10, resize: 'vertical',
-              }}
-            />
+            {requestType === 'kit_topup' ? (
+              <>
+                <label>What do you need? (tick everything you're low on)</label>
+                <div
+                  style={{
+                    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px',
+                    marginBottom: 10, maxHeight: 260, overflowY: 'auto',
+                    border: '1px solid var(--hairline)', borderRadius: 10, padding: '10px 12px', background: '#f8fafc',
+                  }}
+                >
+                  {KIT_PRODUCTS.map((product) => (
+                    <label key={product} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 400, padding: '4px 0' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedProducts.includes(product)}
+                        onChange={() => toggleProduct(product)}
+                        style={{ width: 'auto' }}
+                      />
+                      {product}
+                    </label>
+                  ))}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 400, padding: '4px 0', gridColumn: '1 / -1' }}>
+                    <input
+                      type="checkbox"
+                      checked={otherChecked}
+                      onChange={(e) => setOtherChecked(e.target.checked)}
+                      style={{ width: 'auto' }}
+                    />
+                    Other
+                  </label>
+                </div>
+                {otherChecked && (
+                  <input
+                    value={otherProductText}
+                    onChange={(e) => setOtherProductText(e.target.value)}
+                    placeholder="What else do you need?"
+                    style={{ marginBottom: 10 }}
+                  />
+                )}
+              </>
+            ) : (
+              <>
+                <label>What's the issue?</label>
+                <textarea
+                  value={requestDescription}
+                  onChange={(e) => setRequestDescription(e.target.value)}
+                  placeholder="e.g. Hoover on the van is broken"
+                  rows={3}
+                  required
+                  style={{
+                    width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10,
+                    background: '#f8fafc', fontSize: 14, fontFamily: 'inherit', marginBottom: 10, resize: 'vertical',
+                  }}
+                />
+              </>
+            )}
             <button type="submit" disabled={submittingRequest} style={{ width: '100%' }}>
               {submittingRequest ? 'Sending...' : 'Send Request'}
             </button>
