@@ -249,6 +249,9 @@ export default function AdminQuotes() {
           <p className="page-subtitle">Priced proposals for clients and prospects</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          <Link href="/admin/quotes/history" className="btn-secondary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+            History
+          </Link>
           {role === 'admin' && (
             <button className="btn-secondary" onClick={() => (showPricingSettings ? setShowPricingSettings(false) : startEditPricing())}>
               {showPricingSettings ? 'Cancel' : 'Pricing Settings'}
