@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Siren } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
+import { respondToEmergencyAlert } from '../../lib/emergencyRespond';
 
 const POLL_INTERVAL_MS = 15000;
 
@@ -32,15 +33,11 @@ export default function EmergencyBanner() {
     return () => { cancelled = true; clearInterval(timer); };
   }, []);
 
-  const acknowledge = async (id) => {
-    setAcknowledgingId(id);
-    const { data: { session } } = await supabase.auth.getSession();
-    const { error } = await supabase
-      .from('emergency_alerts')
-      .update({ status: 'acknowledged', acknowledged_by: session.user.id, acknowledged_at: new Date().toISOString() })
-      .eq('id', id);
+  const respond = async (alert) => {
+    setAcknowledgingId(alert.id);
+    const { error } = await respondToEmergencyAlert(alert.id, alert.cleaner_id);
     setAcknowledgingId(null);
-    if (!error) setAlerts((prev) => prev.filter((a) => a.id !== id));
+    if (!error) setAlerts((prev) => prev.filter((a) => a.id !== alert.id));
   };
 
   if (alerts.length === 0) return null;
@@ -64,10 +61,10 @@ export default function EmergencyBanner() {
           <button
             type="button"
             className="emergency-banner-ack"
-            onClick={() => acknowledge(a.id)}
+            onClick={() => respond(a)}
             disabled={acknowledgingId === a.id}
           >
-            {acknowledgingId === a.id ? 'Acknowledging...' : 'Acknowledge'}
+            {acknowledgingId === a.id ? 'Responding...' : 'Respond'}
           </button>
         </div>
       ))}

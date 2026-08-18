@@ -7,6 +7,7 @@ import { Home, Calendar, User, HelpCircle, Settings, MessageCircle } from 'lucid
 import { supabase } from '../../lib/supabaseClient';
 import PresenceIndicator from '../components/PresenceIndicator';
 import EmergencyButton from '../components/EmergencyButton';
+import EnablePush from '../components/EnablePush';
 
 const NAV_ITEMS = [
   { href: '/cleaner', label: 'Home', icon: Home },
@@ -47,6 +48,9 @@ export default function CleanerLayout({ children }) {
   return (
     <div className="cleaner-shell">
       <PresenceIndicator />
+      <div style={{ position: 'fixed', top: 12, right: 12, zIndex: 60, background: 'white', borderRadius: '50%', boxShadow: 'var(--shadow-md)' }}>
+        <EnablePush />
+      </div>
       <EmergencyButton />
       {children}
       <nav className="bottom-nav">

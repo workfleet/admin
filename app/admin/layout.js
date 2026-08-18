@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabaseClient';
 import { signOutAndClearPresence } from '../../lib/signOut';
 import PresenceIndicator from '../components/PresenceIndicator';
 import EmergencyBanner from '../components/EmergencyBanner';
+import EnablePush from '../components/EnablePush';
 
 // Cleaners/Onboarding manage staff accounts directly (adding, deactivating,
 // reviewing onboarding ID documents) - kept admin-only, hidden from
@@ -82,6 +83,7 @@ export default function AdminLayout({ children }) {
           <div className="sidebar-brand-name">Workfleet</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <EnablePush iconColor="white" />
           <PresenceIndicator iconColor="white" />
           <button type="button" className="admin-topbar-menu-btn" onClick={() => setDrawerOpen(true)} aria-label="Open menu">
             <Menu size={20} />
@@ -98,6 +100,7 @@ export default function AdminLayout({ children }) {
             <div className="sidebar-brand-name">Workfleet</div>
             <div className="sidebar-brand-sub">Operations</div>
           </div>
+          <EnablePush />
           <PresenceIndicator />
           <button type="button" className="sidebar-close" onClick={() => setDrawerOpen(false)} aria-label="Close menu">
             <X size={18} />

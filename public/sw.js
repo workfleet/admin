@@ -25,3 +25,39 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
 });
+
+// Web Push - currently only used for emergency alerts (see lib/webPush.js
+// on the server side). The payload is whatever JSON.stringify(payload)
+// was passed to webpush.sendNotification().
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+  const data = event.data.json();
+
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'Workfleet', {
+      body: data.body || '',
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      tag: data.tag || undefined,
+      requireInteraction: true,
+      data: { url: data.url || '/admin' },
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || '/admin';
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          client.navigate(url);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(url);
+    })
+  );
+});

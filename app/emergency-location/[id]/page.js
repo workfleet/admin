@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Siren } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
+import { respondToEmergencyAlert } from '../../../lib/emergencyRespond';
 
 const PropertyMap = dynamic(() => import('../../components/PropertyMap'), { ssr: false });
 
@@ -16,6 +17,7 @@ export default function EmergencyLocationPage() {
   const router = useRouter();
   const [alert, setAlert] = useState(null);
   const [notFound, setNotFound] = useState(false);
+  const [responding, setResponding] = useState(false);
 
   useEffect(() => {
     load();
@@ -30,12 +32,19 @@ export default function EmergencyLocationPage() {
 
     const { data } = await supabase
       .from('emergency_alerts')
-      .select('id, created_at, lat, lng, checkin_at, profiles!emergency_alerts_cleaner_id_fkey(full_name)')
+      .select('id, created_at, lat, lng, checkin_at, status, cleaner_id, profiles!emergency_alerts_cleaner_id_fkey(full_name)')
       .eq('id', id)
       .maybeSingle();
 
     if (!data) { setNotFound(true); return; }
     setAlert(data);
+  };
+
+  const respond = async () => {
+    setResponding(true);
+    const { error } = await respondToEmergencyAlert(alert.id, alert.cleaner_id);
+    setResponding(false);
+    if (!error) setAlert((prev) => ({ ...prev, status: 'acknowledged' }));
   };
 
   if (notFound) return <div style={{ padding: 20 }}>Alert not found.</div>;
@@ -69,6 +78,17 @@ export default function EmergencyLocationPage() {
           No location on file - this cleaner hasn't clocked in to a job today, so there's no GPS fix to show. Call them directly.
         </p>
       )}
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+        {alert.status === 'acknowledged' ? (
+          <p style={{ fontSize: 13.5, color: 'var(--brand-primary)', margin: 0 }}>Responded - the cleaner has been notified.</p>
+        ) : (
+          <button type="button" onClick={respond} disabled={responding} style={{ flex: 1 }}>
+            {responding ? 'Responding...' : 'Respond'}
+          </button>
+        )}
+        <button type="button" className="btn-secondary" onClick={() => window.close()}>Close</button>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { resend, EMAIL_FROM } from '../../../lib/resend';
 import { supabaseAdmin } from '../../../lib/supabaseAdmin';
+import { sendPushToSubscriptions } from '../../../lib/webPush';
 
 // Any signed-in user may trigger a notification (a client sending a
 // message needs to notify admin), but we still require a valid session
@@ -42,12 +43,53 @@ async function clientEmails(clientId) {
   return emails.filter(Boolean);
 }
 
+// Push, unlike email, isn't gated behind RESEND_API_KEY - it has its own
+// independent "configured or not" check (see lib/webPush.js), so it
+// still works even before anyone's set up email delivery.
+async function pushToUserIds(userIds, payload) {
+  if (userIds.length === 0) return;
+
+  const { data: subs } = await supabaseAdmin
+    .from('push_subscriptions')
+    .select('endpoint, p256dh, auth')
+    .in('user_id', userIds);
+  if (!subs || subs.length === 0) return;
+
+  const { gone } = await sendPushToSubscriptions(subs, payload);
+  if (gone.length > 0) {
+    await supabaseAdmin.from('push_subscriptions').delete().in('endpoint', gone);
+  }
+}
+
+async function pushAdminsAndSupervisors(cleanerName) {
+  const { data: staff } = await supabaseAdmin.from('profiles').select('id').in('role', ['admin', 'supervisor']);
+  await pushToUserIds((staff || []).map((s) => s.id), {
+    title: '🚨 Emergency Alert',
+    body: `${cleanerName} needs help - tap to respond.`,
+    tag: 'emergency-alert',
+    url: '/admin',
+  });
+}
+
 export async function POST(request) {
   const user = await requireUser(request);
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  if (!process.env.RESEND_API_KEY) return NextResponse.json({ skipped: 'no_api_key' });
 
   const payload = await request.json();
+
+  if (payload.type === 'emergency_alert') {
+    await pushAdminsAndSupervisors(payload.cleanerName);
+  } else if (payload.type === 'emergency_alert_acknowledged') {
+    await pushToUserIds([payload.cleanerId], {
+      title: 'Alert picked up',
+      body: `${payload.responderName || 'Admin'} has picked up your emergency alert - help is on the way.`,
+      tag: 'emergency-alert-acknowledged',
+      url: '/cleaner',
+    });
+    return NextResponse.json({ pushed: true });
+  }
+
+  if (!process.env.RESEND_API_KEY) return NextResponse.json({ skipped: 'no_api_key' });
 
   try {
     let to = [];
