@@ -106,6 +106,27 @@ export default function AdminTasks() {
     return tasks.filter((t) => t.status !== 'done');
   }, [tasks, filter]);
 
+  // Grouped by assignee rather than one mixed feed, so "what's on my
+  // list" doesn't mean scanning past everyone else's tasks - own group
+  // always shown first (even empty), the rest alphabetical.
+  const groupedTasks = useMemo(() => {
+    const groups = new Map();
+    staff.forEach((s) => groups.set(s.id, { id: s.id, name: s.full_name || 'Unknown', tasks: [] }));
+
+    filteredTasks.forEach((task) => {
+      const key = task.assigned_to;
+      if (!groups.has(key)) groups.set(key, { id: key, name: task.assignee?.full_name || 'Unassigned', tasks: [] });
+      groups.get(key).tasks.push(task);
+    });
+
+    const own = groups.get(ownId);
+    const others = [...groups.values()]
+      .filter((g) => g.id !== ownId && g.tasks.length > 0)
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    return own ? [{ ...own, name: 'My Tasks' }, ...others] : others;
+  }, [filteredTasks, staff, ownId]);
+
   if (loading) return <div className="page-inner">Loading...</div>;
 
   return (
@@ -113,7 +134,7 @@ export default function AdminTasks() {
       <div className="page-header-row">
         <div>
           <h1>Team Tasks</h1>
-          <p className="page-subtitle">Internal work assigned between admins and supervisors — everyone sees the whole board</p>
+          <p className="page-subtitle">Internal work assigned between admins and supervisors — your own list first, everyone else's below</p>
         </div>
         <button className="btn-primary" onClick={() => setShowForm((s) => !s)}>
           {showForm ? 'Cancel' : '+ New Task'}
@@ -166,46 +187,53 @@ export default function AdminTasks() {
         <button className={filter === 'all' ? 'btn-primary' : 'btn-secondary'} onClick={() => setFilter('all')}>All</button>
       </div>
 
-      {filteredTasks.length === 0 && <p className="empty-state">Nothing here.</p>}
+      {groupedTasks.map((group) => (
+        <div key={group.id} style={{ marginBottom: 24 }}>
+          <h2 style={{ fontSize: 15, margin: '0 0 10px' }}>
+            {group.name} <span style={{ color: 'var(--muted)', fontWeight: 500 }}>({group.tasks.length})</span>
+          </h2>
 
-      <div className="job-list">
-        {filteredTasks.map((task) => (
-          <div key={task.id} className="card job-card" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-              <div>
-                <h2>{task.title}</h2>
-                {task.description && <p className="job-time">{task.description}</p>}
-                <p className="job-time">
-                  Assigned to {task.assignee?.full_name || 'Unknown'}
-                  {' · '}by {task.creator?.full_name || 'Unknown'}
-                  {task.due_date && (
-                    <>
-                      {' · due '}
-                      <span style={isOverdue(task) ? { color: 'crimson', fontWeight: 600 } : undefined}>
-                        {new Date(task.due_date).toLocaleDateString()}
-                      </span>
-                    </>
-                  )}
-                </p>
+          {group.tasks.length === 0 && <p className="empty-state" style={{ padding: '4px 0' }}>Nothing here.</p>}
+
+          <div className="job-list">
+            {group.tasks.map((task) => (
+              <div key={task.id} className="card job-card" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                  <div>
+                    <h2>{task.title}</h2>
+                    {task.description && <p className="job-time">{task.description}</p>}
+                    <p className="job-time">
+                      by {task.creator?.full_name || 'Unknown'}
+                      {task.due_date && (
+                        <>
+                          {' · due '}
+                          <span style={isOverdue(task) ? { color: 'crimson', fontWeight: 600 } : undefined}>
+                            {new Date(task.due_date).toLocaleDateString()}
+                          </span>
+                        </>
+                      )}
+                    </p>
+                  </div>
+                  <button className="btn-secondary" onClick={() => deleteTask(task.id)} style={{ height: 'fit-content' }}>Delete</button>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--hairline)' }}>
+                  <span className={`badge ${STATUS_BADGE_CLASS[task.status]}`}>{STATUS_LABELS[task.status]}</span>
+                  <select
+                    value={task.status}
+                    onChange={(e) => changeStatus(task, e.target.value)}
+                    style={{ width: 'auto', margin: 0 }}
+                  >
+                    {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <button className="btn-secondary" onClick={() => deleteTask(task.id)} style={{ height: 'fit-content' }}>Delete</button>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--hairline)' }}>
-              <span className={`badge ${STATUS_BADGE_CLASS[task.status]}`}>{STATUS_LABELS[task.status]}</span>
-              <select
-                value={task.status}
-                onChange={(e) => changeStatus(task, e.target.value)}
-                style={{ width: 'auto', margin: 0 }}
-              >
-                {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
     </div>
   );
 }
