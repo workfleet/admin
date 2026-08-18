@@ -10,7 +10,7 @@ import { useToast } from '../../components/ToastProvider';
 import {
   ROOM_TYPES, CONDITION_OPTIONS, CLEAN_TYPE_OPTIONS, FURNISHED_OPTIONS,
   PROPERTY_TYPES, PROPERTY_TYPE_DEFAULTS, ADDON_TYPES, OVEN_OPTIONS,
-  SERVICE_TYPES, GARDEN_SIZE_OPTIONS, GARDEN_ADDON_TYPES,
+  SERVICE_TYPES, GARDEN_SIZE_OPTIONS, GARDEN_ADDON_TYPES, COMMERCIAL_FREQUENCY_OPTIONS,
   calculateQuote, defaultQuoteDescription,
 } from '../../../lib/quoteCalculator';
 
@@ -37,6 +37,8 @@ const EMPTY_CALC_INPUT = {
   addons: EMPTY_ADDONS,
   oven: 'none',
   gardenSize: GARDEN_SIZE_OPTIONS[0].value,
+  estimatedHours: 2,
+  commercialFrequency: COMMERCIAL_FREQUENCY_OPTIONS[0].value,
 };
 
 function formatPrice(price) {
@@ -392,7 +394,7 @@ export default function AdminQuotes() {
                     />
                   </div>
 
-                  {calcInput.serviceType === 'gardening' ? (
+                  {calcInput.serviceType === 'gardening' && (
                     <div className="field-row">
                       <div className="field">
                         <label className="field-label">Garden size</label>
@@ -407,38 +409,58 @@ export default function AdminQuotes() {
                         </select>
                       </div>
                     </div>
-                  ) : (
+                  )}
+
+                  {calcInput.serviceType === 'commercial' && (
                     <div className="field-row">
                       <div className="field">
-                        <label className="field-label">Property type</label>
-                        <select value={calcInput.propertyType} onChange={(e) => applyPropertyType(e.target.value)}>
-                          {PROPERTY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                        </select>
+                        <label className="field-label">Estimated hours per visit</label>
+                        <input
+                          type="number" min="0" step="0.25"
+                          value={calcInput.estimatedHours}
+                          onChange={(e) => setCalcInput((c) => ({ ...c, estimatedHours: e.target.value }))}
+                        />
                       </div>
                       <div className="field">
-                        <label className="field-label">Condition</label>
-                        <select value={calcInput.condition} onChange={(e) => setCalcInput((c) => ({ ...c, condition: e.target.value }))}>
-                          {CONDITION_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
+                        <label className="field-label">Frequency</label>
+                        <select value={calcInput.commercialFrequency} onChange={(e) => setCalcInput((c) => ({ ...c, commercialFrequency: e.target.value }))}>
+                          {COMMERCIAL_FREQUENCY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
                         </select>
                       </div>
                     </div>
                   )}
 
-                  {calcInput.serviceType !== 'gardening' && (
-                    <div className="field-row">
-                      <div className="field">
-                        <label className="field-label">Clean type</label>
-                        <select value={calcInput.cleanType} onChange={(e) => setCalcInput((c) => ({ ...c, cleanType: e.target.value }))}>
-                          {CLEAN_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
-                        </select>
+                  {calcInput.serviceType === 'cleaning' && (
+                    <>
+                      <div className="field-row">
+                        <div className="field">
+                          <label className="field-label">Property type</label>
+                          <select value={calcInput.propertyType} onChange={(e) => applyPropertyType(e.target.value)}>
+                            {PROPERTY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                        </div>
+                        <div className="field">
+                          <label className="field-label">Condition</label>
+                          <select value={calcInput.condition} onChange={(e) => setCalcInput((c) => ({ ...c, condition: e.target.value }))}>
+                            {CONDITION_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
+                          </select>
+                        </div>
                       </div>
-                      <div className="field">
-                        <label className="field-label">Furnished?</label>
-                        <select value={calcInput.furnished} onChange={(e) => setCalcInput((c) => ({ ...c, furnished: e.target.value }))}>
-                          {FURNISHED_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
-                        </select>
+                      <div className="field-row">
+                        <div className="field">
+                          <label className="field-label">Clean type</label>
+                          <select value={calcInput.cleanType} onChange={(e) => setCalcInput((c) => ({ ...c, cleanType: e.target.value }))}>
+                            {CLEAN_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
+                          </select>
+                        </div>
+                        <div className="field">
+                          <label className="field-label">Furnished?</label>
+                          <select value={calcInput.furnished} onChange={(e) => setCalcInput((c) => ({ ...c, furnished: e.target.value }))}>
+                            {FURNISHED_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
+                          </select>
+                        </div>
                       </div>
-                    </div>
+                    </>
                   )}
 
                   <div className="field">
@@ -450,7 +472,7 @@ export default function AdminQuotes() {
                     />
                   </div>
 
-                  {calcInput.serviceType !== 'gardening' && (
+                  {calcInput.serviceType === 'cleaning' && (
                     <>
                       <label className="field-label" style={{ marginTop: 10, display: 'block' }}>Room counts</label>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10, marginBottom: 12 }}>
@@ -468,6 +490,8 @@ export default function AdminQuotes() {
                     </>
                   )}
 
+                  {calcInput.serviceType !== 'commercial' && (
+                  <>
                   <label className="field-label" style={{ display: 'block' }}>Extras</label>
                   {(calcInput.serviceType === 'gardening' ? GARDEN_ADDON_TYPES : ADDON_TYPES).map((a) => (
                     <div key={a.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
@@ -488,8 +512,10 @@ export default function AdminQuotes() {
                       )}
                     </div>
                   ))}
+                  </>
+                  )}
 
-                  {calcInput.serviceType !== 'gardening' && (
+                  {calcInput.serviceType === 'cleaning' && (
                     <div className="field" style={{ marginTop: 10 }}>
                       <label className="field-label">Oven clean</label>
                       <select value={calcInput.oven} onChange={(e) => setCalcInput((c) => ({ ...c, oven: e.target.value }))}>
@@ -513,6 +539,11 @@ export default function AdminQuotes() {
                       <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>
                         Profit {formatPrice(breakdown.profit)} ({(breakdown.marginPct * 100).toFixed(1)}%) — {breakdown.marginWarning}
                       </p>
+                      {breakdown.monthlyContractValue > 0 && (
+                        <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>
+                          {breakdown.visitsPerWeek}x/week — {formatPrice(breakdown.weeklyContractValue)}/week, approx. {formatPrice(breakdown.monthlyContractValue)}/month
+                        </p>
+                      )}
                       <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                         <button type="button" className="btn-secondary" onClick={useCalculatedPrice}>Use this price</button>
                         <button type="button" className="btn-secondary" onClick={useGeneratedDescription}>Use this description</button>
@@ -612,6 +643,9 @@ export default function AdminQuotes() {
                   <div>Labour {formatPrice(b.cleanerWageCost)} · Holiday {formatPrice(b.holidayCost)} · NI {formatPrice(b.niCost)} · Pension {formatPrice(b.pensionCost)}</div>
                   <div>Materials {formatPrice(b.materialsCost)} · Admin {formatPrice(b.adminCost)} · Travel {formatPrice(b.travelCost)}</div>
                   {b.ovenCharge > 0 && <div>Oven charge {formatPrice(b.ovenCharge)} (cleaner pay {formatPrice(b.ovenCleanerPay)})</div>}
+                  {b.monthlyContractValue > 0 && (
+                    <div>{b.visitsPerWeek}x/week — {formatPrice(b.weeklyContractValue)}/week, approx. {formatPrice(b.monthlyContractValue)}/month</div>
+                  )}
                 </div>
               )}
 
