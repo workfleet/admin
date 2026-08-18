@@ -1,12 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
 import { signOutAndClearPresence } from '../lib/signOut';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -34,9 +32,16 @@ export default function LoginPage() {
       return;
     }
 
-    if (profile?.role === 'admin' || profile?.role === 'supervisor') router.push('/admin');
-    else if (profile?.role === 'client') router.push('/client');
-    else router.push('/cleaner');
+    // Hard navigation (not router.push) is deliberate: if this login
+    // followed an invalid-refresh-token kickout, a stale retry from that
+    // earlier failed background refresh can still be in flight in this
+    // tab and clear the brand-new session moments later. A full reload
+    // gives the browser a fresh Supabase client with no memory of the
+    // old failure, so the new login actually sticks.
+    const destination = profile?.role === 'admin' || profile?.role === 'supervisor'
+      ? '/admin'
+      : profile?.role === 'client' ? '/client' : '/cleaner';
+    window.location.href = destination;
   };
 
   const handleLogin = async (e) => {
