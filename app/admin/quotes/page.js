@@ -10,6 +10,7 @@ import { useToast } from '../../components/ToastProvider';
 import {
   ROOM_TYPES, CONDITION_OPTIONS, CLEAN_TYPE_OPTIONS, FURNISHED_OPTIONS,
   PROPERTY_TYPES, PROPERTY_TYPE_DEFAULTS, ADDON_TYPES, OVEN_OPTIONS,
+  SERVICE_TYPES, GARDEN_SIZE_OPTIONS, GARDEN_ADDON_TYPES,
   calculateQuote, defaultQuoteDescription,
 } from '../../../lib/quoteCalculator';
 
@@ -20,8 +21,12 @@ const EMPTY_ROOMS = Object.fromEntries(ROOM_TYPES.map((r) => [r.key, 0]));
 const EMPTY_ADDONS = Object.fromEntries(
   ADDON_TYPES.flatMap((a) => [[a.key, false], [`${a.key}Qty`, 1]])
 );
+const EMPTY_GARDEN_ADDONS = Object.fromEntries(
+  GARDEN_ADDON_TYPES.flatMap((a) => [[a.key, false], [`${a.key}Qty`, 1]])
+);
 
 const EMPTY_CALC_INPUT = {
+  serviceType: 'cleaning',
   propertyAddress: '',
   propertyType: PROPERTY_TYPES[0],
   condition: 'Standard',
@@ -31,6 +36,7 @@ const EMPTY_CALC_INPUT = {
   rooms: EMPTY_ROOMS,
   addons: EMPTY_ADDONS,
   oven: 'none',
+  gardenSize: GARDEN_SIZE_OPTIONS[0].value,
 };
 
 function formatPrice(price) {
@@ -39,6 +45,7 @@ function formatPrice(price) {
 
 const PRICING_FIELDS = [
   { key: 'cleaner_hourly_pay', label: 'Cleaner hourly pay (£)', step: '0.01' },
+  { key: 'gardener_hourly_pay', label: 'Gardener hourly pay (£)', step: '0.01' },
   { key: 'holiday_allowance_pct', label: 'Holiday allowance (%, e.g. 0.1207)', step: '0.0001' },
   { key: 'employer_ni_pct', label: 'Employer NI allowance (%, e.g. 0.08)', step: '0.0001' },
   { key: 'pension_pct', label: 'Pension allowance (%, e.g. 0.03)', step: '0.0001' },
@@ -152,6 +159,18 @@ export default function AdminQuotes() {
       ...prev,
       propertyType,
       rooms: { ...prev.rooms, bedroom: defaults.bedroom ?? prev.rooms.bedroom, bathroom: defaults.bathroom ?? prev.rooms.bathroom },
+    }));
+  };
+
+  // Addons reset on switch since the two catalogs (ADDON_TYPES vs
+  // GARDEN_ADDON_TYPES) don't share keys - leaving stale cleaning addons
+  // ticked while showing garden addon checkboxes would silently keep
+  // charging for minutes that aren't shown anywhere in the form.
+  const setServiceType = (serviceType) => {
+    setCalcInput((prev) => ({
+      ...prev,
+      serviceType,
+      addons: serviceType === 'gardening' ? EMPTY_GARDEN_ADDONS : EMPTY_ADDONS,
     }));
   };
 
@@ -357,6 +376,13 @@ export default function AdminQuotes() {
               {useCalculator && (
                 <div style={{ border: '1px solid var(--hairline)', borderRadius: 12, padding: 14, marginTop: 4 }}>
                   <div className="field">
+                    <label className="field-label">Service type</label>
+                    <select value={calcInput.serviceType} onChange={(e) => setServiceType(e.target.value)}>
+                      {SERVICE_TYPES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="field">
                     <label className="field-label">Property address</label>
                     <AddressAutocomplete
                       value={calcInput.propertyAddress}
@@ -365,34 +391,56 @@ export default function AdminQuotes() {
                       placeholder="Start typing an address..."
                     />
                   </div>
-                  <div className="field-row">
-                    <div className="field">
-                      <label className="field-label">Property type</label>
-                      <select value={calcInput.propertyType} onChange={(e) => applyPropertyType(e.target.value)}>
-                        {PROPERTY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                      </select>
+
+                  {calcInput.serviceType === 'gardening' ? (
+                    <div className="field-row">
+                      <div className="field">
+                        <label className="field-label">Garden size</label>
+                        <select value={calcInput.gardenSize} onChange={(e) => setCalcInput((c) => ({ ...c, gardenSize: e.target.value }))}>
+                          {GARDEN_SIZE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
+                        </select>
+                      </div>
+                      <div className="field">
+                        <label className="field-label">Condition</label>
+                        <select value={calcInput.condition} onChange={(e) => setCalcInput((c) => ({ ...c, condition: e.target.value }))}>
+                          {CONDITION_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
+                        </select>
+                      </div>
                     </div>
-                    <div className="field">
-                      <label className="field-label">Condition</label>
-                      <select value={calcInput.condition} onChange={(e) => setCalcInput((c) => ({ ...c, condition: e.target.value }))}>
-                        {CONDITION_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
-                      </select>
+                  ) : (
+                    <div className="field-row">
+                      <div className="field">
+                        <label className="field-label">Property type</label>
+                        <select value={calcInput.propertyType} onChange={(e) => applyPropertyType(e.target.value)}>
+                          {PROPERTY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </div>
+                      <div className="field">
+                        <label className="field-label">Condition</label>
+                        <select value={calcInput.condition} onChange={(e) => setCalcInput((c) => ({ ...c, condition: e.target.value }))}>
+                          {CONDITION_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
+                        </select>
+                      </div>
                     </div>
-                  </div>
-                  <div className="field-row">
-                    <div className="field">
-                      <label className="field-label">Clean type</label>
-                      <select value={calcInput.cleanType} onChange={(e) => setCalcInput((c) => ({ ...c, cleanType: e.target.value }))}>
-                        {CLEAN_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
-                      </select>
+                  )}
+
+                  {calcInput.serviceType !== 'gardening' && (
+                    <div className="field-row">
+                      <div className="field">
+                        <label className="field-label">Clean type</label>
+                        <select value={calcInput.cleanType} onChange={(e) => setCalcInput((c) => ({ ...c, cleanType: e.target.value }))}>
+                          {CLEAN_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
+                        </select>
+                      </div>
+                      <div className="field">
+                        <label className="field-label">Furnished?</label>
+                        <select value={calcInput.furnished} onChange={(e) => setCalcInput((c) => ({ ...c, furnished: e.target.value }))}>
+                          {FURNISHED_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
+                        </select>
+                      </div>
                     </div>
-                    <div className="field">
-                      <label className="field-label">Furnished?</label>
-                      <select value={calcInput.furnished} onChange={(e) => setCalcInput((c) => ({ ...c, furnished: e.target.value }))}>
-                        {FURNISHED_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
-                      </select>
-                    </div>
-                  </div>
+                  )}
+
                   <div className="field">
                     <label className="field-label">Travel miles (0 if not charging)</label>
                     <input
@@ -402,22 +450,26 @@ export default function AdminQuotes() {
                     />
                   </div>
 
-                  <label className="field-label" style={{ marginTop: 10, display: 'block' }}>Room counts</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10, marginBottom: 12 }}>
-                    {ROOM_TYPES.map((r) => (
-                      <div className="field" key={r.key} style={{ marginBottom: 0 }}>
-                        <label className="field-label" style={{ fontSize: 12 }}>{r.label}</label>
-                        <input
-                          type="number" min="0"
-                          value={calcInput.rooms[r.key]}
-                          onChange={(e) => setCalcInput((c) => ({ ...c, rooms: { ...c.rooms, [r.key]: e.target.value } }))}
-                        />
+                  {calcInput.serviceType !== 'gardening' && (
+                    <>
+                      <label className="field-label" style={{ marginTop: 10, display: 'block' }}>Room counts</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10, marginBottom: 12 }}>
+                        {ROOM_TYPES.map((r) => (
+                          <div className="field" key={r.key} style={{ marginBottom: 0 }}>
+                            <label className="field-label" style={{ fontSize: 12 }}>{r.label}</label>
+                            <input
+                              type="number" min="0"
+                              value={calcInput.rooms[r.key]}
+                              onChange={(e) => setCalcInput((c) => ({ ...c, rooms: { ...c.rooms, [r.key]: e.target.value } }))}
+                            />
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    </>
+                  )}
 
                   <label className="field-label" style={{ display: 'block' }}>Extras</label>
-                  {ADDON_TYPES.map((a) => (
+                  {(calcInput.serviceType === 'gardening' ? GARDEN_ADDON_TYPES : ADDON_TYPES).map((a) => (
                     <div key={a.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                       <input
                         type="checkbox"
@@ -437,14 +489,16 @@ export default function AdminQuotes() {
                     </div>
                   ))}
 
-                  <div className="field" style={{ marginTop: 10 }}>
-                    <label className="field-label">Oven clean</label>
-                    <select value={calcInput.oven} onChange={(e) => setCalcInput((c) => ({ ...c, oven: e.target.value }))}>
-                      {Object.entries(OVEN_OPTIONS).map(([key, o]) => (
-                        <option key={key} value={key}>{o.label}{o.price ? ` (£${o.price})` : ''}</option>
-                      ))}
-                    </select>
-                  </div>
+                  {calcInput.serviceType !== 'gardening' && (
+                    <div className="field" style={{ marginTop: 10 }}>
+                      <label className="field-label">Oven clean</label>
+                      <select value={calcInput.oven} onChange={(e) => setCalcInput((c) => ({ ...c, oven: e.target.value }))}>
+                        {Object.entries(OVEN_OPTIONS).map(([key, o]) => (
+                          <option key={key} value={key}>{o.label}{o.price ? ` (£${o.price})` : ''}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   {breakdown && (
                     <div style={{ background: '#f8fafc', borderRadius: 10, padding: 12, marginTop: 12 }}>
@@ -555,7 +609,7 @@ export default function AdminQuotes() {
                 <div style={{ background: '#f8fafc', borderRadius: 10, padding: 12, marginTop: 10, fontSize: 13, color: 'var(--muted)', lineHeight: 1.8 }}>
                   <div>{b.totalHours}h estimated · {b.chargeableHours}h chargeable · {formatPrice(b.hourlyEquivalent)}/hr equivalent · {b.pricePosition}</div>
                   <div>Profit {formatPrice(b.profit)} ({(b.marginPct * 100).toFixed(1)}%) — {b.marginWarning}</div>
-                  <div>Cleaner wage {formatPrice(b.cleanerWageCost)} · Holiday {formatPrice(b.holidayCost)} · NI {formatPrice(b.niCost)} · Pension {formatPrice(b.pensionCost)}</div>
+                  <div>Labour {formatPrice(b.cleanerWageCost)} · Holiday {formatPrice(b.holidayCost)} · NI {formatPrice(b.niCost)} · Pension {formatPrice(b.pensionCost)}</div>
                   <div>Materials {formatPrice(b.materialsCost)} · Admin {formatPrice(b.adminCost)} · Travel {formatPrice(b.travelCost)}</div>
                   {b.ovenCharge > 0 && <div>Oven charge {formatPrice(b.ovenCharge)} (cleaner pay {formatPrice(b.ovenCleanerPay)})</div>}
                 </div>
