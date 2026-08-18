@@ -103,9 +103,32 @@ export default function AdminInventory() {
     );
   }, [products, search]);
 
+  const downloadShoppingList = async (kind) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch(`/api/inventory/shopping-list/${kind}`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!res.ok) { toast.error('Could not generate the shopping list.'); return; }
+
+    const blob = await res.blob();
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="(.+)"/);
+    const filename = match ? match[1] : `shopping-list.${kind}`;
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   if (loading) return <div className="page-inner">Loading...</div>;
 
   const lowStockCount = products.filter((p) => p.stock_level <= p.reorder_threshold).length;
+  const shoppingListItems = products.filter((p) => p.stock_level <= p.reorder_threshold);
 
   return (
     <div className="page-inner">
@@ -166,6 +189,37 @@ export default function AdminInventory() {
       )}
 
       {products.length === 0 && <p className="empty-state">No products tracked yet - add one to get started.</p>}
+
+      {products.length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <h2 style={{ margin: 0 }}>Shopping List</h2>
+              <p style={{ fontSize: 13, color: 'var(--muted)', margin: '2px 0 0' }}>
+                {shoppingListItems.length === 0 ? 'Nothing needs reordering right now.' : `${shoppingListItems.length} item${shoppingListItems.length === 1 ? '' : 's'} at or below reorder level`}
+              </p>
+            </div>
+            {shoppingListItems.length > 0 && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn-secondary" onClick={() => downloadShoppingList('docx')}>Word</button>
+                <button className="btn-secondary" onClick={() => downloadShoppingList('xlsx')}>Excel</button>
+                <button className="btn-secondary" onClick={() => downloadShoppingList('pdf')}>PDF</button>
+              </div>
+            )}
+          </div>
+
+          {shoppingListItems.length > 0 && (
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--hairline)' }}>
+              {shoppingListItems.map((p) => (
+                <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 13.5 }}>
+                  <span>{p.name}{p.supplier && <span style={{ color: 'var(--muted)' }}> · {p.supplier}</span>}</span>
+                  <span style={{ color: 'crimson' }}>{formatQty(p.stock_level)} / {formatQty(p.reorder_threshold)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {products.length > 0 && (
         <input
