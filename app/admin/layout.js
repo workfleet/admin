@@ -7,6 +7,7 @@ import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, M
 import { supabase } from '../../lib/supabaseClient';
 import { signOutAndClearPresence } from '../../lib/signOut';
 import PresenceIndicator from '../components/PresenceIndicator';
+import EmergencyBanner from '../components/EmergencyBanner';
 
 // Cleaners/Onboarding manage staff accounts directly (adding, deactivating,
 // reviewing onboarding ID documents) - kept admin-only, hidden from
@@ -72,7 +73,9 @@ export default function AdminLayout({ children }) {
   if (!authorized) return null;
 
   return (
-    <div className="admin-shell">
+    <>
+      <EmergencyBanner />
+      <div className="admin-shell">
       <div className="admin-topbar">
         <div className="admin-topbar-brand">
           <div className="sidebar-logo">WF</div>
@@ -124,6 +127,7 @@ export default function AdminLayout({ children }) {
       </aside>
 
       <main className="admin-main">{children}</main>
-    </div>
+      </div>
+    </>
   );
 }

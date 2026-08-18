@@ -77,6 +77,99 @@ body {
   color: var(--brand-primary);
 }
 
+/* ---- Emergency alert (lone worker panic button + admin banner) ---- */
+.emergency-fab {
+  position: fixed;
+  right: 16px;
+  bottom: 92px;
+  height: 52px;
+  padding: 0 18px 0 16px;
+  border-radius: 999px;
+  background: #dc2626;
+  color: white;
+  border: 2px solid white;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.5);
+  z-index: 60;
+  cursor: pointer;
+  animation: emergency-pulse 2.2s ease-in-out infinite;
+}
+
+.emergency-fab:hover {
+  background: #b91c1c;
+}
+
+.emergency-fab:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  animation: none;
+}
+
+@keyframes emergency-pulse {
+  0%, 100% { box-shadow: 0 4px 14px rgba(220, 38, 38, 0.5); }
+  50% { box-shadow: 0 4px 14px rgba(220, 38, 38, 0.5), 0 0 0 8px rgba(220, 38, 38, 0.18); }
+}
+
+.emergency-fab-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #22c55e;
+  border: 2px solid white;
+}
+
+.emergency-banner-stack {
+  position: sticky;
+  top: 0;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.emergency-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #dc2626;
+  color: white;
+  padding: 10px 16px;
+  font-size: 14px;
+}
+
+.emergency-banner span {
+  flex: 1;
+}
+
+.emergency-banner-ack {
+  background: white;
+  color: #dc2626;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.emergency-banner-ack:hover {
+  background: #fee2e2;
+}
+
+.emergency-banner-ack:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 /* ---- Client portal shell (desktop-only by design, no mobile
    collapse - this portal is meant to be used on a laptop) ---- */
 .client-shell-layout {

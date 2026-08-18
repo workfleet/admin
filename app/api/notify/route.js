@@ -26,6 +26,15 @@ async function adminEmails() {
   return emails.filter(Boolean);
 }
 
+// Admin + supervisor, unlike adminEmails() - for an emergency alert,
+// reaching whoever's actually reachable matters more than the usual
+// admin-only escalation path other notification types use.
+async function adminAndSupervisorEmails() {
+  const { data: staff } = await supabaseAdmin.from('profiles').select('id').in('role', ['admin', 'supervisor']);
+  const emails = await Promise.all((staff || []).map((a) => emailForUserId(a.id)));
+  return emails.filter(Boolean);
+}
+
 async function clientEmails(clientId) {
   const { data: profiles } = await supabaseAdmin
     .from('profiles').select('id').eq('client_id', clientId).eq('role', 'client');
@@ -108,6 +117,11 @@ export async function POST(request) {
       subject = `${payload.cleanerName} needs more time at ${payload.address}`;
       text = `${payload.cleanerName} requested ${payload.requestedMinutes} more minutes at ${payload.address}.`
         + (payload.reason ? `\n\nReason: ${payload.reason}` : '');
+    } else if (payload.type === 'emergency_alert') {
+      to = await adminAndSupervisorEmails();
+      if (to.length === 0) return NextResponse.json({ skipped: 'no_email' });
+      subject = `EMERGENCY ALERT from ${payload.cleanerName}`;
+      text = `${payload.cleanerName} has raised an emergency alert from the Workfleet app. Call them back immediately.`;
     } else if (payload.type === 'time_extension_decided') {
       const email = await emailForUserId(payload.cleanerId);
       if (!email) return NextResponse.json({ skipped: 'no_email' });
