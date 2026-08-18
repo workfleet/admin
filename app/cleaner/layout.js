@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Home, Calendar, User, HelpCircle, Settings, MessageCircle } from 'lucide-react';
-import { supabase } from '../../lib/supabaseClient';
+import { getSessionAndProfile } from '../../lib/authGate';
 import PresenceIndicator from '../components/PresenceIndicator';
 import EmergencyButton from '../components/EmergencyButton';
 import EnablePush from '../components/EnablePush';
@@ -22,26 +22,33 @@ export default function CleanerLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
   const [authorized, setAuthorized] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     checkAccess();
   }, []);
 
   const checkAccess = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    setLoadError(false);
+    const { session, profile, error } = await getSessionAndProfile();
     if (!session) { router.push('/'); return; }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', session.user.id)
-      .single();
+    if (error) { setLoadError(true); return; }
 
     if (profile?.role === 'admin' || profile?.role === 'supervisor') { router.push('/admin'); return; }
     if (profile?.role === 'client') { router.push('/client'); return; }
 
     setAuthorized(true);
   };
+
+  if (loadError) {
+    return (
+      <div className="container login-page">
+        <p style={{ marginBottom: 12 }}>Couldn't load your account - please check your connection and try again.</p>
+        <button onClick={checkAccess}>Retry</button>
+      </div>
+    );
+  }
 
   if (!authorized) return null;
 

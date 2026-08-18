@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { signOutAndClearPresence } from '../lib/signOut';
+import { getSessionAndProfile } from '../lib/authGate';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -14,17 +15,25 @@ export default function LoginPage() {
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session) await redirectByRole(session.user.id);
+      if (session) await redirectByRole();
     };
     checkSession();
   }, []);
 
-  const redirectByRole = async (userId) => {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, active')
-      .eq('id', userId)
-      .single();
+  // No longer takes a userId - re-fetches session itself via
+  // getSessionAndProfile(), which retries once on a failed profile
+  // lookup instead of treating that failure the same as "no such
+  // role" and silently guessing a destination (previously: an admin
+  // whose profile fetch hit a transient error would get routed to
+  // /cleaner instead of /admin, with no visible error at all).
+  const redirectByRole = async () => {
+    const { session, profile, error: fetchError } = await getSessionAndProfile();
+    if (!session) return;
+
+    if (fetchError) {
+      setError("Couldn't load your account - please check your connection and try again.");
+      return;
+    }
 
     if (profile?.active === false) {
       await signOutAndClearPresence();
@@ -49,7 +58,7 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
 
-    const { data, error: loginError } = await supabase.auth.signInWithPassword({
+    const { error: loginError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -61,7 +70,7 @@ export default function LoginPage() {
       return;
     }
 
-    await redirectByRole(data.user.id);
+    await redirectByRole();
   };
 
   return (

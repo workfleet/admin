@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Download, Folder, Package, Menu, X } from 'lucide-react';
-import { supabase } from '../../lib/supabaseClient';
 import { signOutAndClearPresence } from '../../lib/signOut';
+import { getSessionAndProfile } from '../../lib/authGate';
 import PresenceIndicator from '../components/PresenceIndicator';
 import EmergencyBanner from '../components/EmergencyBanner';
 import EnablePush from '../components/EnablePush';
@@ -37,6 +37,7 @@ export default function AdminLayout({ children }) {
   const [authorized, setAuthorized] = useState(false);
   const [role, setRole] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     checkAccess();
@@ -47,14 +48,11 @@ export default function AdminLayout({ children }) {
   }, [pathname]);
 
   const checkAccess = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    setLoadError(false);
+    const { session, profile, error } = await getSessionAndProfile();
     if (!session) { router.push('/'); return; }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', session.user.id)
-      .single();
+    if (error) { setLoadError(true); return; }
 
     if (profile?.role !== 'admin' && profile?.role !== 'supervisor') {
       router.push('/');
@@ -70,6 +68,15 @@ export default function AdminLayout({ children }) {
     await signOutAndClearPresence();
     router.push('/');
   };
+
+  if (loadError) {
+    return (
+      <div className="container login-page">
+        <p style={{ marginBottom: 12 }}>Couldn't load your account - please check your connection and try again.</p>
+        <button onClick={checkAccess}>Retry</button>
+      </div>
+    );
+  }
 
   if (!authorized) return null;
 
