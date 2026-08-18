@@ -170,6 +170,16 @@ body {
   cursor: not-allowed;
 }
 
+.emergency-banner-location {
+  background: transparent;
+  color: white;
+  border: 1.5px solid white;
+}
+
+.emergency-banner-location:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
 /* ---- Client portal shell (desktop-only by design, no mobile
    collapse - this portal is meant to be used on a laptop) ---- */
 .client-shell-layout {

@@ -56,6 +56,13 @@ export default function EmergencyBanner() {
           </span>
           <button
             type="button"
+            className="emergency-banner-ack emergency-banner-location"
+            onClick={() => window.open(`/emergency-location/${a.id}`, `emergency-location-${a.id}`, 'width=420,height=560,noopener')}
+          >
+            View Location
+          </button>
+          <button
+            type="button"
             className="emergency-banner-ack"
             onClick={() => acknowledge(a.id)}
             disabled={acknowledgingId === a.id}
