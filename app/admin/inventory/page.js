@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Minus, Trash2 } from 'lucide-react';
+import { Plus, Minus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
@@ -26,6 +26,7 @@ export default function AdminInventory() {
   const [newLocation, setNewLocation] = useState('');
   const [newSupplier, setNewSupplier] = useState('');
   const [newUnitPrice, setNewUnitPrice] = useState('');
+  const [shoppingListOpen, setShoppingListOpen] = useState(false);
 
   useEffect(() => {
     load();
@@ -192,15 +193,21 @@ export default function AdminInventory() {
 
       {products.length > 0 && (
         <div className="card" style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-            <div>
-              <h2 style={{ margin: 0 }}>Shopping List</h2>
-              <p style={{ fontSize: 13, color: 'var(--muted)', margin: '2px 0 0' }}>
-                {shoppingListItems.length === 0 ? 'Nothing needs reordering right now.' : `${shoppingListItems.length} item${shoppingListItems.length === 1 ? '' : 's'} at or below reorder level`}
-              </p>
+          <div
+            onClick={() => shoppingListItems.length > 0 && setShoppingListOpen((o) => !o)}
+            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, cursor: shoppingListItems.length > 0 ? 'pointer' : 'default' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {shoppingListItems.length > 0 && (shoppingListOpen ? <ChevronUp size={18} color="var(--muted)" /> : <ChevronDown size={18} color="var(--muted)" />)}
+              <div>
+                <h2 style={{ margin: 0 }}>Shopping List</h2>
+                <p style={{ fontSize: 13, color: 'var(--muted)', margin: '2px 0 0' }}>
+                  {shoppingListItems.length === 0 ? 'Nothing needs reordering right now.' : `${shoppingListItems.length} item${shoppingListItems.length === 1 ? '' : 's'} at or below reorder level`}
+                </p>
+              </div>
             </div>
             {shoppingListItems.length > 0 && (
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8 }} onClick={(e) => e.stopPropagation()}>
                 <button className="btn-secondary" onClick={() => downloadShoppingList('docx')}>Word</button>
                 <button className="btn-secondary" onClick={() => downloadShoppingList('xlsx')}>Excel</button>
                 <button className="btn-secondary" onClick={() => downloadShoppingList('pdf')}>PDF</button>
@@ -208,7 +215,7 @@ export default function AdminInventory() {
             )}
           </div>
 
-          {shoppingListItems.length > 0 && (
+          {shoppingListOpen && shoppingListItems.length > 0 && (
             <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--hairline)' }}>
               {shoppingListItems.map((p) => (
                 <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 13.5 }}>
