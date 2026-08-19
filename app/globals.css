@@ -180,8 +180,7 @@ body {
   background: rgba(255, 255, 255, 0.15);
 }
 
-/* ---- Client portal shell (desktop-only by design, no mobile
-   collapse - this portal is meant to be used on a laptop) ---- */
+/* ---- Client portal shell ---- */
 .client-shell-layout {
   display: flex;
   min-height: 100vh;
@@ -204,6 +203,105 @@ body {
   flex: 1;
   padding: 32px 40px;
   max-width: 1000px;
+  min-width: 0;
+}
+
+.client-topbar {
+  display: none;
+}
+
+.client-sidebar-close {
+  display: none;
+}
+
+/* ---- Responsive: stack sidebar into a hamburger drawer on narrow
+   screens - same mechanics as the admin shell (see @media block near
+   .admin-shell). Without this, .client-main gets squeezed to almost
+   nothing next to the fixed 224px sidebar, and any child relying on a
+   percentage width (e.g. message bubbles) wraps to one word per line. ---- */
+@media (max-width: 720px) {
+  .client-shell-layout {
+    flex-direction: column;
+  }
+  .client-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--sidebar-bg);
+    padding: 12px 16px;
+    position: sticky;
+    top: 0;
+    z-index: 60;
+  }
+  .client-topbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .client-topbar-brand .sidebar-brand-name {
+    color: white;
+  }
+  .client-topbar-menu-btn {
+    background: rgba(255, 255, 255, 0.12);
+    border: none;
+    color: white;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+  .client-topbar-menu-btn:hover {
+    background: rgba(255, 255, 255, 0.24);
+  }
+  .client-drawer-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.5);
+    z-index: 70;
+  }
+  .client-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    height: 100vh;
+    width: 78%;
+    max-width: 280px;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    z-index: 80;
+    box-shadow: var(--shadow-md);
+  }
+  .client-sidebar.client-sidebar-open {
+    transform: translateX(0);
+  }
+  .client-sidebar .sidebar-brand {
+    position: relative;
+  }
+  .client-sidebar-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    right: 0;
+    top: 4px;
+    background: transparent;
+    border: none;
+    color: var(--sidebar-text);
+    width: 30px;
+    height: 30px;
+    padding: 0;
+  }
+  .client-sidebar-close:hover {
+    color: white;
+  }
+  .client-main {
+    padding: 20px 16px;
+    max-width: 100%;
+  }
 }
 
 .login-page {

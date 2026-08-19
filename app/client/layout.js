@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, History, MessageCircle, FileText, HelpCircle, Settings, Phone, LogOut } from 'lucide-react';
+import { LayoutDashboard, History, MessageCircle, FileText, HelpCircle, Settings, Phone, LogOut, Menu, X } from 'lucide-react';
 import { getSessionAndProfile } from '../../lib/authGate';
 import { signOutAndClearPresence } from '../../lib/signOut';
 
@@ -22,10 +22,15 @@ export default function ClientLayout({ children }) {
   const router = useRouter();
   const [authorized, setAuthorized] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     checkAccess();
   }, []);
+
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [pathname]);
 
   const checkAccess = async () => {
     setLoadError(false);
@@ -58,13 +63,28 @@ export default function ClientLayout({ children }) {
 
   return (
     <div className="client-shell-layout">
-      <aside className="client-sidebar">
+      <div className="client-topbar">
+        <div className="client-topbar-brand">
+          <div className="sidebar-logo">CC</div>
+          <div className="sidebar-brand-name">CrewConnect</div>
+        </div>
+        <button type="button" className="client-topbar-menu-btn" onClick={() => setDrawerOpen(true)} aria-label="Open menu">
+          <Menu size={20} />
+        </button>
+      </div>
+
+      {drawerOpen && <div className="client-drawer-overlay" onClick={() => setDrawerOpen(false)} />}
+
+      <aside className={`client-sidebar ${drawerOpen ? 'client-sidebar-open' : ''}`}>
         <div className="sidebar-brand">
           <div className="sidebar-logo">CC</div>
           <div>
             <div className="sidebar-brand-name">CrewConnect</div>
             <div className="sidebar-brand-sub">Client Portal</div>
           </div>
+          <button type="button" className="client-sidebar-close" onClick={() => setDrawerOpen(false)} aria-label="Close menu">
+            <X size={18} />
+          </button>
         </div>
 
         <nav className="sidebar-nav">
