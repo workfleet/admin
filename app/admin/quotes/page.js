@@ -412,22 +412,30 @@ export default function AdminQuotes() {
                   )}
 
                   {calcInput.serviceType === 'commercial' && (
-                    <div className="field-row">
-                      <div className="field">
-                        <label className="field-label">Estimated hours per visit</label>
-                        <input
-                          type="number" min="0" step="0.25"
-                          value={calcInput.estimatedHours}
-                          onChange={(e) => setCalcInput((c) => ({ ...c, estimatedHours: e.target.value }))}
-                        />
+                    <>
+                      <div className="field-row">
+                        <div className="field">
+                          <label className="field-label">Estimated hours per visit</label>
+                          <input
+                            type="number" min="0" step="0.25"
+                            value={calcInput.estimatedHours}
+                            onChange={(e) => setCalcInput((c) => ({ ...c, estimatedHours: e.target.value }))}
+                          />
+                        </div>
+                        <div className="field">
+                          <label className="field-label">Frequency</label>
+                          <select value={calcInput.commercialFrequency} onChange={(e) => setCalcInput((c) => ({ ...c, commercialFrequency: e.target.value }))}>
+                            {COMMERCIAL_FREQUENCY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
+                          </select>
+                        </div>
                       </div>
                       <div className="field">
-                        <label className="field-label">Frequency</label>
-                        <select value={calcInput.commercialFrequency} onChange={(e) => setCalcInput((c) => ({ ...c, commercialFrequency: e.target.value }))}>
-                          {COMMERCIAL_FREQUENCY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
+                        <label className="field-label">Condition</label>
+                        <select value={calcInput.condition} onChange={(e) => setCalcInput((c) => ({ ...c, condition: e.target.value }))}>
+                          {CONDITION_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
                         </select>
                       </div>
-                    </div>
+                    </>
                   )}
 
                   {calcInput.serviceType === 'cleaning' && (
