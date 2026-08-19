@@ -13,6 +13,7 @@ import {
   SERVICE_TYPES, GARDEN_SIZE_OPTIONS, GARDEN_ADDON_TYPES, COMMERCIAL_FREQUENCY_OPTIONS,
   calculateQuote, defaultQuoteDescription,
 } from '../../../lib/quoteCalculator';
+import BackButton from '../../components/BackButton';
 
 const STATUS_LABELS = { draft: 'Draft', sent: 'Sent', accepted: 'Accepted', declined: 'Declined', expired: 'Expired' };
 const STATUS_BADGE_CLASS = { draft: 'scheduled', sent: 'in_progress', accepted: 'completed', declined: 'missed', expired: 'missed' };
@@ -271,6 +272,7 @@ export default function AdminQuotes() {
 
   return (
     <div className="page-inner">
+      <BackButton />
       <div className="page-header-row">
         <div>
           <h1>Quotes</h1>

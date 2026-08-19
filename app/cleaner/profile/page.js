@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
+import BackButton from '../../components/BackButton';
 
 export default function CleanerProfile() {
   const router = useRouter();
@@ -51,6 +52,7 @@ export default function CleanerProfile() {
 
   return (
     <div className="container">
+      <BackButton />
       <h1>My Profile</h1>
       <form className="card" onSubmit={save}>
         <label>Full name</label>

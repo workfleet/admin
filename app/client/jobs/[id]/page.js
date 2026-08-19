@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { ArrowLeft, CheckCircle2, Circle, Star } from 'lucide-react';
+import { CheckCircle2, Circle, Star } from 'lucide-react';
 import { supabase } from '../../../../lib/supabaseClient';
 import { COMPANY } from '../../../../lib/companyBranding';
+import BackButton from '../../../components/BackButton';
 
 export default function ClientJobDetail() {
   const { id } = useParams();
@@ -116,10 +116,7 @@ export default function ClientJobDetail() {
 
   return (
     <div>
-      <Link href="/client/history" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13.5, color: 'var(--muted)', textDecoration: 'none', marginBottom: 12 }}>
-        <ArrowLeft size={15} /> All history
-      </Link>
-
+      <BackButton />
       <div className="card" style={{ marginBottom: 16 }}>
         <h1 style={{ margin: 0 }}>{job.properties?.address}</h1>
         <p style={{ margin: '4px 0', fontSize: 14 }}>

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Mail, Phone, MapPin, Globe } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { COMPANY } from '../../../lib/companyBranding';
+import BackButton from '../../components/BackButton';
 
 export default function ClientContacts() {
   const router = useRouter();
@@ -29,6 +30,7 @@ export default function ClientContacts() {
 
   return (
     <div>
+      <BackButton />
       <div className="page-header-row">
         <div>
           <h1>Contacts</h1>

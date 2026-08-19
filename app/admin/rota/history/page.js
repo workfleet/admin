@@ -2,9 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
 import { supabase } from '../../../../lib/supabaseClient';
+import BackButton from '../../../components/BackButton';
 
 const STATUS_LABELS = { scheduled: 'Scheduled', in_progress: 'In Progress', completed: 'Completed', missed: 'Missed' };
 
@@ -56,10 +55,7 @@ export default function JobHistory() {
 
   return (
     <div className="page-inner">
-      <Link href="/admin/rota" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13.5, color: 'var(--muted)', textDecoration: 'none', marginBottom: 12 }}>
-        <ArrowLeft size={15} /> Back to Rota
-      </Link>
-
+      <BackButton />
       <div className="page-header-row">
         <div>
           <h1>Job History</h1>

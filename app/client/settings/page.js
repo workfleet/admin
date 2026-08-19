@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
+import BackButton from '../../components/BackButton';
 
 export default function ClientSettings() {
   const router = useRouter();
@@ -93,6 +94,7 @@ export default function ClientSettings() {
 
   return (
     <div>
+      <BackButton />
       <div className="page-header-row">
         <div>
           <h1>Settings</h1>

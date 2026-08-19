@@ -6,6 +6,7 @@ import { Plus, Minus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
+import BackButton from '../../components/BackButton';
 
 function formatQty(n) {
   return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
@@ -133,6 +134,7 @@ export default function AdminInventory() {
 
   return (
     <div className="page-inner">
+      <BackButton />
       <div className="page-header-row">
         <div>
           <h1>Inventory</h1>

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FileText, Download } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
+import BackButton from '../../components/BackButton';
 
 const CATEGORY_LABELS = { health_safety: 'Health & Safety', policy: 'Policy', contract: 'Contract', other: 'Other' };
 const CATEGORY_ORDER = ['health_safety', 'contract', 'policy', 'other'];
@@ -46,6 +47,7 @@ export default function ClientDocuments() {
 
   return (
     <div>
+      <BackButton />
       <div className="page-header-row">
         <div>
           <h1>Documents</h1>

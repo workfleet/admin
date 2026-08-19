@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../../../lib/supabaseClient';
+import BackButton from '../../components/BackButton';
 
 export default function ClientHistory() {
   const router = useRouter();
@@ -38,6 +39,7 @@ export default function ClientHistory() {
 
   return (
     <div>
+      <BackButton />
       <div className="page-header-row">
         <div>
           <h1>History</h1>

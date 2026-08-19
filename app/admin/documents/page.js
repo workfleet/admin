@@ -6,6 +6,7 @@ import { FileText, Download, Trash2 } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
+import BackButton from '../../components/BackButton';
 
 const CATEGORY_LABELS = { policy: 'Policy', contract: 'Contract', other: 'Other' };
 const CATEGORY_ORDER = ['policy', 'contract', 'other'];
@@ -149,6 +150,7 @@ export default function AdminDocuments() {
 
   return (
     <div className="page-inner">
+      <BackButton />
       <div className="page-header-row">
         <div>
           <h1>Documents</h1>

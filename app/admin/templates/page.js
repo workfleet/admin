@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
+import BackButton from '../../components/BackButton';
 
 export default function AdminTemplates() {
   const router = useRouter();
@@ -113,6 +114,7 @@ export default function AdminTemplates() {
 
   return (
     <div className="page-inner">
+      <BackButton />
       <div className="page-header-row">
         <div>
           <h1>Job Templates</h1>

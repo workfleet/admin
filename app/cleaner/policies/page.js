@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { FileText, Download } from 'lucide-react';
 import { POLICY_SECTIONS } from '../../../lib/companyPolicies';
 import { supabase } from '../../../lib/supabaseClient';
+import BackButton from '../../components/BackButton';
 
 const CATEGORY_LABELS = { policy: 'Policy', contract: 'Contract', other: 'Other' };
 const CATEGORY_ORDER = ['policy', 'contract', 'other'];
@@ -70,6 +71,7 @@ export default function CleanerHelp() {
 
   return (
     <div className="container">
+      <BackButton />
       <h1>Help</h1>
       <p style={{ color: 'var(--muted)', fontSize: 14, marginTop: -8, marginBottom: 16 }}>
         How to use the app, and how we work at CrewConnect Cleaning.

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { notify } from '../../../lib/notify';
+import BackButton from '../../components/BackButton';
 
 const CLIENT_CFG = {
   table: 'client_messages',
@@ -187,6 +188,7 @@ export default function AdminMessages() {
 
   return (
     <div className="page-inner">
+      <BackButton />
       <div className="page-header-row">
         <div>
           <h1>Messages</h1>

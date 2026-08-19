@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { COMPANY } from '../../../lib/companyBranding';
+import BackButton from '../../components/BackButton';
 
 const SECTIONS = [
   {
@@ -82,6 +83,7 @@ export default function ClientHelp() {
 
   return (
     <div>
+      <BackButton />
       <div className="page-header-row">
         <div>
           <h1>Help</h1>

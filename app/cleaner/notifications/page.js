@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { purgeOldNotifications } from '../../../lib/notifications';
+import BackButton from '../../components/BackButton';
 
 export default function NotificationHistory() {
   const router = useRouter();
@@ -42,6 +43,7 @@ export default function NotificationHistory() {
 
   return (
     <div className="container">
+      <BackButton />
       <h1>Notifications</h1>
       <p style={{ color: 'var(--muted)', fontSize: 14, marginTop: -8, marginBottom: 16 }}>
         Notifications are removed automatically 30 days after they arrive.

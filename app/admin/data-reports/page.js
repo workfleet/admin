@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Download } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { toCSV, downloadCSV } from '../../../lib/csv';
+import BackButton from '../../components/BackButton';
 
 function getWeekRange(weekOffset) {
   const now = new Date();
@@ -257,6 +258,7 @@ export default function AdminDataReports() {
 
   return (
     <div className="page-inner">
+      <BackButton />
       <div className="page-header-row">
         <div>
           <h1>Data Reports</h1>

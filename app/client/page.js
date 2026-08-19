@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { CalendarClock, CheckCircle2, MessageSquareWarning, Star } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
+import BackButton from '../components/BackButton';
 
 export default function ClientDashboard() {
   const router = useRouter();
@@ -154,6 +155,7 @@ export default function ClientDashboard() {
 
   return (
     <div>
+      <BackButton />
       <div className="page-header-row">
         <div>
           <h1>Welcome back{clientName ? `, ${clientName}` : ''}</h1>

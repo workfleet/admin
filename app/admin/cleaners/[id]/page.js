@@ -2,12 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
 import { supabase } from '../../../../lib/supabaseClient';
 import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 import { lateMinutes } from '../../../../lib/clockIn';
+import BackButton from '../../../components/BackButton';
 
 const HOLIDAY_ACCRUAL_RATE = 0.1207; // UK statutory: 5.6 weeks / 46.4 working weeks
 
@@ -336,10 +335,7 @@ export default function CleanerProfile() {
 
   return (
     <div className="page-inner">
-      <Link href="/admin/cleaners" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13.5, color: 'var(--muted)', textDecoration: 'none', marginBottom: 12 }}>
-        <ArrowLeft size={15} /> All staff
-      </Link>
-
+      <BackButton />
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="page-header-row">
           <div>

@@ -7,6 +7,7 @@ import { notify } from '../../../lib/notify';
 import { respondToEmergencyAlert } from '../../../lib/emergencyRespond';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
+import BackButton from '../../components/BackButton';
 
 const HOLIDAY_ACCRUAL_RATE = 0.1207; // UK statutory: 5.6 weeks / 46.4 working weeks
 
@@ -455,6 +456,7 @@ export default function AdminRequests() {
 
   return (
     <div className="page-inner">
+      <BackButton />
       <div className="page-header-row">
         <div>
           <h1>Requests</h1>

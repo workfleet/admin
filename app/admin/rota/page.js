@@ -8,6 +8,7 @@ import { notify } from '../../../lib/notify';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
+import BackButton from '../../components/BackButton';
 
 // Full 24hr range with scroll (CrewConnect crews run early mornings through
 // overnight), defaulting the scroll position to business hours on load.
@@ -703,6 +704,7 @@ export default function AdminRota() {
 
   return (
     <div className="page-inner">
+      <BackButton />
       <div className="page-header-row">
         <div>
           <h1>Rota</h1>

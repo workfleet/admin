@@ -1,5 +1,7 @@
 'use client';
 
+import BackButton from '../../components/BackButton';
+
 const HELP_SECTIONS = [
   {
     title: 'Creating a Job & Assigning a Cleaner',
@@ -42,6 +44,7 @@ const HELP_SECTIONS = [
 export default function AdminHelp() {
   return (
     <div className="page-inner">
+      <BackButton />
       <div className="page-header-row">
         <div>
           <h1>Help</h1>

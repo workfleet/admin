@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { notify } from '../../../lib/notify';
+import BackButton from '../../components/BackButton';
 
 function groupByDate(jobs) {
   const groups = {};
@@ -210,6 +211,7 @@ export default function CleanerRota() {
 
   return (
     <div className="container">
+      <BackButton />
       <h1>My Rota</h1>
 
       <div className="card">

@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import Link from 'next/link';
-import { ArrowLeft, FileText, Download, Trash2 } from 'lucide-react';
+import { FileText, Download, Trash2 } from 'lucide-react';
 import { supabase } from '../../../../lib/supabaseClient';
 import AddressAutocomplete from '../../../components/AddressAutocomplete';
 import { INDUSTRY_OPTIONS } from '../../../../lib/clientIndustries';
 import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 import { lateMinutes } from '../../../../lib/clockIn';
+import BackButton from '../../../components/BackButton';
 
 export default function ClientDetail() {
   const router = useRouter();
@@ -455,10 +455,7 @@ export default function ClientDetail() {
 
   return (
     <div className="page-inner">
-      <Link href="/admin/clients" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13.5, color: 'var(--muted)', textDecoration: 'none', marginBottom: 12 }}>
-        <ArrowLeft size={15} /> All clients
-      </Link>
-
+      <BackButton />
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="page-header-row" style={{ marginBottom: isEditing ? 12 : 0 }}>
           <h1 style={{ margin: 0 }}>{client.name}</h1>

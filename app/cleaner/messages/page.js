@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { notify } from '../../../lib/notify';
+import BackButton from '../../components/BackButton';
 
 export default function CleanerMessages() {
   const router = useRouter();
@@ -176,6 +177,7 @@ export default function CleanerMessages() {
 
   return (
     <div className="container">
+      <BackButton />
       <div className="page-header-row" style={{ marginBottom: 12 }}>
         <h1 style={{ margin: 0 }}>Chats</h1>
         <button className="btn-secondary" onClick={() => (showDirectory ? setShowDirectory(false) : openDirectory())}>

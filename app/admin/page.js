@@ -7,6 +7,7 @@ import { ClipboardList, Users, Building2, MapPin, UserX } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { getWorkAnniversaryYears } from '../../lib/workAnniversary';
 import WorkAnniversaryPopup from '../components/WorkAnniversaryPopup';
+import BackButton from '../components/BackButton';
 
 function formatTimeRange(scheduledAt, durationMinutes) {
   const start = new Date(scheduledAt);
@@ -358,6 +359,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="page-inner">
+      <BackButton />
       {anniversary && <WorkAnniversaryPopup name={anniversary.name} years={anniversary.years} />}
       <div className="page-header-row">
         <div>

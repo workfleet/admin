@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Mic, Square } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { REPORT_TEMPLATES, DEFAULT_TEMPLATE } from '../../../lib/reportTemplates';
+import BackButton from '../../components/BackButton';
 
 export default function AdminReports() {
   const router = useRouter();
@@ -140,6 +141,7 @@ export default function AdminReports() {
 
   return (
     <div className="page-inner">
+      <BackButton />
       <div className="page-header-row">
         <div>
           <h1>Reports</h1>

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { signOutAndClearPresence } from '../../../lib/signOut';
+import BackButton from '../../components/BackButton';
 
 export default function CleanerSettings() {
   const router = useRouter();
@@ -47,6 +48,7 @@ export default function CleanerSettings() {
 
   return (
     <div className="container">
+      <BackButton />
       <h1>Settings</h1>
 
       <form className="card" onSubmit={changePassword}>

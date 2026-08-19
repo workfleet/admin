@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { INDUSTRY_OPTIONS } from '../../../lib/clientIndustries';
+import BackButton from '../../components/BackButton';
 
 const EMPTY_PROFILE = { name: '', contact_name: '', email: '', phone: '', billing_address: '', notes: '', industry: '' };
 
@@ -87,6 +88,7 @@ export default function AdminClients() {
 
   return (
     <div className="page-inner">
+      <BackButton />
       <div className="page-header-row">
         <div>
           <h1>Clients</h1>

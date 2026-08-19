@@ -6,6 +6,7 @@ import { supabase } from '../../../lib/supabaseClient';
 import { notify } from '../../../lib/notify';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
+import BackButton from '../../components/BackButton';
 
 export default function AdminOnboarding() {
   const router = useRouter();
@@ -117,6 +118,7 @@ export default function AdminOnboarding() {
 
   return (
     <div className="page-inner">
+      <BackButton />
       <div className="page-header-row">
         <div>
           <h1>Onboarding</h1>

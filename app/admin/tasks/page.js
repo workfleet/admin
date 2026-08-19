@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
+import BackButton from '../../components/BackButton';
 
 const STATUS_LABELS = { to_do: 'To Do', in_progress: 'In Progress', done: 'Done' };
 // Reuses the job-status badge colours (scheduled/in_progress/completed)
@@ -131,6 +132,7 @@ export default function AdminTasks() {
 
   return (
     <div className="page-inner">
+      <BackButton />
       <div className="page-header-row">
         <div>
           <h1>Team Tasks</h1>

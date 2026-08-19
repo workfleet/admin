@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { notify } from '../../../lib/notify';
+import BackButton from '../../components/BackButton';
 
 export default function ClientMessages() {
   const router = useRouter();
@@ -75,6 +76,7 @@ export default function ClientMessages() {
 
   return (
     <div>
+      <BackButton />
       <div className="page-header-row">
         <div>
           <h1>Messages</h1>

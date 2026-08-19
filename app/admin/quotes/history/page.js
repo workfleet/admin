@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
 import { supabase } from '../../../../lib/supabaseClient';
 import { formatPriceGBP, quoteReference, quoteRecipientName } from '../../../../lib/companyBranding';
 import { ROOM_TYPES, ADDON_TYPES, OVEN_OPTIONS } from '../../../../lib/quoteCalculator';
+import BackButton from '../../../components/BackButton';
 
 const STATUS_LABELS = { draft: 'Draft', sent: 'Sent', accepted: 'Accepted', declined: 'Declined', expired: 'Expired' };
 const STATUS_BADGE_CLASS = { draft: 'scheduled', sent: 'in_progress', accepted: 'completed', declined: 'missed', expired: 'missed' };
@@ -50,10 +50,7 @@ export default function QuoteHistory() {
 
   return (
     <div className="page-inner">
-      <Link href="/admin/quotes" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13.5, color: 'var(--muted)', textDecoration: 'none', marginBottom: 12 }}>
-        <ArrowLeft size={15} /> Back to Quotes
-      </Link>
-
+      <BackButton />
       <div className="page-header-row">
         <div>
           <h1>Quote History</h1>

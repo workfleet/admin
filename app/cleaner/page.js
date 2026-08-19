@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabaseClient';
 import { purgeOldNotifications } from '../../lib/notifications';
 import { getWorkAnniversaryYears } from '../../lib/workAnniversary';
 import WorkAnniversaryPopup from '../components/WorkAnniversaryPopup';
+import BackButton from '../components/BackButton';
 import { KIT_PRODUCTS } from '../../lib/kitProducts';
 
 export default function CleanerDashboard() {
@@ -139,6 +140,7 @@ export default function CleanerDashboard() {
 
   return (
     <div className="container">
+      <BackButton />
       {anniversary && <WorkAnniversaryPopup name={anniversary.name} years={anniversary.years} />}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>Home</h1>

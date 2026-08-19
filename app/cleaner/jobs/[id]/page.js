@@ -8,6 +8,7 @@ import { notify } from '../../../../lib/notify';
 import { distanceMeters, GEOFENCE_RADIUS_METERS } from '../../../../lib/geo';
 import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
+import BackButton from '../../../components/BackButton';
 
 // Leaflet touches `window` at load time, so it can't run during SSR.
 const PropertyMap = dynamic(() => import('../../../components/PropertyMap'), { ssr: false });
@@ -279,10 +280,7 @@ export default function JobDetailPage() {
 
   return (
     <div className="container">
-      <button onClick={() => router.push(isHistory ? '/cleaner/rota' : '/cleaner')} style={{ background: 'transparent', color: 'var(--brand-primary)', padding: 0, marginBottom: 12 }}>
-        ← Back
-      </button>
-
+      <BackButton />
       <h1>{job.properties?.address}</h1>
       <p style={{ color: 'var(--muted)' }}>{new Date(job.scheduled_at).toLocaleString()}</p>
       {isHistory && <span className="badge completed">completed</span>}
