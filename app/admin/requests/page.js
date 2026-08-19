@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { notify } from '../../../lib/notify';
+import { respondToEmergencyAlert } from '../../../lib/emergencyRespond';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
 
@@ -19,7 +20,7 @@ export default function AdminRequests() {
   const router = useRouter();
   const confirm = useConfirm();
   const toast = useToast();
-  const [section, setSection] = useState('requests'); // requests | timeoff | extensions | reschedules | clientRequests | pauses
+  const [section, setSection] = useState('requests'); // requests | timeoff | extensions | reschedules | clientRequests | pauses | emergencies
   const [loading, setLoading] = useState(true);
   const [holidayBalances, setHolidayBalances] = useState({}); // cleanerId -> accrued hours
 
@@ -65,6 +66,11 @@ export default function AdminRequests() {
   const [decidingPauseId, setDecidingPauseId] = useState(null);
   const [pauseAdminNote, setPauseAdminNote] = useState('');
 
+  // emergency alert log
+  const [emergencies, setEmergencies] = useState([]);
+  const [emergencyFilter, setEmergencyFilter] = useState('all'); // open | acknowledged | all
+  const [respondingEmergencyId, setRespondingEmergencyId] = useState(null);
+
   useEffect(() => {
     load();
   }, []);
@@ -73,7 +79,7 @@ export default function AdminRequests() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/'); return; }
 
-    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, { data: assignmentsData }, { data: extensionsData }, { data: reschedulesData }, { data: clientRequestsData }, { data: pausesData }] = await Promise.all([
+    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, { data: assignmentsData }, { data: extensionsData }, { data: reschedulesData }, { data: clientRequestsData }, { data: pausesData }, { data: emergenciesData }] = await Promise.all([
       supabase
         .from('staff_requests')
         .select('id, type, description, status, created_at, resolved_at, resolution_note, resolved_by, cleaner_id, profiles!staff_requests_cleaner_id_fkey(full_name), resolver:profiles!staff_requests_resolved_by_fkey(full_name), jobs(scheduled_at, properties(address))')
@@ -100,6 +106,10 @@ export default function AdminRequests() {
         .from('client_pause_requests')
         .select('id, start_date, end_date, reason, status, admin_note, created_at, client_id, clients(name), decider:profiles!client_pause_requests_decided_by_fkey(full_name)')
         .order('created_at', { ascending: false }),
+      supabase
+        .from('emergency_alerts')
+        .select('id, status, created_at, lat, lng, checkin_at, cleaner_id, acknowledged_by, acknowledged_at, profiles!emergency_alerts_cleaner_id_fkey(full_name), acknowledger:profiles!emergency_alerts_acknowledged_by_fkey(full_name)')
+        .order('created_at', { ascending: false }),
     ]);
 
     // A job's duration is split evenly across everyone assigned to it.
@@ -123,7 +133,22 @@ export default function AdminRequests() {
     setReschedules(reschedulesData || []);
     setClientRequests(clientRequestsData || []);
     setPauses(pausesData || []);
+    setEmergencies(emergenciesData || []);
     setLoading(false);
+  };
+
+  const respondToEmergency = async (alert) => {
+    setRespondingEmergencyId(alert.id);
+    const { data: { session } } = await supabase.auth.getSession();
+    const { error } = await respondToEmergencyAlert(alert.id, alert.cleaner_id);
+    setRespondingEmergencyId(null);
+    if (error) { toast.error('Could not respond to this alert.'); return; }
+
+    const { data: responderProfile } = await supabase.from('profiles').select('full_name').eq('id', session.user.id).single();
+    setEmergencies((prev) => prev.map((e) => (e.id === alert.id
+      ? { ...e, status: 'acknowledged', acknowledged_by: session.user.id, acknowledged_at: new Date().toISOString(), acknowledger: { full_name: responderProfile?.full_name || 'Admin' } }
+      : e)));
+    toast.success('Cleaner notified - help is on the way.');
   };
 
   const startResolve = (id) => {
@@ -423,6 +448,9 @@ export default function AdminRequests() {
   const filteredExtensions = extensions.filter((r) => extensionFilter === 'all' || (extensionFilter === 'decided' ? r.status !== 'pending' : r.status === extensionFilter));
   const pendingExtensionCount = extensions.filter((r) => r.status === 'pending').length;
 
+  const filteredEmergencies = emergencies.filter((e) => emergencyFilter === 'all' || e.status === emergencyFilter);
+  const openEmergencyCount = emergencies.filter((e) => e.status === 'open').length;
+
   if (loading) return <div className="page-inner">Loading...</div>;
 
   return (
@@ -450,6 +478,9 @@ export default function AdminRequests() {
           </button>
           <button className={section === 'pauses' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('pauses')}>
             Pause Requests ({pendingPauseCount})
+          </button>
+          <button className={section === 'emergencies' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('emergencies')}>
+            Emergency Log ({openEmergencyCount})
           </button>
         </div>
       </div>
@@ -873,6 +904,52 @@ export default function AdminRequests() {
                     </div>
                   </div>
                 )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {section === 'emergencies' && (
+        <>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <button className={emergencyFilter === 'open' ? 'btn-primary' : 'btn-secondary'} onClick={() => setEmergencyFilter('open')}>Open</button>
+            <button className={emergencyFilter === 'acknowledged' ? 'btn-primary' : 'btn-secondary'} onClick={() => setEmergencyFilter('acknowledged')}>Acknowledged</button>
+            <button className={emergencyFilter === 'all' ? 'btn-primary' : 'btn-secondary'} onClick={() => setEmergencyFilter('all')}>All</button>
+          </div>
+
+          {filteredEmergencies.length === 0 && <p className="empty-state">Nothing here.</p>}
+
+          <div className="job-list">
+            {filteredEmergencies.map((e) => (
+              <div key={e.id} className="card job-card" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                  <div>
+                    <h2>{e.profiles?.full_name || 'Unknown cleaner'}</h2>
+                    <p className="job-time">{new Date(e.created_at).toLocaleString()}</p>
+                    <span className={`badge ${e.status === 'acknowledged' ? 'completed' : 'missed'}`}>{e.status}</span>
+                    {e.status === 'acknowledged' && (
+                      <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 4 }}>
+                        Acknowledged by {e.acknowledger?.full_name || 'Unknown'}{e.acknowledged_at && ` · ${new Date(e.acknowledged_at).toLocaleString()}`}
+                      </p>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, height: 'fit-content' }}>
+                    {e.lat != null && e.lng != null && (
+                      <button
+                        className="btn-secondary"
+                        onClick={() => window.open(`/emergency-location/${e.id}`, `emergency-location-${e.id}`, 'width=420,height=560,noopener')}
+                      >
+                        View Location
+                      </button>
+                    )}
+                    {e.status === 'open' && (
+                      <button className="btn-primary" onClick={() => respondToEmergency(e)} disabled={respondingEmergencyId === e.id}>
+                        {respondingEmergencyId === e.id ? 'Responding...' : 'Respond'}
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             ))}
           </div>
