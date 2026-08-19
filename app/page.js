@@ -2,11 +2,35 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
 import { signOutAndClearPresence } from '../lib/signOut';
 import { getSessionAndProfile } from '../lib/authGate';
 
+// The hard-navigation below depends on Supabase actually having written
+// the new session to localStorage first - normally near-instant, but
+// browsers with blocked/partitioned storage (private browsing, strict
+// tracking-prevention modes, some locked-down corporate profiles) never
+// complete that write, so the fresh reload finds no session and bounces
+// straight back to login with no visible error. This checks for the
+// real sb-*-auth-token key rather than assuming the write succeeded.
+function sessionPersisted() {
+  try {
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
+        const raw = window.localStorage.getItem(key);
+        if (raw && raw.includes('access_token')) return true;
+      }
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -47,11 +71,27 @@ export default function LoginPage() {
     // earlier failed background refresh can still be in flight in this
     // tab and clear the brand-new session moments later. A full reload
     // gives the browser a fresh Supabase client with no memory of the
-    // old failure, so the new login actually sticks.
+    // old failure, so the new login actually sticks. But that reload
+    // only works if the session actually made it into localStorage first
+    // - confirm that before committing to it, and fall back to an
+    // in-memory soft navigation (no reload, so no storage round-trip)
+    // if it didn't, rather than silently bouncing back to login.
     const destination = profile?.role === 'admin' || profile?.role === 'supervisor'
       ? '/admin'
       : profile?.role === 'client' ? '/client' : '/cleaner';
-    window.location.href = destination;
+
+    let persisted = sessionPersisted();
+    for (let i = 0; i < 6 && !persisted; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      persisted = sessionPersisted();
+    }
+
+    if (persisted) {
+      window.location.href = destination;
+    } else {
+      setError("This browser isn't saving your sign-in - if you're in private/incognito browsing or have site data blocked, you may need to log in again after navigating. Taking you in now.");
+      router.push(destination);
+    }
   };
 
   const handleLogin = async (e) => {
