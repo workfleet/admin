@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../../../lib/supabaseClient';
+import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
 import { useConfirm } from '../../components/ConfirmProvider';
@@ -307,7 +308,7 @@ export default function AdminRota() {
   };
 
   const loadLookups = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
     const { data: cleanersData } = await supabase

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../../lib/supabaseClient';
+import { getSessionWithRetry } from '../../../../lib/authGate';
 import BackButton from '../../../components/BackButton';
 
 const STATUS_LABELS = { scheduled: 'Scheduled', in_progress: 'In Progress', completed: 'Completed', missed: 'Missed' };
@@ -28,7 +29,7 @@ export default function JobHistory() {
   }, []);
 
   const load = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
     const { data } = await supabase

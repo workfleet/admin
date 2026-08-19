@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
+import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
 import BackButton from '../../components/BackButton';
 
@@ -87,7 +88,7 @@ export default function CleanerRota() {
   }, []);
 
   const load = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
     const [{ data: assignmentRows }, { data: timeOffData }, { data: profileData }] = await Promise.all([

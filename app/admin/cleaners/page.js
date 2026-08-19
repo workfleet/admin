@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
+import { getSessionWithRetry } from '../../../lib/authGate';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
 import BackButton from '../../components/BackButton';
@@ -69,7 +70,7 @@ export default function AdminCleaners() {
   }, []);
 
   const load = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
     // Managing staff accounts stays full-admin only, even though

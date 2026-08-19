@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../../../lib/supabaseClient';
+import { getSessionWithRetry } from '../../../lib/authGate';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
@@ -97,7 +98,7 @@ export default function AdminQuotes() {
   }, []);
 
   const load = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
     const [{ data: ownProfile }, { data: quotesData }, { data: clientsData }, { data: pricingData }] = await Promise.all([

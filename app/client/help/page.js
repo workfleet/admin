@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../../../lib/supabaseClient';
+import { getSessionWithRetry } from '../../../lib/authGate';
 import { COMPANY } from '../../../lib/companyBranding';
 import BackButton from '../../components/BackButton';
 
@@ -74,7 +75,7 @@ export default function ClientHelp() {
 
   useEffect(() => {
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = await getSessionWithRetry();
       if (!session) { router.push('/'); return; }
       setChecked(true);
     })();

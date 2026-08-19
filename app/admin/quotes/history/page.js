@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../../../../lib/supabaseClient';
+import { getSessionWithRetry } from '../../../../lib/authGate';
 import { formatPriceGBP, quoteReference, quoteRecipientName } from '../../../../lib/companyBranding';
 import { ROOM_TYPES, ADDON_TYPES, OVEN_OPTIONS } from '../../../../lib/quoteCalculator';
 import BackButton from '../../../components/BackButton';
@@ -24,7 +25,7 @@ export default function QuoteHistory() {
   }, []);
 
   const load = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
     const { data } = await supabase

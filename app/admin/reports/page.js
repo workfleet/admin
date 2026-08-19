@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Mic, Square } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
+import { getSessionWithRetry } from '../../../lib/authGate';
 import { REPORT_TEMPLATES, DEFAULT_TEMPLATE } from '../../../lib/reportTemplates';
 import BackButton from '../../components/BackButton';
 
@@ -27,7 +28,7 @@ export default function AdminReports() {
   }, []);
 
   const load = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
     const { data } = await supabase

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { CalendarClock, CheckCircle2, MessageSquareWarning, Star } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
+import { getSessionWithRetry } from '../../lib/authGate';
 import BackButton from '../components/BackButton';
 
 export default function ClientDashboard() {
@@ -37,7 +38,7 @@ export default function ClientDashboard() {
   }, []);
 
   const load = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
     const { data: profile } = await supabase.from('profiles').select('client_id').eq('id', session.user.id).single();

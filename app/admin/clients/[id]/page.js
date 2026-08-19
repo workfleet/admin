@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { FileText, Download, Trash2 } from 'lucide-react';
 import { supabase } from '../../../../lib/supabaseClient';
+import { getSessionWithRetry } from '../../../../lib/authGate';
 import AddressAutocomplete from '../../../components/AddressAutocomplete';
 import { INDUSTRY_OPTIONS } from '../../../../lib/clientIndustries';
 import { useConfirm } from '../../../components/ConfirmProvider';
@@ -63,7 +64,7 @@ export default function ClientDetail() {
   }, [id]);
 
   const load = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
     const { data: clientData } = await supabase

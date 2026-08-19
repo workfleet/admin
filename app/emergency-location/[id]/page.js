@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Siren } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
+import { getSessionWithRetry } from '../../../lib/authGate';
 import { respondToEmergencyAlert } from '../../../lib/emergencyRespond';
 
 const PropertyMap = dynamic(() => import('../../components/PropertyMap'), { ssr: false });
@@ -24,7 +25,7 @@ export default function EmergencyLocationPage() {
   }, [id]);
 
   const load = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();

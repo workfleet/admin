@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { X } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
+import { getSessionWithRetry } from '../../lib/authGate';
 import { purgeOldNotifications } from '../../lib/notifications';
 import { getWorkAnniversaryYears } from '../../lib/workAnniversary';
 import WorkAnniversaryPopup from '../components/WorkAnniversaryPopup';
@@ -32,11 +33,8 @@ export default function CleanerDashboard() {
   }, []);
 
   const loadData = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      router.push('/');
-      return;
-    }
+    const session = await getSessionWithRetry();
+    if (!session) { router.push('/'); return; }
 
     const { data: ownProfile } = await supabase
       .from('profiles').select('full_name, created_at').eq('id', session.user.id).single();

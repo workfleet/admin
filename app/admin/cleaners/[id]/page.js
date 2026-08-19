@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '../../../../lib/supabaseClient';
+import { getSessionWithRetry } from '../../../../lib/authGate';
 import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 import { lateMinutes } from '../../../../lib/clockIn';
@@ -84,7 +85,7 @@ export default function CleanerProfile() {
   }, [id]);
 
   const load = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
     // Same admin-only gate as the Cleaners list this page is reached

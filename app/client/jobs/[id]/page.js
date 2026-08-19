@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { CheckCircle2, Circle, Star } from 'lucide-react';
 import { supabase } from '../../../../lib/supabaseClient';
+import { getSessionWithRetry } from '../../../../lib/authGate';
 import { COMPANY } from '../../../../lib/companyBranding';
 import BackButton from '../../../components/BackButton';
 
@@ -36,7 +37,7 @@ export default function ClientJobDetail() {
   }, [id]);
 
   const load = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
     const { data: profile } = await supabase.from('profiles').select('client_id').eq('id', session.user.id).single();

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { supabase } from '../../../../lib/supabaseClient';
+import { getSessionWithRetry } from '../../../../lib/authGate';
 import { notify } from '../../../../lib/notify';
 import { distanceMeters, GEOFENCE_RADIUS_METERS } from '../../../../lib/geo';
 import { useConfirm } from '../../../components/ConfirmProvider';
@@ -38,7 +39,7 @@ export default function JobDetailPage() {
   }, [id]);
 
   const loadJob = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
     setUserId(session.user.id);
 

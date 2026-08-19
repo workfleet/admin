@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FileText, Download } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
+import { getSessionWithRetry } from '../../../lib/authGate';
 import BackButton from '../../components/BackButton';
 
 const CATEGORY_LABELS = { health_safety: 'Health & Safety', policy: 'Policy', contract: 'Contract', other: 'Other' };
@@ -26,7 +27,7 @@ export default function ClientDocuments() {
   }, []);
 
   const load = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
     const { data } = await supabase

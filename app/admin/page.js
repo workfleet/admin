@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ClipboardList, Users, Building2, MapPin, UserX } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
+import { getSessionWithRetry } from '../../lib/authGate';
 import { getWorkAnniversaryYears } from '../../lib/workAnniversary';
 import WorkAnniversaryPopup from '../components/WorkAnniversaryPopup';
 import BackButton from '../components/BackButton';
@@ -139,7 +140,7 @@ export default function AdminDashboard() {
   };
 
   const loadDashboard = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
     const { data: ownProfile } = await supabase.from('profiles').select('role, full_name, created_at').eq('id', session.user.id).single();

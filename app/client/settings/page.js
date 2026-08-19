@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
+import { getSessionWithRetry } from '../../../lib/authGate';
 import BackButton from '../../components/BackButton';
 
 export default function ClientSettings() {
@@ -27,7 +28,7 @@ export default function ClientSettings() {
   }, []);
 
   const load = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
     const { data: profile } = await supabase.from('profiles').select('client_id').eq('id', session.user.id).single();
