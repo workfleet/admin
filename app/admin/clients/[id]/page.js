@@ -68,7 +68,7 @@ export default function ClientDetail() {
 
     const { data: clientData } = await supabase
       .from('clients')
-      .select('id, name, contact_name, email, phone, billing_address, notes, industry, contract_value, contract_renewal_date, contract_notice_days')
+      .select('id, name, contact_name, email, phone, billing_address, notes, industry, contract_value, contract_renewal_date, contract_notice_days, relationship_ended_at')
       .eq('id', id)
       .single();
 
@@ -346,6 +346,41 @@ export default function ClientDetail() {
     router.push('/admin/clients');
   };
 
+  const exportClientData = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch(`/api/admin/clients/${id}/export`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!res.ok) { toast.error('Could not export this client\'s data.'); return; }
+
+    const blob = await res.blob();
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="(.+)"/);
+    const filename = match ? match[1] : `client-${id}-data-export.json`;
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const toggleRelationshipEnded = async () => {
+    if (client.relationship_ended_at) {
+      if (!(await confirm('Clear the "relationship ended" date? This client will no longer be eligible for automatic data retention cleanup.', { title: 'Clear end date' }))) return;
+      const { data, error } = await supabase.from('clients').update({ relationship_ended_at: null }).eq('id', id).select('relationship_ended_at').single();
+      if (!error) { setClient((c) => ({ ...c, ...data })); toast.success('Cleared.'); }
+      return;
+    }
+
+    if (!(await confirm('Mark this client\'s relationship as ended today? Their contact details will be automatically redacted 6 years from now under our data retention policy.', { title: 'Mark relationship ended' }))) return;
+    const { data, error } = await supabase.from('clients').update({ relationship_ended_at: new Date().toISOString() }).eq('id', id).select('relationship_ended_at').single();
+    if (!error) { setClient((c) => ({ ...c, ...data })); toast.success('Marked as ended.'); }
+  };
+
   const addProperty = async (e) => {
     e.preventDefault();
     if (!newAddress.trim()) return;
@@ -459,13 +494,23 @@ export default function ClientDetail() {
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="page-header-row" style={{ marginBottom: isEditing ? 12 : 0 }}>
           <h1 style={{ margin: 0 }}>{client.name}</h1>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn-secondary" onClick={exportClientData}>Export Data</button>
+            <button className="btn-secondary" onClick={toggleRelationshipEnded}>
+              {client.relationship_ended_at ? 'Clear End Date' : 'Mark Relationship Ended'}
+            </button>
             <button className="btn-secondary" onClick={() => (isEditing ? setIsEditing(false) : startEdit())}>
               {isEditing ? 'Cancel' : 'Edit'}
             </button>
             <button className="btn-secondary" onClick={deleteClient}>Delete</button>
           </div>
         </div>
+
+        {client.relationship_ended_at && (
+          <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '4px 0 0' }}>
+            Relationship ended {new Date(client.relationship_ended_at).toLocaleDateString()} - contact details will be automatically redacted on {new Date(new Date(client.relationship_ended_at).setFullYear(new Date(client.relationship_ended_at).getFullYear() + 6)).toLocaleDateString()}.
+          </p>
+        )}
 
         {isEditing ? (
           <form onSubmit={saveEdit} style={{ marginTop: 12 }}>

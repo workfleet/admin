@@ -1,7 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import BackButton from '../../components/BackButton';
+import { supabase } from '../../../lib/supabaseClient';
+import { useToast } from '../../components/ToastProvider';
 
 const HELP_SECTIONS = [
   {
@@ -43,6 +46,26 @@ const HELP_SECTIONS = [
 ];
 
 export default function AdminHelp() {
+  const toast = useToast();
+  const [runningRetention, setRunningRetention] = useState(false);
+
+  const runRetentionSweep = async () => {
+    setRunningRetention(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/admin/enforce-retention', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    setRunningRetention(false);
+
+    if (!res.ok) { toast.error("Couldn't run the retention sweep."); return; }
+    const body = await res.json();
+    const total = body.cleanersProcessed.length + body.clientsProcessed.length;
+    toast.success(total > 0
+      ? `Redacted ${body.cleanersProcessed.length} staff record(s) and ${body.clientsProcessed.length} client record(s) past their 6-year retention date.`
+      : 'Nothing was past its retention date - no records were changed.');
+  };
+
   return (
     <div className="page-inner">
       <BackButton />
@@ -59,6 +82,18 @@ export default function AdminHelp() {
           <p style={{ fontSize: 14, margin: '6px 0 0', lineHeight: 1.5 }}>{s.body}</p>
         </div>
       ))}
+
+      <div className="card" style={{ marginBottom: 12 }}>
+        <h2>Data Retention</h2>
+        <p style={{ fontSize: 14, margin: '6px 0 12px', lineHeight: 1.5 }}>
+          Runs automatically every night, but you can trigger it manually here. It redacts personal
+          details (and deletes any ID document on file) for deactivated staff, and for clients marked
+          "relationship ended", once 6 years have passed - per our <Link href="/privacy">Privacy Notice</Link>.
+        </p>
+        <button className="btn-secondary" onClick={runRetentionSweep} disabled={runningRetention}>
+          {runningRetention ? 'Running...' : 'Run Retention Sweep Now'}
+        </button>
+      </div>
 
       <p style={{ fontSize: 13.5 }}>
         <Link href="/privacy">Privacy Notice</Link>

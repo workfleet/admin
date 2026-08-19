@@ -95,7 +95,7 @@ export default function CleanerProfile() {
 
     const { data: cleanerData } = await supabase
       .from('profiles')
-      .select('id, full_name, role, created_at, active, holiday_adjustment_hours')
+      .select('id, full_name, role, created_at, active, holiday_adjustment_hours, deactivated_at')
       .eq('id', id)
       .single();
 
@@ -255,6 +255,21 @@ export default function CleanerProfile() {
     toast.success('Reminder deleted.');
   };
 
+  const exportCleanerData = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch(`/api/admin/cleaners/${id}/export`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!res.ok) { toast.error("Couldn't generate the export."); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `staff-${id}-data-export.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const toggleActive = async () => {
     const nextActive = !cleaner.active;
     if (!nextActive && !(await confirm(`Deactivate ${cleaner.full_name || 'this cleaner'}? They won't be able to log in until reactivated.`, { danger: true, confirmLabel: 'Deactivate' }))) return;
@@ -350,7 +365,8 @@ export default function CleanerProfile() {
             </h1>
             <p className="job-time" style={{ marginTop: 4 }}>Joined {new Date(cleaner.created_at).toLocaleDateString()}</p>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn-secondary" onClick={exportCleanerData}>Export Data</button>
             <button className="btn-secondary" onClick={toggleActive}>
               {cleaner.active === false ? 'Reactivate' : 'Deactivate'}
             </button>
@@ -361,6 +377,11 @@ export default function CleanerProfile() {
             )}
           </div>
         </div>
+        {cleaner.active === false && cleaner.deactivated_at && (
+          <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '4px 0 0' }}>
+            Deactivated {new Date(cleaner.deactivated_at).toLocaleDateString()} - their onboarding ID and personal details will be automatically redacted on {new Date(new Date(cleaner.deactivated_at).setFullYear(new Date(cleaner.deactivated_at).getFullYear() + 6)).toLocaleDateString()} if they stay deactivated.
+          </p>
+        )}
         {removedEmail && (
           <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 10 }}>
             Removed — <strong>{removedEmail}</strong> is now free to use for a new onboarding invite.

@@ -28,7 +28,7 @@ const SECTIONS = [
   },
   {
     title: 'How long we keep it',
-    body: 'We keep staff records for [RETENTION PERIOD - e.g. the duration of employment plus 6 years, or as required by law]. We keep client and job records for [RETENTION PERIOD]. Data is deleted or anonymised after these periods unless we are required by law to keep it longer.',
+    body: 'We keep staff records for the duration of employment, then anonymise personal details (including deleting any ID document on file) 6 years after someone leaves. We keep client records similarly - 6 years after a client relationship ends. This aligns with the standard UK limitation period for contract claims and the retention period required for accounting records. This runs automatically; some operational records (e.g. completed job history) are kept in anonymised form beyond this for legitimate business reporting.',
   },
   {
     title: 'Who we share it with',
