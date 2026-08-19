@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { supabase } from '../lib/supabaseClient';
 import { signOutAndClearPresence } from '../lib/signOut';
 import { getSessionAndProfile } from '../lib/authGate';
@@ -102,6 +103,7 @@ export default function LoginPage() {
       <p style={{ marginTop: 12, fontSize: 14, color: 'var(--muted)' }}>
         New staff get an account set up via their onboarding invite link.
       </p>
+      <Link href="/privacy" style={{ marginTop: 20, fontSize: 13, color: 'var(--muted)' }}>Privacy Notice</Link>
     </div>
   );
 }

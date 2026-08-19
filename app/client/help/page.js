@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { supabase } from '../../../lib/supabaseClient';
 import { COMPANY } from '../../../lib/companyBranding';
 import BackButton from '../../components/BackButton';
@@ -110,6 +111,10 @@ export default function ClientHelp() {
           <a href={`mailto:${COMPANY.email}`}>{COMPANY.email}</a> or {COMPANY.phone}.
         </p>
       </div>
+
+      <p style={{ fontSize: 13.5, marginTop: 12 }}>
+        <Link href="/privacy">Privacy Notice</Link>
+      </p>
     </div>
   );
 }

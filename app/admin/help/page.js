@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import BackButton from '../../components/BackButton';
 
 const HELP_SECTIONS = [
@@ -58,6 +59,10 @@ export default function AdminHelp() {
           <p style={{ fontSize: 14, margin: '6px 0 0', lineHeight: 1.5 }}>{s.body}</p>
         </div>
       ))}
+
+      <p style={{ fontSize: 13.5 }}>
+        <Link href="/privacy">Privacy Notice</Link>
+      </p>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { FileText, Download } from 'lucide-react';
 import { POLICY_SECTIONS } from '../../../lib/companyPolicies';
 import { supabase } from '../../../lib/supabaseClient';
@@ -140,6 +141,10 @@ export default function CleanerHelp() {
           })}
         </>
       )}
+
+      <p style={{ fontSize: 13.5, marginTop: 16 }}>
+        <Link href="/privacy">Privacy Notice</Link>
+      </p>
     </div>
   );
 }
