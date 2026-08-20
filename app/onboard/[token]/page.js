@@ -6,9 +6,10 @@ import { POLICY_SECTIONS } from '../../../lib/companyPolicies';
 
 // CrewConnect's actual zero-hours worker contract (supplied by admin).
 // Worker name/address are filled in from what they've entered above; pay
-// rate, pay frequency, and the sickness-notification time are left as
-// blanks exactly as authored in the source document - those are business
-// terms, not something to invent here. The "Signed for and on behalf of
+// rate (£13/hr), pay frequency (weekly), and the sickness-notification
+// deadline (7am on the morning of the allocated shift) are the company's
+// standard terms for every hire, confirmed by admin - not per-hire values.
+// The "Signed for and on behalf of
 // the Company" block is omitted from what's shown/digitally signed here,
 // since that's the company's own countersignature, handled separately -
 // this flow only captures the worker's side (signed_name/signed_at/
@@ -70,8 +71,8 @@ Start Date: _____________________
 5.3 Initial shifts may be supervised and/or treated as training or trial shifts during the probationary period.
 
 6. Pay, Timesheets, Travel & Driving Requirements
-6.1 The Worker will be paid GBP ________ per hour.
-6.2 Pay will be made [weekly/monthly] directly into the Worker's nominated bank account.
+6.1 The Worker will be paid GBP 13.00 per hour.
+6.2 Pay will be made weekly directly into the Worker's nominated bank account.
 6.3 Unless otherwise agreed in writing, travel time and mileage are not paid.
 6.4 The Worker must accurately record working hours using the Company's timesheet or clock-in procedures.
 6.5 Falsification of timesheets, clock-in records, or working records may result in disciplinary action, including dismissal.
@@ -90,7 +91,7 @@ Start Date: _____________________
 7.6 The Company reserves the right to refuse holiday requests where operational requirements, staffing levels, or client commitments cannot reasonably accommodate the requested leave.
 
 8. Sickness Absence
-8.1 The Worker must notify the Company as soon as possible, and no later than [time], on the first day of sickness absence.
+8.1 The Worker must notify the Company of sickness absence no later than 7am on the morning of their allocated shift.
 8.2 The Worker may qualify for Statutory Sick Pay (SSP) in accordance with current legislation.
 8.3 No contractual or enhanced company sick pay is provided.
 8.4 Statutory Sick Pay will only be payable where the Worker meets the qualifying conditions under current legislation.
@@ -179,19 +180,19 @@ Start Date: _____________________
 By typing your full name below and clicking "Sign & Submit", you confirm that the details you've provided are accurate and that this constitutes your signature as the Worker named above, agreeing to the terms of this Agreement.`;
 }
 
-// PLACEHOLDER — a starting point, not legal advice. Review with a solicitor
-// or your usual HR guidance before using this for real staff, and fill in
-// the bracketed retention period to match your actual policy.
+// A starting point, not legal advice - review with a solicitor or your
+// usual HR guidance before relying on this. Retention period matches the
+// 6-year policy actually enforced by app/api/admin/enforce-retention.
 const PRIVACY_NOTICE = `We collect the details on this form (including your
 date of birth, home address, National Insurance number, and a photo of
 your ID) to set you up as a member of staff, run payroll, and meet our
 legal obligations as an employer.
 
 This information is stored securely and is only accessible to admin staff
-who need it for these purposes. We keep it for [RETENTION PERIOD — e.g.
-the duration of your employment plus 6 years, or as required by law], after
-which it is deleted. You can ask what information we hold about you, or
-ask us to correct it, at any time by contacting your employer.`;
+who need it for these purposes. We keep it for the duration of your
+employment plus 6 years afterwards, after which it is anonymised. You can
+ask what information we hold about you, or ask us to correct it, at any
+time by contacting your employer.`;
 
 export default function OnboardPage() {
   const { token } = useParams();
