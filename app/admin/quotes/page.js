@@ -218,6 +218,8 @@ export default function AdminQuotes() {
   const [savingPricing, setSavingPricing] = useState(false);
 
   const [showForm, setShowForm] = useState(false);
+  // Null while writing a new quote; the quote's id while editing one.
+  const [editingQuoteId, setEditingQuoteId] = useState(null);
   const [recipientType, setRecipientType] = useState('client'); // client | prospect
   const [clientId, setClientId] = useState('');
   const [prospectName, setProspectName] = useState('');
@@ -253,7 +255,7 @@ export default function AdminQuotes() {
       supabase.from('profiles').select('role').eq('id', session.user.id).single(),
       supabase
         .from('quotes')
-        .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, status, valid_until, notes, created_at, archived_at, calculator_breakdown, shift_schedule, clients(name)')
+        .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, status, valid_until, notes, created_at, archived_at, calculator_input, calculator_breakdown, shift_schedule, clients(name)')
         .order('created_at', { ascending: false }),
       supabase.from('clients').select('id, name').order('name'),
       supabase.from('pricing_settings').select('*').single(),
@@ -314,6 +316,7 @@ export default function AdminQuotes() {
   };
 
   const resetForm = () => {
+    setEditingQuoteId(null);
     setRecipientType('client');
     setClientId('');
     setProspectName('');
@@ -333,6 +336,48 @@ export default function AdminQuotes() {
     if (!useCalculator || !pricingSettings) return null;
     return calculateQuote(calcInput, pricingSettings);
   }, [useCalculator, calcInput, pricingSettings]);
+
+  // Puts a saved quote back into the form it was written in. The
+  // pricing mode is inferred from what was stored rather than kept as a
+  // column: a schedule means it was priced on shifts, calculator input
+  // means the room calculator, neither means it was typed by hand.
+  const startEditQuote = (quote) => {
+    setEditingQuoteId(quote.id);
+    setRecipientType(quote.client_id ? 'client' : 'prospect');
+    setClientId(quote.client_id || '');
+    setProspectName(quote.prospect_name || '');
+    setProspectEmail(quote.prospect_email || '');
+    setProspectPhone(quote.prospect_phone || '');
+    setDescription(quote.description || '');
+    setPrice(String(quote.price ?? ''));
+    setValidUntil(quote.valid_until || '');
+    setNotes(quote.notes || '');
+
+    setSiteAddress(quote.shift_schedule?.siteAddress || quote.calculator_input?.propertyAddress || '');
+
+    // Merged over the empty shape so a quote saved before a field
+    // existed doesn't leave the form with undefined inputs.
+    setCalcInput(quote.calculator_input
+      ? {
+        ...EMPTY_CALC_INPUT,
+        ...quote.calculator_input,
+        rooms: { ...EMPTY_ROOMS, ...(quote.calculator_input.rooms || {}) },
+        addons: {
+          ...(quote.calculator_input.serviceType === 'gardening' ? EMPTY_GARDEN_ADDONS : EMPTY_ADDONS),
+          ...(quote.calculator_input.addons || {}),
+        },
+      }
+      : EMPTY_CALC_INPUT);
+
+    setShiftSchedule(quote.shift_schedule
+      ? { ...EMPTY_SHIFT_SCHEDULE, ...quote.shift_schedule }
+      : EMPTY_SHIFT_SCHEDULE);
+
+    setPricingMode(quote.shift_schedule ? 'schedule' : quote.calculator_input ? 'calculator' : 'manual');
+
+    setShowForm(true);
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const scheduleSummary = useMemo(
     () => (useShiftSchedule ? summariseShiftSchedule(shiftSchedule) : null),
@@ -398,7 +443,7 @@ export default function AdminQuotes() {
     if (breakdown) setDescription(defaultQuoteDescription(calcInput, breakdown, siteAddress));
   };
 
-  const createQuote = async (e) => {
+  const saveQuote = async (e) => {
     e.preventDefault();
     if (!description.trim() || !price) return;
     if (recipientType === 'client' && !clientId) return;
@@ -416,7 +461,8 @@ export default function AdminQuotes() {
       price: parseFloat(price),
       valid_until: validUntil || null,
       notes: notes.trim() || null,
-      created_by: session.user.id,
+      // Set on creation only - editing a quote doesn't make you its author.
+      ...(editingQuoteId ? {} : { created_by: session.user.id }),
       calculator_input: useCalculator ? { ...calcInput, propertyAddress: siteAddress } : null,
       calculator_breakdown: useCalculator ? breakdown : null,
       // Only stored once it prices something - a half-filled pattern
@@ -424,14 +470,20 @@ export default function AdminQuotes() {
       shift_schedule: scheduleSummary ? { ...shiftSchedule, siteAddress } : null,
     };
 
-    const { data } = await supabase
-      .from('quotes')
-      .insert(payload)
-      .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, status, valid_until, notes, created_at, archived_at, calculator_breakdown, shift_schedule, clients(name)')
-      .single();
+    const query = editingQuoteId
+      ? supabase.from('quotes').update(payload).eq('id', editingQuoteId)
+      : supabase.from('quotes').insert(payload);
+
+    const { data, error } = await query.select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, status, valid_until, notes, created_at, archived_at, calculator_input, calculator_breakdown, shift_schedule, clients(name)').single();
 
     setCreating(false);
-    if (data) setQuotes((prev) => [data, ...prev]);
+    if (error || !data) { toast.error('Could not save the quote.'); return; }
+
+    setQuotes((prev) => (editingQuoteId
+      ? prev.map((q) => (q.id === editingQuoteId ? data : q))
+      : [data, ...prev]));
+    toast.success(editingQuoteId ? 'Quote updated.' : 'Quote added.');
+
     resetForm();
     setShowForm(false);
   };
@@ -523,7 +575,11 @@ export default function AdminQuotes() {
               {showPricingSettings ? 'Cancel' : 'Pricing Settings'}
             </button>
           )}
-          <button className="btn-primary" onClick={() => setShowForm((s) => !s)} title="Write a new quote for a client">
+          <button
+            className="btn-primary"
+            onClick={() => { if (showForm) { resetForm(); setShowForm(false); } else { resetForm(); setShowForm(true); } }}
+            title="Write a new quote for a client"
+          >
             {showForm ? 'Cancel' : '+ New Quote'}
           </button>
         </div>
@@ -592,10 +648,10 @@ export default function AdminQuotes() {
       {showForm && (
         <div className="card job-form-card">
           <div className="job-form-header">
-            <h2>New Quote</h2>
-            <button className="job-form-close" type="button" onClick={() => setShowForm(false)}>×</button>
+            <h2>{editingQuoteId ? 'Edit Quote' : 'New Quote'}</h2>
+            <button className="job-form-close" type="button" onClick={() => { resetForm(); setShowForm(false); }}>×</button>
           </div>
-          <form onSubmit={createQuote}>
+          <form onSubmit={saveQuote}>
             <div className="job-form-body">
               <div className="field">
                 <label className="field-label">Who's this for?</label>
@@ -920,8 +976,10 @@ export default function AdminQuotes() {
               </div>
             </div>
             <div className="job-form-actions">
-              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
-              <button type="submit" className="btn-primary" disabled={creating}>{creating ? 'Adding...' : 'Add Quote'}</button>
+              <button type="button" className="btn-secondary" onClick={() => { resetForm(); setShowForm(false); }}>Cancel</button>
+              <button type="submit" className="btn-primary" disabled={creating}>
+                {creating ? 'Saving...' : editingQuoteId ? 'Save Changes' : 'Add Quote'}
+              </button>
             </div>
           </form>
         </div>
@@ -1017,6 +1075,7 @@ export default function AdminQuotes() {
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
+                  <button className="btn-secondary" onClick={() => startEditQuote(quote)} title="Change the wording, price or details of this quote">Edit</button>
                   <button className="btn-secondary" onClick={() => downloadQuoteFile(quote, 'pdf')} title="Download this quote as a PDF to send to the client">PDF</button>
                   <button className="btn-secondary" onClick={() => downloadQuoteFile(quote, 'docx')} title="Download this quote as a Word document you can edit first">Word</button>
                   {quote.archived_at ? (
