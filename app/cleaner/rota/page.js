@@ -218,7 +218,7 @@ export default function CleanerRota() {
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 style={{ margin: 0 }}>Time Off</h2>
-          <button className="btn-secondary" onClick={() => { setShowForm((s) => !s); setForm(EMPTY_FORM); setFormError(''); }}>
+          <button className="btn-secondary" onClick={() => { setShowForm((s) => !s); setForm(EMPTY_FORM); setFormError(''); }} title="Request holiday, or tell the office you are unavailable on certain days">
             {showForm ? 'Cancel' : '+ Request'}
           </button>
         </div>

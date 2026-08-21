@@ -265,7 +265,7 @@ export default function AdminDataReports() {
           <h1>Data Reports</h1>
           <p className="page-subtitle">Pull data for clients, staff, hours, jobs, and more</p>
         </div>
-        <button className="btn-secondary" onClick={handleDownload} disabled={loading || rows.length === 0} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <button className="btn-secondary" onClick={handleDownload} disabled={loading || rows.length === 0} style={{ display: 'flex', alignItems: 'center', gap: 6 }} title="Download the rows below as a spreadsheet file">
           <Download size={16} /> Download CSV
         </button>
       </div>

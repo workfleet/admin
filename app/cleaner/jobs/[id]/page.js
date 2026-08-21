@@ -358,7 +358,7 @@ export default function JobDetailPage() {
       <div className="card">
         <h2>Check In / Out</h2>
         {!checkin && !isHistory && (
-          <button onClick={handleCheckIn} disabled={checkingIn}>
+          <button onClick={handleCheckIn} disabled={checkingIn} title="Start this job - your location is checked to confirm you are on site">
             {checkingIn ? 'Checking location...' : 'Check In'}
           </button>
         )}
@@ -371,7 +371,7 @@ export default function JobDetailPage() {
           </p>
         )}
         {checkin && !checkin.checked_out_at && !isHistory && (
-          <button onClick={handleCheckOut}>Check Out</button>
+          <button onClick={handleCheckOut} title="Finish this job and record the time you left">Check Out</button>
         )}
       </div>
 
@@ -389,7 +389,7 @@ export default function JobDetailPage() {
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h2 style={{ margin: 0 }}>Can't Make This Shift?</h2>
-                <button className="btn-secondary" onClick={() => setShowCoverForm((s) => !s)}>
+                <button className="btn-secondary" onClick={() => setShowCoverForm((s) => !s)} title="Offer this shift to the rest of the team - it stays yours until someone takes it">
                   {showCoverForm ? 'Cancel' : 'Ask for cover'}
                 </button>
               </div>
@@ -420,7 +420,7 @@ export default function JobDetailPage() {
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={{ margin: 0 }}>Need More Time?</h2>
-            <button className="btn-secondary" onClick={() => setShowExtensionForm((s) => !s)}>
+            <button className="btn-secondary" onClick={() => setShowExtensionForm((s) => !s)} title="Ask the office for more time on this job">
               {showExtensionForm ? 'Cancel' : 'Request'}
             </button>
           </div>

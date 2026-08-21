@@ -144,7 +144,7 @@ export default function ClientSettings() {
               style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10, background: '#f8fafc', fontSize: 14, fontFamily: 'inherit', marginBottom: 8, resize: 'vertical' }}
             />
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button className="btn-secondary" onClick={() => saveAccessNotes(p.id)} disabled={savingPropertyId === p.id}>
+              <button className="btn-secondary" onClick={() => saveAccessNotes(p.id)} disabled={savingPropertyId === p.id} title="Save these access notes - your cleaners see them on the job">
                 {savingPropertyId === p.id ? 'Saving...' : 'Save'}
               </button>
               {savedPropertyId === p.id && <span style={{ fontSize: 13, color: 'var(--wf-verified-ink)' }}>Saved</span>}

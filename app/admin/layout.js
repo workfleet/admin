@@ -94,7 +94,7 @@ export default function AdminLayout({ children }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <EnablePush iconColor="white" />
           <PresenceIndicator iconColor="white" />
-          <button type="button" className="admin-topbar-menu-btn" onClick={() => setDrawerOpen(true)} aria-label="Open menu">
+          <button type="button" className="admin-topbar-menu-btn" onClick={() => setDrawerOpen(true)} aria-label="Open menu" title="Open the menu">
             <Menu size={20} />
           </button>
         </div>
@@ -110,7 +110,7 @@ export default function AdminLayout({ children }) {
           </div>
           <EnablePush />
           <PresenceIndicator />
-          <button type="button" className="sidebar-close" onClick={() => setDrawerOpen(false)} aria-label="Close menu">
+          <button type="button" className="sidebar-close" onClick={() => setDrawerOpen(false)} aria-label="Close menu" title="Close the menu">
             <X size={18} />
           </button>
         </div>

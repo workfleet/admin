@@ -712,13 +712,13 @@ export default function AdminRota() {
           <p className="page-subtitle">{weekLabel}</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn-secondary" onClick={() => setWeekStart(addDays(weekStart, -7))}>‹ Prev</button>
-          <button className="btn-secondary" onClick={() => setWeekStart(getMonday(new Date()))}>Today</button>
-          <button className="btn-secondary" onClick={() => setWeekStart(addDays(weekStart, 7))}>Next ›</button>
+          <button className="btn-secondary" onClick={() => setWeekStart(addDays(weekStart, -7))} title="Go back a week">‹ Prev</button>
+          <button className="btn-secondary" onClick={() => setWeekStart(getMonday(new Date()))} title="Jump back to this week">Today</button>
+          <button className="btn-secondary" onClick={() => setWeekStart(addDays(weekStart, 7))} title="Go forward a week">Next ›</button>
           <Link href="/admin/rota/history" className="btn-secondary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
             History
           </Link>
-          <button className="btn-primary" onClick={() => setShowForm((s) => !s)}>
+          <button className="btn-primary" onClick={() => setShowForm((s) => !s)} title="Schedule a new job and assign staff to it">
             {showForm ? 'Cancel' : '+ New Job'}
           </button>
         </div>
@@ -810,6 +810,7 @@ export default function AdminRota() {
                     type="button"
                     className={`duration-chip ${useCustomDuration ? 'active' : ''}`}
                     onClick={() => setUseCustomDuration(true)}
+                    title="Enter a length that is not one of the presets"
                   >
                     Custom
                   </button>
@@ -929,7 +930,7 @@ export default function AdminRota() {
 
             <div className="job-form-actions">
               <button type="button" className="btn-secondary" onClick={resetForm}>Cancel</button>
-              <button type="submit" className="btn-primary">Add Job</button>
+              <button type="submit" className="btn-primary" title="Create this job and notify anyone you have assigned to it">Add Job</button>
             </div>
           </form>
         </div>
@@ -1011,11 +1012,11 @@ export default function AdminRota() {
             <span className={`badge ${selectedJob.status}`}>{selectedJob.status.replace('_', ' ')}</span>
             <div style={{ display: 'flex', gap: 8 }}>
               {selectedJob.series_id && (
-                <button className="btn-secondary" onClick={() => deleteFutureInSeries(selectedJob)}>
+                <button className="btn-secondary" onClick={() => deleteFutureInSeries(selectedJob)} title="Delete this job and every future one in the recurring series - past ones are kept">
                   Delete this + future in series
                 </button>
               )}
-              <button className="btn-secondary" onClick={() => deleteJob(selectedJob)}>Delete Job</button>
+              <button className="btn-secondary" onClick={() => deleteJob(selectedJob)} title="Delete just this one job - this cannot be undone">Delete Job</button>
             </div>
           </div>
           {selectedJob.series_id && (
@@ -1062,6 +1063,7 @@ export default function AdminRota() {
                   type="button"
                   className={`duration-chip ${editUseCustomDuration ? 'active' : ''}`}
                   onClick={() => setEditUseCustomDuration(true)}
+                  title="Enter a length that is not one of the presets"
                 >
                   Custom
                 </button>
@@ -1097,6 +1099,7 @@ export default function AdminRota() {
               onClick={saveJobDetails}
               disabled={savingJob}
               style={{ marginTop: 10, width: '100%' }}
+              title="Save the changes to this job's date, time and length"
             >
               {savingJob ? 'Saving...' : 'Save Changes'}
             </button>
@@ -1111,7 +1114,7 @@ export default function AdminRota() {
             {(selectedJob.job_assignments || []).map((a) => (
               <div key={a.cleaner_id} className="task-row" style={{ justifyContent: 'space-between' }}>
                 <span style={{ fontSize: 14 }}>{a.profiles?.full_name || 'Unknown'}</span>
-                <button className="btn-secondary" onClick={() => removeCleanerFromJob(selectedJob.id, a.cleaner_id)}>Remove</button>
+                <button className="btn-secondary" onClick={() => removeCleanerFromJob(selectedJob.id, a.cleaner_id)} title="Take this person off the job - they are told it has been unassigned">Remove</button>
               </div>
             ))}
             {availableToAdd.length > 0 && (
@@ -1130,6 +1133,7 @@ export default function AdminRota() {
                   className="btn-primary"
                   disabled={!addCleanerSelection}
                   onClick={() => { addCleanerToJob(selectedJob.id, addCleanerSelection); setAddCleanerSelection(''); }}
+                  title="Put this person on the job - they get a notification about the new shift"
                 >
                   Add
                 </button>
@@ -1193,7 +1197,7 @@ export default function AdminRota() {
                     <option key={t.id} value={t.id}>{t.name} ({t.job_template_items.length} items)</option>
                   ))}
                 </select>
-                <button className="btn-secondary" disabled={!applyTemplateSelection} onClick={applyTemplateToJob}>Apply</button>
+                <button className="btn-secondary" disabled={!applyTemplateSelection} onClick={applyTemplateToJob} title="Copy every task from the chosen template onto this job">Apply</button>
               </div>
             )}
             {jobTasks.length === 0 && (
@@ -1202,7 +1206,7 @@ export default function AdminRota() {
             {jobTasks.map((task) => (
               <div key={task.id} className={`task-row ${task.completed ? 'done' : ''}`}>
                 <span style={{ flex: 1 }}>{task.description}</span>
-                <button className="btn-secondary" onClick={() => deleteTask(task.id)}>Remove</button>
+                <button className="btn-secondary" onClick={() => deleteTask(task.id)} title="Remove this task from the job">Remove</button>
               </div>
             ))}
             <form onSubmit={addTask} style={{ display: 'flex', gap: 8, marginTop: 10 }}>

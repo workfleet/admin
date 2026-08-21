@@ -121,7 +121,7 @@ export default function AdminTemplates() {
           <h1>Job Templates</h1>
           <p className="page-subtitle">Reusable checklists you can apply to any job instead of retyping tasks each time</p>
         </div>
-        <button className="btn-primary" onClick={toggleForm}>
+        <button className="btn-primary" onClick={toggleForm} title="Build a reusable checklist you can drop onto any job">
           {showForm ? 'Cancel' : '+ New Template'}
         </button>
       </div>
@@ -158,7 +158,7 @@ export default function AdminTemplates() {
                     </button>
                   </div>
                 ))}
-                <button type="button" className="btn-secondary" onClick={() => setNewItems((prev) => [...prev, ''])}>
+                <button type="button" className="btn-secondary" onClick={() => setNewItems((prev) => [...prev, ''])} title="Add another empty task line">
                   + Add item
                 </button>
               </div>
@@ -184,10 +184,10 @@ export default function AdminTemplates() {
                   <p className="job-time">{t.job_template_items.length} item{t.job_template_items.length === 1 ? '' : 's'}</p>
                 </div>
                 <div style={{ display: 'flex', gap: 8, height: 'fit-content' }}>
-                  <button className="btn-secondary" onClick={() => setExpandedId(isExpanded ? null : t.id)}>
+                  <button className="btn-secondary" onClick={() => setExpandedId(isExpanded ? null : t.id)} title="Show or hide the tasks in this template">
                     {isExpanded ? 'Hide' : 'Edit'}
                   </button>
-                  <button className="btn-secondary" onClick={() => deleteTemplate(t.id)}>Delete</button>
+                  <button className="btn-secondary" onClick={() => deleteTemplate(t.id)} title="Delete this template - jobs it was already applied to keep their tasks">Delete</button>
                 </div>
               </div>
 
@@ -196,7 +196,7 @@ export default function AdminTemplates() {
                   {t.job_template_items.map((item) => (
                     <div key={item.id} className="task-row">
                       <span style={{ flex: 1 }}>{item.description}</span>
-                      <button className="btn-secondary" onClick={() => removeItem(t.id, item.id)}>Remove</button>
+                      <button className="btn-secondary" onClick={() => removeItem(t.id, item.id)} title="Remove this task from the template">Remove</button>
                     </div>
                   ))}
                   <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
@@ -206,7 +206,7 @@ export default function AdminTemplates() {
                       placeholder="e.g. Empty bins"
                       style={{ flex: 1, marginBottom: 0 }}
                     />
-                    <button className="btn-primary" onClick={() => addItem(t.id)}>Add</button>
+                    <button className="btn-primary" onClick={() => addItem(t.id)} title="Add this task to the template">Add</button>
                   </div>
                 </div>
               )}

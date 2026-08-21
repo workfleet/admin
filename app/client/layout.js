@@ -68,7 +68,7 @@ export default function ClientLayout({ children }) {
           <div className="sidebar-logo">CC</div>
           <div className="sidebar-brand-name">CrewConnect</div>
         </div>
-        <button type="button" className="client-topbar-menu-btn" onClick={() => setDrawerOpen(true)} aria-label="Open menu">
+        <button type="button" className="client-topbar-menu-btn" onClick={() => setDrawerOpen(true)} aria-label="Open menu" title="Open the menu">
           <Menu size={20} />
         </button>
       </div>
@@ -82,7 +82,7 @@ export default function ClientLayout({ children }) {
             <div className="sidebar-brand-name">CrewConnect</div>
             <div className="sidebar-brand-sub">Client Portal</div>
           </div>
-          <button type="button" className="client-sidebar-close" onClick={() => setDrawerOpen(false)} aria-label="Close menu">
+          <button type="button" className="client-sidebar-close" onClick={() => setDrawerOpen(false)} aria-label="Close menu" title="Close the menu">
             <X size={18} />
           </button>
         </div>

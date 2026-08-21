@@ -139,7 +139,7 @@ export default function AdminTasks() {
           <h1>Team Tasks</h1>
           <p className="page-subtitle">Internal work assigned between admins and supervisors — your own list first, everyone else's below</p>
         </div>
-        <button className="btn-primary" onClick={() => setShowForm((s) => !s)}>
+        <button className="btn-primary" onClick={() => setShowForm((s) => !s)} title="Add a task for the team to pick up">
           {showForm ? 'Cancel' : '+ New Task'}
         </button>
       </div>
@@ -178,7 +178,7 @@ export default function AdminTasks() {
             </div>
             <div className="job-form-actions">
               <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
-              <button type="submit" className="btn-primary" disabled={creating}>{creating ? 'Adding...' : 'Add Task'}</button>
+              <button type="submit" className="btn-primary" disabled={creating} title="Save this task">{creating ? 'Adding...' : 'Add Task'}</button>
             </div>
           </form>
         </div>
@@ -217,7 +217,7 @@ export default function AdminTasks() {
                       )}
                     </p>
                   </div>
-                  <button className="btn-secondary" onClick={() => deleteTask(task.id)} style={{ height: 'fit-content' }}>Delete</button>
+                  <button className="btn-secondary" onClick={() => deleteTask(task.id)} style={{ height: 'fit-content' }} title="Delete this task">Delete</button>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--hairline)' }}>

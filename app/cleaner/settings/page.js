@@ -74,7 +74,7 @@ export default function CleanerSettings() {
 
       <div className="card" style={{ marginTop: 12 }}>
         <h2>Account</h2>
-        <button className="btn-secondary" onClick={logout} style={{ marginTop: 8 }}>Log Out</button>
+        <button className="btn-secondary" onClick={logout} style={{ marginTop: 8 }} title="Sign out of the app on this device">Log Out</button>
       </div>
     </div>
   );

@@ -145,6 +145,7 @@ export default function ShiftCoverCard({ userId, onChange }) {
                 onClick={() => cancelOwn(offer)}
                 disabled={busyId === offer.id}
                 style={{ flexShrink: 0 }}
+                title="Take this shift back off the cover list - it stays yours"
               >
                 Withdraw
               </button>
@@ -182,6 +183,7 @@ export default function ShiftCoverCard({ userId, onChange }) {
                   onClick={() => accept(offer)}
                   disabled={busyId === offer.id}
                   style={{ flex: 1 }}
+                  title="Take this shift on - it goes straight onto your rota"
                 >
                   {busyId === offer.id ? 'Just a sec...' : "I'll take it"}
                 </button>
@@ -191,6 +193,7 @@ export default function ShiftCoverCard({ userId, onChange }) {
                   onClick={() => decline(offer)}
                   disabled={busyId === offer.id}
                   style={{ flex: 1 }}
+                  title="Hide this one - it stays available for everyone else"
                 >
                   Not me
                 </button>

@@ -178,6 +178,7 @@ export default function AdminCleaners() {
         <button
           className="btn-primary"
           onClick={() => { setShowAddForm((s) => !s); setJustCreated(null); setCreateError(''); }}
+          title="Create a staff account directly, without sending an onboarding invite"
         >
           {showAddForm ? 'Cancel' : '+ Add Staff'}
         </button>
@@ -218,7 +219,7 @@ export default function AdminCleaners() {
                     placeholder="At least 8 characters"
                     style={{ flex: 1, marginBottom: 0 }}
                   />
-                  <button type="button" className="btn-secondary" onClick={() => setNewPassword(generatePassword())}>
+                  <button type="button" className="btn-secondary" onClick={() => setNewPassword(generatePassword())} title="Generate a random password for them">
                     Generate
                   </button>
                 </div>
@@ -290,6 +291,7 @@ export default function AdminCleaners() {
                       className="btn-secondary"
                       onClick={(e) => { e.stopPropagation(); isEditingAdjustment ? setEditingAdjustmentId(null) : startEditAdjustment(c); }}
                       style={{ padding: '2px 10px', fontSize: 12, marginLeft: 4 }}
+                      title="Manually adjust this person's holiday balance up or down"
                     >
                       {isEditingAdjustment ? 'Cancel' : 'Adjust'}
                     </button>
@@ -300,6 +302,7 @@ export default function AdminCleaners() {
                   className="btn-secondary"
                   onClick={(e) => { e.stopPropagation(); toggleActive(c); }}
                   style={{ height: 'fit-content' }}
+                  title="Switch this account between active and deactivated - deactivating blocks login but keeps their history"
                 >
                   {c.active === false ? 'Reactivate' : 'Deactivate'}
                 </button>
@@ -319,7 +322,7 @@ export default function AdminCleaners() {
                     style={{ width: 80 }}
                     autoFocus
                   />
-                  <button className="btn-primary" onClick={() => saveAdjustment(c.id)}>Save</button>
+                  <button className="btn-primary" onClick={() => saveAdjustment(c.id)} title="Save the holiday adjustment">Save</button>
                 </div>
               )}
             </div>

@@ -146,7 +146,7 @@ export default function AdminInventory() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn-primary" onClick={() => setShowAddForm((s) => !s)}>
+          <button className="btn-primary" onClick={() => setShowAddForm((s) => !s)} title="Add a product to the inventory">
             {showAddForm ? 'Cancel' : '+ Product'}
           </button>
         </div>
@@ -187,7 +187,7 @@ export default function AdminInventory() {
             </div>
             <div className="job-form-actions">
               <button type="button" className="btn-secondary" onClick={() => setShowAddForm(false)}>Cancel</button>
-              <button type="submit" className="btn-primary">Add Product</button>
+              <button type="submit" className="btn-primary" title="Save this product to the inventory">Add Product</button>
             </div>
           </form>
         </div>
@@ -212,9 +212,9 @@ export default function AdminInventory() {
             </div>
             {shoppingListItems.length > 0 && (
               <div style={{ display: 'flex', gap: 8 }} onClick={(e) => e.stopPropagation()}>
-                <button className="btn-secondary" onClick={() => downloadShoppingList('docx')}>Word</button>
-                <button className="btn-secondary" onClick={() => downloadShoppingList('xlsx')}>Excel</button>
-                <button className="btn-secondary" onClick={() => downloadShoppingList('pdf')}>PDF</button>
+                <button className="btn-secondary" onClick={() => downloadShoppingList('docx')} title="Download the shopping list as a Word document">Word</button>
+                <button className="btn-secondary" onClick={() => downloadShoppingList('xlsx')} title="Download the shopping list as an Excel spreadsheet">Excel</button>
+                <button className="btn-secondary" onClick={() => downloadShoppingList('pdf')} title="Download the shopping list as a PDF">PDF</button>
               </div>
             )}
           </div>
@@ -260,14 +260,14 @@ export default function AdminInventory() {
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <button type="button" className="btn-secondary" onClick={() => adjustStock(p, -1)} style={{ padding: '6px 8px' }} aria-label="Decrease">
+                <button type="button" className="btn-secondary" onClick={() => adjustStock(p, -1)} style={{ padding: '6px 8px' }} aria-label="Decrease" title="Take one off the stock count">
                   <Minus size={14} />
                 </button>
                 <strong style={{ fontSize: 16, minWidth: 28, textAlign: 'center' }}>{formatQty(p.stock_level)}</strong>
-                <button type="button" className="btn-secondary" onClick={() => adjustStock(p, 1)} style={{ padding: '6px 8px' }} aria-label="Increase">
+                <button type="button" className="btn-secondary" onClick={() => adjustStock(p, 1)} style={{ padding: '6px 8px' }} aria-label="Increase" title="Add one to the stock count">
                   <Plus size={14} />
                 </button>
-                <button type="button" className="btn-secondary" onClick={() => deleteProduct(p)} style={{ padding: '6px 8px' }} aria-label="Remove">
+                <button type="button" className="btn-secondary" onClick={() => deleteProduct(p)} style={{ padding: '6px 8px' }} aria-label="Remove" title="Delete this product from the inventory">
                   <Trash2 size={14} />
                 </button>
               </div>

@@ -223,7 +223,7 @@ export default function ClientJobDetail() {
               </div>
             </form>
           ) : (
-            <button type="button" className="btn-secondary" onClick={() => setShowRescheduleForm(true)}>
+            <button type="button" className="btn-secondary" onClick={() => setShowRescheduleForm(true)} title="Ask us to move this clean to a different date or time">
               Request a different time
             </button>
           )}

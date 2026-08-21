@@ -161,7 +161,7 @@ export default function CleanerDashboard() {
                 type="button"
                 className="dismiss-btn"
                 onClick={() => dismissNotification(n.id)}
-                aria-label="Dismiss notification"
+                aria-label="Dismiss notification" title="Dismiss this — it stays in your history for 30 days"
               >
                 <X size={14} />
               </button>

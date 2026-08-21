@@ -175,7 +175,7 @@ export default function AdminReports() {
                   <span className={`badge ${job.status}`}>{job.status.replace('_', ' ')}</span>
                   {report && <span className="badge completed" style={{ marginLeft: 6 }}>report ready</span>}
                 </div>
-                <button className="btn-secondary" onClick={() => toggleExpand(job)}>
+                <button className="btn-secondary" onClick={() => toggleExpand(job)} title="Show or hide the report and notes for this job">
                   {isExpanded ? 'Close' : report ? 'View Report' : 'Generate Report'}
                 </button>
               </div>
@@ -232,7 +232,7 @@ export default function AdminReports() {
                       />
                       Add to client portal
                     </label>
-                    <button className="btn-secondary" onClick={() => setEditingReport(true)}>
+                    <button className="btn-secondary" onClick={() => setEditingReport(true)} title="Write it again from new notes - the current report is replaced">
                       Regenerate
                     </button>
                   </div>
@@ -265,6 +265,7 @@ export default function AdminReports() {
                         className="btn-secondary"
                         onClick={toggleRecording}
                         style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                        title="Dictate your notes instead of typing them"
                       >
                         {recording ? <Square size={14} /> : <Mic size={14} />}
                         {recording ? 'Stop' : 'Speak notes'}
@@ -275,6 +276,7 @@ export default function AdminReports() {
                         onClick={() => generateReport(job.id)}
                         disabled={generating}
                         style={{ flex: 1 }}
+                        title="Write a report from your notes and the job's photos"
                       >
                         {generating ? 'Generating...' : report ? 'Regenerate Report' : 'Generate Report'}
                       </button>

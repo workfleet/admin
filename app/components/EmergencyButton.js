@@ -58,7 +58,7 @@ export default function EmergencyButton() {
       type="button"
       onClick={raiseAlert}
       disabled={sending}
-      aria-label="Send emergency alert to admin"
+      aria-label="Send emergency alert to admin" title="Raise an emergency alert — admins and supervisors are contacted straight away"
       className="emergency-fab"
       title={justSent ? 'Alert sent - admin has been notified' : 'Emergency alert'}
     >

@@ -181,6 +181,7 @@ export default function AdminDocuments() {
               className={audience === 'everyone' ? 'btn-primary' : 'btn-secondary'}
               onClick={() => setAudience('everyone')}
               style={{ flex: 1 }}
+              title="Share whatever you upload next with every member of staff"
             >
               Everyone
             </button>
@@ -189,6 +190,7 @@ export default function AdminDocuments() {
               className={audience === 'specific' ? 'btn-primary' : 'btn-secondary'}
               onClick={() => setAudience('specific')}
               style={{ flex: 1 }}
+              title="Pick which cleaners can see whatever you upload next"
             >
               Certain cleaners
             </button>
@@ -255,10 +257,10 @@ export default function AdminDocuments() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                  <button type="button" className="btn-secondary" onClick={() => handleDownload(doc)} aria-label="Download" style={{ padding: '8px 10px' }}>
+                  <button type="button" className="btn-secondary" onClick={() => handleDownload(doc)} aria-label="Download" title="Download this document" style={{ padding: '8px 10px' }}>
                     <Download size={16} />
                   </button>
-                  <button type="button" className="btn-secondary" onClick={() => handleDelete(doc)} aria-label="Delete" style={{ padding: '8px 10px' }}>
+                  <button type="button" className="btn-secondary" onClick={() => handleDelete(doc)} aria-label="Delete" title="Delete this document — staff will no longer be able to see it" style={{ padding: '8px 10px' }}>
                     <Trash2 size={16} />
                   </button>
                 </div>

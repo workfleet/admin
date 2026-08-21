@@ -98,6 +98,7 @@ export default function AdminClients() {
         <button
           className="btn-primary"
           onClick={() => { setShowClientForm((s) => !s); setClientForm(EMPTY_PROFILE); }}
+          title="Add a new client and their first site"
         >
           {showClientForm ? 'Cancel' : '+ New Client'}
         </button>

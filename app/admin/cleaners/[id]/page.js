@@ -389,12 +389,12 @@ export default function CleanerProfile() {
             <p className="job-time" style={{ marginTop: 4 }}>Joined {new Date(cleaner.created_at).toLocaleDateString()}</p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="btn-secondary" onClick={exportCleanerData}>Export Data</button>
-            <button className="btn-secondary" onClick={toggleActive}>
+            <button className="btn-secondary" onClick={exportCleanerData} title="Download everything held about this person as a file - use this to answer a data request">Export Data</button>
+            <button className="btn-secondary" onClick={toggleActive} title="Switch this account between active and deactivated - deactivating blocks login but keeps all their history">
               {cleaner.active === false ? 'Reactivate' : 'Deactivate'}
             </button>
             {cleaner.active !== false && (
-              <button className="btn-secondary" onClick={removeAccount} disabled={removing}>
+              <button className="btn-secondary" onClick={removeAccount} disabled={removing} title="Deactivate them and free up their email so a new starter can use it - their history is kept, and this is blocked while they still hold keys">
                 {removing ? 'Removing...' : 'Remove Account'}
               </button>
             )}
@@ -436,7 +436,7 @@ export default function CleanerProfile() {
                   Open ID Document
                 </a>
               ) : (
-                <button className="btn-secondary" onClick={viewDocument} disabled={docLoading}>
+                <button className="btn-secondary" onClick={viewDocument} disabled={docLoading} title="Open the ID document they uploaded when they onboarded">
                   {docLoading ? 'Loading...' : 'View ID Document'}
                 </button>
               )}
@@ -484,7 +484,7 @@ export default function CleanerProfile() {
                 )}
                 {c.notes && <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>{c.notes}</div>}
               </div>
-              <button className="btn-secondary" onClick={() => deleteCertification(c.id)}>Delete</button>
+              <button className="btn-secondary" onClick={() => deleteCertification(c.id)} title="Delete this certification record">Delete</button>
             </div>
           );
         })}
@@ -499,11 +499,11 @@ export default function CleanerProfile() {
             <input value={newCertNotes} onChange={(e) => setNewCertNotes(e.target.value)} placeholder="e.g. Reference number, issuing body" />
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
               <button type="button" className="btn-secondary" onClick={() => setIsAddingCert(false)}>Cancel</button>
-              <button type="submit" className="btn-primary">Add Certification</button>
+              <button type="submit" className="btn-primary" title="Save this certification against this person">Add Certification</button>
             </div>
           </form>
         ) : (
-          <button className="btn-secondary" onClick={() => setIsAddingCert(true)} style={{ marginTop: certifications.length ? 12 : 0 }}>
+          <button className="btn-secondary" onClick={() => setIsAddingCert(true)} style={{ marginTop: certifications.length ? 12 : 0 }} title="Record a certification or check against this person, with its expiry date">
             + Certification
           </button>
         )}
@@ -512,7 +512,7 @@ export default function CleanerProfile() {
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="page-header-row" style={{ marginBottom: editingAdjustment ? 12 : 0 }}>
           <h2 style={{ margin: 0 }}>Holiday</h2>
-          <button className="btn-secondary" onClick={() => (editingAdjustment ? setEditingAdjustment(false) : startEditAdjustment())}>
+          <button className="btn-secondary" onClick={() => (editingAdjustment ? setEditingAdjustment(false) : startEditAdjustment())} title="Manually adjust their holiday balance up or down">
             {editingAdjustment ? 'Cancel' : 'Adjust'}
           </button>
         </div>
@@ -532,7 +532,7 @@ export default function CleanerProfile() {
               style={{ width: 80 }}
               autoFocus
             />
-            <button className="btn-primary" onClick={saveAdjustment}>Save</button>
+            <button className="btn-primary" onClick={saveAdjustment} title="Save the holiday adjustment">Save</button>
           </div>
         )}
       </div>
@@ -555,10 +555,10 @@ export default function CleanerProfile() {
                 {r.notes && <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>{r.notes}</div>}
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
-                <button className="btn-secondary" onClick={() => completeReminder(r)}>
+                <button className="btn-secondary" onClick={() => completeReminder(r)} title="Mark this reminder done - yearly ones roll forward to next year">
                   {r.recurs_yearly ? 'Done (reset to next year)' : 'Done'}
                 </button>
-                <button className="btn-secondary" onClick={() => deleteReminder(r.id)}>Delete</button>
+                <button className="btn-secondary" onClick={() => deleteReminder(r.id)} title="Delete this reminder">Delete</button>
               </div>
             </div>
           );
@@ -585,11 +585,11 @@ export default function CleanerProfile() {
             />
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
               <button type="button" className="btn-secondary" onClick={() => setIsAddingReminder(false)}>Cancel</button>
-              <button type="submit" className="btn-primary">Add Reminder</button>
+              <button type="submit" className="btn-primary" title="Save this reminder">Add Reminder</button>
             </div>
           </form>
         ) : (
-          <button className="btn-secondary" onClick={() => setIsAddingReminder(true)} style={{ marginTop: reminders.length ? 12 : 0 }}>
+          <button className="btn-secondary" onClick={() => setIsAddingReminder(true)} style={{ marginTop: reminders.length ? 12 : 0 }} title="Set a reminder about this person, such as a review or an expiring document">
             + Reminder
           </button>
         )}

@@ -128,6 +128,7 @@ export default function AdminOnboarding() {
         <button
           className="btn-primary"
           onClick={() => { setShowForm((s) => !s); setJustCreatedLink(null); }}
+          title={showForm ? 'Close the form' : 'Create an invite link for a new starter to set up their own account'}
         >
           {showForm ? 'Cancel' : '+ New Invite'}
         </button>
@@ -163,7 +164,7 @@ export default function AdminOnboarding() {
             </div>
             <div className="job-form-actions">
               <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
-              <button type="submit" className="btn-primary">Send Invite</button>
+              <button type="submit" className="btn-primary" title="Create the invite and email them a link to set up their own account">Send Invite</button>
             </div>
           </form>
         </div>
@@ -179,6 +180,7 @@ export default function AdminOnboarding() {
             <button
               className="btn-secondary"
               onClick={() => copyLink(justCreatedLink.split('/onboard/')[1])}
+              title="Copy this link so you can send it to them yourself"
             >
               Copy
             </button>
@@ -210,14 +212,14 @@ export default function AdminOnboarding() {
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   {invite.status === 'pending' && !expired && (
-                    <button className="btn-secondary" onClick={() => copyLink(invite.token)}>Copy Link</button>
+                    <button className="btn-secondary" onClick={() => copyLink(invite.token)} title="Copy this invite link so you can send it to them yourself">Copy Link</button>
                   )}
                   {submission && (
-                    <button className="btn-secondary" onClick={() => toggleExpand(invite)}>
+                    <button className="btn-secondary" onClick={() => toggleExpand(invite)} title="Show or hide the details they submitted">
                       {isExpanded ? 'Hide details' : 'View details'}
                     </button>
                   )}
-                  <button className="btn-secondary" onClick={() => deleteInvite(invite.id)}>Delete</button>
+                  <button className="btn-secondary" onClick={() => deleteInvite(invite.id)} title="Delete this invite - the link stops working immediately">Delete</button>
                 </div>
               </div>
 

@@ -195,7 +195,11 @@ export default function AdminKeys() {
             Every key, fob and access code issued — who holds it now, and the signed handover trail
           </p>
         </div>
-        <button type="button" onClick={() => setShowAddForm((s) => !s)}>
+        <button
+          type="button"
+          onClick={() => setShowAddForm((s) => !s)}
+          title={showAddForm ? 'Close the form without adding anything' : 'Add a new key, fob or access code to the register'}
+        >
           {showAddForm ? 'Cancel' : 'Add Key'}
         </button>
       </div>
@@ -247,7 +251,13 @@ export default function AdminKeys() {
             Don't write the actual alarm code or key-safe number here. The register records who
             was given it and when it was handed back — the code itself stays out of the system.
           </p>
-          <button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Add Key'}</button>
+          <button
+            type="submit"
+            disabled={saving}
+            title="Save this key to the register - it starts off in the office, not issued to anyone"
+          >
+            {saving ? 'Saving...' : 'Add Key'}
+          </button>
         </form>
       )}
 
@@ -282,7 +292,7 @@ export default function AdminKeys() {
                 className="btn-secondary"
                 onClick={() => returnKey(key, holding)}
                 style={{ padding: '8px 10px' }}
-                aria-label="Record return"
+                aria-label="Record return" title="Record this key as handed back to the office"
               >
                 <Undo2 size={16} />
               </button>
@@ -327,7 +337,12 @@ export default function AdminKeys() {
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'flex-start' }}>
                       {key.active && !holding && (
-                        <button type="button" className="btn-secondary" onClick={() => startIssue(key.id)}>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => startIssue(key.id)}
+                          title={issuingKeyId === key.id ? 'Close without issuing' : 'Hand this key to a staff member - they will be asked to sign for it'}
+                        >
                           {issuingKeyId === key.id ? 'Cancel' : 'Issue'}
                         </button>
                       )}
@@ -336,7 +351,7 @@ export default function AdminKeys() {
                           type="button"
                           className="btn-secondary"
                           onClick={() => returnKey(key, holding)}
-                          aria-label="Record return"
+                          aria-label="Record return" title="Record this key as handed back to the office"
                           style={{ padding: '8px 10px' }}
                         >
                           <Undo2 size={16} />
@@ -347,7 +362,7 @@ export default function AdminKeys() {
                           type="button"
                           className="btn-secondary"
                           onClick={() => setHistoryKeyId(historyKeyId === key.id ? null : key.id)}
-                          aria-label="History"
+                          aria-label="History" title="Show everyone who has held this key"
                           style={{ padding: '8px 10px' }}
                         >
                           <History size={16} />
@@ -358,7 +373,7 @@ export default function AdminKeys() {
                           type="button"
                           className="btn-secondary"
                           onClick={() => retireKey(key)}
-                          aria-label="Retire key"
+                          aria-label="Retire key" title="Retire this key — keeps its history, stops it being issued again"
                           style={{ padding: '8px 10px' }}
                         >
                           <Archive size={16} />
@@ -398,7 +413,12 @@ export default function AdminKeys() {
                           placeholder="e.g. Handed over at the office, on the blue fob"
                         />
                       </div>
-                      <button type="submit" disabled={saving} style={{ width: '100%' }}>
+                      <button
+                        type="submit"
+                        disabled={saving}
+                        style={{ width: '100%' }}
+                        title="Sign this key out to the chosen person and notify them to confirm they have it"
+                      >
                         {saving ? 'Issuing...' : 'Issue Key'}
                       </button>
                     </form>

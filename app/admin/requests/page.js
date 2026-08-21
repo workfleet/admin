@@ -523,7 +523,7 @@ export default function AdminRequests() {
                   {r.status === 'resolved' ? (
                     <button className="btn-secondary" onClick={() => reopen(r.id)} style={{ height: 'fit-content' }}>Reopen</button>
                   ) : (
-                    <button className="btn-secondary" onClick={() => startResolve(r.id)} style={{ height: 'fit-content' }}>Mark Resolved</button>
+                    <button className="btn-secondary" onClick={() => startResolve(r.id)} style={{ height: 'fit-content' }} title="Add a note and close this request off - the cleaner is told what you did">Mark Resolved</button>
                   )}
                 </div>
 
@@ -540,7 +540,7 @@ export default function AdminRequests() {
                     />
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button className="btn-secondary" onClick={() => setResolvingId(null)}>Cancel</button>
-                      <button className="btn-primary" onClick={() => confirmResolve(r.id)}>Confirm Resolved</button>
+                      <button className="btn-primary" onClick={() => confirmResolve(r.id)} title="Save your note and mark this request resolved">Confirm Resolved</button>
                     </div>
                   </div>
                 )}
@@ -590,8 +590,8 @@ export default function AdminRequests() {
                   </div>
                   {t.status === 'pending' && (
                     <div style={{ display: 'flex', gap: 8, height: 'fit-content' }}>
-                      <button className="btn-secondary" onClick={() => startDecide(t.id, 'declined')}>Decline</button>
-                      <button className="btn-primary" onClick={() => startDecide(t.id, 'approved')}>Approve</button>
+                      <button className="btn-secondary" onClick={() => startDecide(t.id, 'declined')} title="Turn this time off request down - you can add a note first">Decline</button>
+                      <button className="btn-primary" onClick={() => startDecide(t.id, 'approved')} title="Approve this time off - you can add a note, and you will be warned if they already have jobs booked in that week">Approve</button>
                     </div>
                   )}
                 </div>
@@ -664,9 +664,9 @@ export default function AdminRequests() {
                   </div>
                   {r.status === 'pending' && r.jobs && (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, height: 'fit-content', justifyContent: 'flex-end' }}>
-                      <button className="btn-secondary" onClick={() => startDecideExtension(r.id, 'declined')}>Decline</button>
+                      <button className="btn-secondary" onClick={() => startDecideExtension(r.id, 'declined')} title="Turn down the extra time asked for on this job">Decline</button>
                       <button className="btn-secondary" onClick={() => startDecideExtension(r.id, 'alternative_suggested')}>Suggest Alternative</button>
-                      <button className="btn-primary" onClick={() => startDecideExtension(r.id, 'approved')}>Approve</button>
+                      <button className="btn-primary" onClick={() => startDecideExtension(r.id, 'approved')} title="Give this cleaner the extra minutes they asked for">Approve</button>
                     </div>
                   )}
                 </div>
@@ -761,8 +761,8 @@ export default function AdminRequests() {
                     </div>
                     {r.status === 'pending' && (
                       <div style={{ display: 'flex', gap: 8, height: 'fit-content' }}>
-                        <button className="btn-secondary" onClick={() => startDecideReschedule(r.id)}>Decline</button>
-                        <button className="btn-primary" onClick={() => startDecideReschedule(r.id)}>Approve</button>
+                        <button className="btn-secondary" onClick={() => startDecideReschedule(r.id)} title="Turn down this request to move the job - you can add a note first">Decline</button>
+                        <button className="btn-primary" onClick={() => startDecideReschedule(r.id)} title="Move the job to the date and time the client asked for">Approve</button>
                       </div>
                     )}
                   </div>
@@ -780,8 +780,8 @@ export default function AdminRequests() {
                       />
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button className="btn-secondary" onClick={() => setDecidingRescheduleId(null)}>Cancel</button>
-                        <button className="btn-secondary" onClick={() => confirmDecideReschedule(r.id, 'declined')}>Confirm Decline</button>
-                        <button className="btn-primary" onClick={() => confirmDecideReschedule(r.id, 'approved')}>Confirm Approval</button>
+                        <button className="btn-secondary" onClick={() => confirmDecideReschedule(r.id, 'declined')} title="Send the decline, along with your note">Confirm Decline</button>
+                        <button className="btn-primary" onClick={() => confirmDecideReschedule(r.id, 'approved')} title="Move the job to the date and time the client asked for">Confirm Approval</button>
                       </div>
                     </div>
                   )}
@@ -823,7 +823,7 @@ export default function AdminRequests() {
                   {r.status === 'resolved' ? (
                     <button className="btn-secondary" onClick={() => reopenClientRequest(r.id)} style={{ height: 'fit-content' }}>Reopen</button>
                   ) : (
-                    <button className="btn-secondary" onClick={() => startResolveClientRequest(r.id)} style={{ height: 'fit-content' }}>Mark Resolved</button>
+                    <button className="btn-secondary" onClick={() => startResolveClientRequest(r.id)} style={{ height: 'fit-content' }} title="Add a note and close this client request off - the client sees the note">Mark Resolved</button>
                   )}
                 </div>
 
@@ -840,7 +840,7 @@ export default function AdminRequests() {
                     />
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button className="btn-secondary" onClick={() => setResolvingClientRequestId(null)}>Cancel</button>
-                      <button className="btn-primary" onClick={() => confirmResolveClientRequest(r.id)}>Confirm Resolved</button>
+                      <button className="btn-primary" onClick={() => confirmResolveClientRequest(r.id)} title="Save your note and mark this request resolved">Confirm Resolved</button>
                     </div>
                   </div>
                 )}
@@ -883,8 +883,8 @@ export default function AdminRequests() {
                   </div>
                   {p.status === 'pending' && (
                     <div style={{ display: 'flex', gap: 8, height: 'fit-content' }}>
-                      <button className="btn-secondary" onClick={() => startDecidePause(p.id)}>Decline</button>
-                      <button className="btn-primary" onClick={() => startDecidePause(p.id)}>Approve</button>
+                      <button className="btn-secondary" onClick={() => startDecidePause(p.id)} title="Turn down this request to pause their cleans - you can add a note first">Decline</button>
+                      <button className="btn-primary" onClick={() => startDecidePause(p.id)} title="Approve pausing this client's cleans - check the rota, jobs already booked in are not cancelled for you">Approve</button>
                     </div>
                   )}
                 </div>
@@ -902,8 +902,8 @@ export default function AdminRequests() {
                     />
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button className="btn-secondary" onClick={() => setDecidingPauseId(null)}>Cancel</button>
-                      <button className="btn-secondary" onClick={() => confirmDecidePause(p.id, 'declined')}>Confirm Decline</button>
-                      <button className="btn-primary" onClick={() => confirmDecidePause(p.id, 'approved')}>Confirm Approval</button>
+                      <button className="btn-secondary" onClick={() => confirmDecidePause(p.id, 'declined')} title="Send the decline, along with your note">Confirm Decline</button>
+                      <button className="btn-primary" onClick={() => confirmDecidePause(p.id, 'approved')} title="Approve the pause - existing jobs in that period are not cancelled for you, check the rota">Confirm Approval</button>
                     </div>
                   </div>
                 )}

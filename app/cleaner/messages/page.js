@@ -181,7 +181,7 @@ export default function CleanerMessages() {
       <BackButton />
       <div className="page-header-row" style={{ marginBottom: 12 }}>
         <h1 style={{ margin: 0 }}>Chats</h1>
-        <button className="btn-secondary" onClick={() => (showDirectory ? setShowDirectory(false) : openDirectory())}>
+        <button className="btn-secondary" onClick={() => (showDirectory ? setShowDirectory(false) : openDirectory())} title="Start a new conversation with someone on the team">
           {showDirectory ? 'Cancel' : '+ New Chat'}
         </button>
       </div>

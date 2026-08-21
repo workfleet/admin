@@ -271,7 +271,7 @@ export default function ClientDashboard() {
             </div>
           </form>
         ) : (
-          <button type="button" className="btn-secondary" onClick={() => setShowPauseForm(true)}>
+          <button type="button" className="btn-secondary" onClick={() => setShowPauseForm(true)} title="Ask us to pause your cleans for a period">
             + Request a Pause
           </button>
         )}

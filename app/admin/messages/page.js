@@ -246,7 +246,7 @@ export default function AdminMessages() {
       {mode === 'staff' && (
         <>
           <div style={{ marginBottom: 16 }}>
-            <button className="btn-secondary" onClick={() => (showDirectory ? setShowDirectory(false) : openDirectory())}>
+            <button className="btn-secondary" onClick={() => (showDirectory ? setShowDirectory(false) : openDirectory())} title="Start a new conversation with a member of staff">
               {showDirectory ? 'Cancel' : '+ New Chat'}
             </button>
           </div>

@@ -469,7 +469,7 @@ export default function AdminDashboard() {
                     </div>
                     <div className="dash-row-subtitle">{item.subtitle}</div>
                   </div>
-                  <button className="btn-secondary" onClick={() => completeReminder(item)}>Done</button>
+                  <button className="btn-secondary" onClick={() => completeReminder(item)} title="Mark this reminder done and clear it off your dashboard">Done</button>
                 </div>
               );
             }
@@ -607,6 +607,7 @@ export default function AdminDashboard() {
               <button
                 type="button"
                 onClick={() => { completeTodo(detailItem.rawId); setDetailItem(null); }}
+                title="Tick this off your to-do list"
               >
                 Mark Resolved
               </button>

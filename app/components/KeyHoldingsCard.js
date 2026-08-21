@@ -105,6 +105,7 @@ export default function KeyHoldingsCard({ userId }) {
                 onClick={() => sign(h)}
                 disabled={signing === h.id || !(signatures[h.id] || '').trim()}
                 style={{ width: '100%' }}
+                title="Sign to confirm you were handed this - it goes on the record and cannot be changed afterwards"
               >
                 {signing === h.id ? 'Saving...' : 'Confirm I have it'}
               </button>

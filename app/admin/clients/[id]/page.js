@@ -496,14 +496,14 @@ export default function ClientDetail() {
         <div className="page-header-row" style={{ marginBottom: isEditing ? 12 : 0 }}>
           <h1 style={{ margin: 0 }}>{client.name}</h1>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="btn-secondary" onClick={exportClientData}>Export Data</button>
-            <button className="btn-secondary" onClick={toggleRelationshipEnded}>
+            <button className="btn-secondary" onClick={exportClientData} title="Download everything held about this client as a file - use this to answer a data request">Export Data</button>
+            <button className="btn-secondary" onClick={toggleRelationshipEnded} title="Record that this client has left, which starts the 6 year clock on redacting their contact details - or clear that date again">
               {client.relationship_ended_at ? 'Clear End Date' : 'Mark Relationship Ended'}
             </button>
-            <button className="btn-secondary" onClick={() => (isEditing ? setIsEditing(false) : startEdit())}>
+            <button className="btn-secondary" onClick={() => (isEditing ? setIsEditing(false) : startEdit())} title="Edit this client's details">
               {isEditing ? 'Cancel' : 'Edit'}
             </button>
-            <button className="btn-secondary" onClick={deleteClient}>Delete</button>
+            <button className="btn-secondary" onClick={deleteClient} title="Delete this client and all their properties - this cannot be undone">Delete</button>
           </div>
         </div>
 
@@ -677,10 +677,10 @@ export default function ClientDetail() {
                   )}
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="btn-secondary" onClick={() => toggleChecklist(p.id)}>
+                  <button className="btn-secondary" onClick={() => toggleChecklist(p.id)} title="Show or hide the room-by-room checklist for this property">
                     {expandedPropertyId === p.id ? 'Close' : 'Checklist'}
                   </button>
-                  <button className="btn-secondary" onClick={() => deleteProperty(p.id)}>Remove</button>
+                  <button className="btn-secondary" onClick={() => deleteProperty(p.id)} title="Delete this property">Remove</button>
                 </div>
               </div>
 
@@ -703,7 +703,7 @@ export default function ClientDetail() {
                       {items.map((item) => (
                         <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
                           <span style={{ fontSize: 14 }}>{item.task}</span>
-                          <button className="btn-secondary" onClick={() => deleteChecklistItem(p.id, item.id)} style={{ padding: '4px 8px', fontSize: 12 }}>
+                          <button className="btn-secondary" onClick={() => deleteChecklistItem(p.id, item.id)} style={{ padding: '4px 8px', fontSize: 12 }} title="Remove this item from the checklist">
                             Delete
                           </button>
                         </div>
@@ -751,7 +751,7 @@ export default function ClientDetail() {
               </div>
             </form>
           ) : (
-            <button className="btn-secondary" onClick={() => setIsAddingProperty(true)} style={{ marginTop: properties.length ? 12 : 0 }}>
+            <button className="btn-secondary" onClick={() => setIsAddingProperty(true)} style={{ marginTop: properties.length ? 12 : 0 }} title="Add another site for this client">
               + Property
             </button>
           )}
@@ -796,7 +796,7 @@ export default function ClientDetail() {
                   {log.profiles?.full_name && ` · logged by ${log.profiles.full_name}`}
                 </div>
               </div>
-              <button className="btn-secondary" onClick={() => deleteCallLog(log.id)}>Remove</button>
+              <button className="btn-secondary" onClick={() => deleteCallLog(log.id)} title="Delete this call log entry">Remove</button>
             </div>
           ))}
         </div>
@@ -844,10 +844,10 @@ export default function ClientDetail() {
                   {r.notes && <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>{r.notes}</div>}
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="btn-secondary" onClick={() => completeReminder(r)}>
+                  <button className="btn-secondary" onClick={() => completeReminder(r)} title="Mark this reminder done - yearly ones roll forward to next year">
                     {r.recurs_yearly ? 'Done (reset to next year)' : 'Done'}
                   </button>
-                  <button className="btn-secondary" onClick={() => deleteReminder(r.id)}>Delete</button>
+                  <button className="btn-secondary" onClick={() => deleteReminder(r.id)} title="Delete this reminder">Delete</button>
                 </div>
               </div>
             );
@@ -878,7 +878,7 @@ export default function ClientDetail() {
               </div>
             </form>
           ) : (
-            <button className="btn-secondary" onClick={() => setIsAddingReminder(true)} style={{ marginTop: (reminders?.length || 0) ? 12 : 0 }}>
+            <button className="btn-secondary" onClick={() => setIsAddingReminder(true)} style={{ marginTop: (reminders?.length || 0) ? 12 : 0 }} title="Set a reminder about this client, such as a contract review or price rise">
               + Reminder
             </button>
           )}
@@ -954,10 +954,10 @@ export default function ClientDetail() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                    <button type="button" className="btn-secondary" onClick={() => downloadClientDoc(doc)} aria-label="Download" style={{ padding: '8px 10px' }}>
+                    <button type="button" className="btn-secondary" onClick={() => downloadClientDoc(doc)} aria-label="Download" title="Download this document" style={{ padding: '8px 10px' }}>
                       <Download size={16} />
                     </button>
-                    <button type="button" className="btn-secondary" onClick={() => deleteClientDoc(doc)} aria-label="Delete" style={{ padding: '8px 10px' }}>
+                    <button type="button" className="btn-secondary" onClick={() => deleteClientDoc(doc)} aria-label="Delete" title="Delete this document permanently" style={{ padding: '8px 10px' }}>
                       <Trash2 size={16} />
                     </button>
                   </div>

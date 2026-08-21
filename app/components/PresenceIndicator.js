@@ -111,7 +111,7 @@ export default function PresenceIndicator({ iconColor = 'var(--muted)' }) {
           }
           setOpen((o) => !o);
         }}
-        aria-label="Who's online"
+        aria-label="Who's online" title="See who else is online right now"
         style={{
           background: 'transparent', border: 'none', padding: 6, cursor: 'pointer',
           position: 'relative', display: 'flex', alignItems: 'center',

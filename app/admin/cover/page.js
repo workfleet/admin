@@ -191,7 +191,11 @@ export default function AdminCover() {
             Shifts that need someone — offered to every free cleaner, first to accept takes it
           </p>
         </div>
-        <button type="button" onClick={() => setShowOpenForm((s) => !s)}>
+        <button
+          type="button"
+          onClick={() => setShowOpenForm((s) => !s)}
+          title={showOpenForm ? 'Close the form without opening a request' : 'Offer one of your upcoming shifts out for cover'}
+        >
           {showOpenForm ? 'Cancel' : 'Request Cover'}
         </button>
       </div>
@@ -226,7 +230,13 @@ export default function AdminCover() {
               placeholder="e.g. Extra pair of hands needed, client asked for two"
             />
           </div>
-          <button type="submit" disabled={saving}>{saving ? 'Opening...' : 'Open Cover Request'}</button>
+          <button
+            type="submit"
+            disabled={saving}
+            title="Offer this shift to every free cleaner - first to accept takes it"
+          >
+            {saving ? 'Opening...' : 'Open Cover Request'}
+          </button>
         </form>
       )}
 
@@ -268,7 +278,12 @@ export default function AdminCover() {
                 >
                   {assigningOfferId === offer.id ? 'Close' : 'Assign'}
                 </button>
-                <button type="button" className="btn-secondary" onClick={() => cancelOffer(offer)}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => cancelOffer(offer)}
+                  title="Withdraw this cover request - the shift stays with whoever is on it now"
+                >
                   Cancel
                 </button>
               </div>
@@ -287,7 +302,13 @@ export default function AdminCover() {
                       ))}
                   </select>
                 </div>
-                <button type="button" onClick={() => assignCover(offer)} disabled={saving || !assignCleanerId} style={{ width: '100%' }}>
+                <button
+                  type="button"
+                  onClick={() => assignCover(offer)}
+                  disabled={saving || !assignCleanerId}
+                  style={{ width: '100%' }}
+                  title="Put this cleaner on the shift now and stop offering it to everyone else"
+                >
                   {saving ? 'Assigning...' : 'Assign & Close Request'}
                 </button>
               </div>
