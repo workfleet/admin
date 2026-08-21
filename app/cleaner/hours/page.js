@@ -160,12 +160,13 @@ export default function CleanerHours() {
       </div>
 
       <h2 style={{ marginTop: 24, marginBottom: 4 }}>Month by month</h2>
-      <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
-        Tap a month to see the jobs behind it.
-      </p>
 
-      {months.length === 0 && (
+      {months.length === 0 ? (
         <p className="empty-state">No completed jobs yet — your hours will appear here as you finish them.</p>
+      ) : (
+        <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
+          Tap a month to see the jobs behind it.
+        </p>
       )}
 
       {months.map((month) => {
@@ -176,6 +177,7 @@ export default function CleanerHours() {
               type="button"
               onClick={() => setExpanded(open ? null : month.key)}
               aria-expanded={open}
+              aria-label={`${month.label}, ${formatHours(month.hours)} across ${month.jobs.length} job${month.jobs.length === 1 ? '' : 's'}`}
               style={{
                 width: '100%', border: 'none', borderRadius: 0, background: 'transparent', color: 'inherit',
                 padding: '14px 16px', textAlign: 'left', display: 'block', cursor: 'pointer',
