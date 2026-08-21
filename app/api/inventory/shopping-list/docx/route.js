@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, HeadingLevel, ShadingType } from 'docx';
 import { supabaseAdmin } from '../../../../../lib/supabaseAdmin';
+import { needsReorder } from '../../../../../lib/inventory';
 import { COMPANY } from '../../../../../lib/companyBranding';
 
 export const runtime = 'nodejs';
@@ -39,7 +40,7 @@ export async function GET(request) {
     .select('name, stock_level, reorder_threshold, location, supplier')
     .order('name');
 
-  const lowStock = (products || []).filter((p) => p.stock_level <= p.reorder_threshold);
+  const lowStock = (products || []).filter(needsReorder);
   const widths = [3600, 1600, 1600, 2200, 1600];
 
   const rows = [

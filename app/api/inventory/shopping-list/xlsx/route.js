@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
 import { supabaseAdmin } from '../../../../../lib/supabaseAdmin';
+import { needsReorder } from '../../../../../lib/inventory';
 
 export const runtime = 'nodejs';
 
@@ -26,7 +27,7 @@ export async function GET(request) {
     .select('name, stock_level, reorder_threshold, location, supplier, unit_price')
     .order('name');
 
-  const lowStock = (products || []).filter((p) => p.stock_level <= p.reorder_threshold);
+  const lowStock = (products || []).filter(needsReorder);
 
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Shopping List');

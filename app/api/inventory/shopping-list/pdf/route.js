@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Document, Page, View, Text, StyleSheet, renderToBuffer } from '@react-pdf/renderer';
 import { supabaseAdmin } from '../../../../../lib/supabaseAdmin';
+import { needsReorder } from '../../../../../lib/inventory';
 import { COMPANY } from '../../../../../lib/companyBranding';
 
 // @react-pdf/renderer needs real Node APIs (fs, fontkit) - not the edge runtime.
@@ -79,7 +80,7 @@ export async function GET(request) {
     .select('name, stock_level, reorder_threshold, location, supplier')
     .order('name');
 
-  const lowStock = (products || []).filter((p) => p.stock_level <= p.reorder_threshold);
+  const lowStock = (products || []).filter(needsReorder);
 
   const buffer = await renderToBuffer(<ShoppingListPdf items={lowStock} />);
   const stamp = new Date().toISOString().slice(0, 10);

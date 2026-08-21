@@ -7,6 +7,7 @@ import { ClipboardList, Users, Building2, MapPin, UserX } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../lib/authGate';
 import { getWorkAnniversaryYears } from '../../lib/workAnniversary';
+import { needsReorder } from '../../lib/inventory';
 import WorkAnniversaryPopup from '../components/WorkAnniversaryPopup';
 import BackButton from '../components/BackButton';
 
@@ -316,7 +317,7 @@ export default function AdminDashboard() {
           at: c.contract_renewal_date,
         })),
       ...(allProducts || [])
-        .filter((p) => p.stock_level <= p.reorder_threshold)
+        .filter(needsReorder)
         .map((p) => ({
           id: `stock-${p.id}`,
           kind: 'stock',

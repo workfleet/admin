@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Plus, Minus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
+import { needsReorder } from '../../../lib/inventory';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
 import BackButton from '../../components/BackButton';
@@ -130,8 +131,8 @@ export default function AdminInventory() {
 
   if (loading) return <div className="page-inner">Loading...</div>;
 
-  const lowStockCount = products.filter((p) => p.stock_level <= p.reorder_threshold).length;
-  const shoppingListItems = products.filter((p) => p.stock_level <= p.reorder_threshold);
+  const shoppingListItems = products.filter(needsReorder);
+  const lowStockCount = shoppingListItems.length;
 
   return (
     <div className="page-inner">
@@ -205,7 +206,7 @@ export default function AdminInventory() {
               <div>
                 <h2 style={{ margin: 0 }}>Shopping List</h2>
                 <p style={{ fontSize: 13, color: 'var(--muted)', margin: '2px 0 0' }}>
-                  {shoppingListItems.length === 0 ? 'Nothing needs reordering right now.' : `${shoppingListItems.length} item${shoppingListItems.length === 1 ? '' : 's'} at or below reorder level`}
+                  {shoppingListItems.length === 0 ? 'Nothing needs reordering right now.' : `${shoppingListItems.length} item${shoppingListItems.length === 1 ? '' : 's'} below reorder level`}
                 </p>
               </div>
             </div>
@@ -246,7 +247,7 @@ export default function AdminInventory() {
       <div className="card">
         {filteredProducts.length === 0 && products.length > 0 && <p className="empty-state">No products match your search.</p>}
         {filteredProducts.map((p) => {
-          const low = p.stock_level <= p.reorder_threshold;
+          const low = needsReorder(p);
           return (
             <div key={p.id} className="task-row" style={{ justifyContent: 'space-between' }}>
               <div>
