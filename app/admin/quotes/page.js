@@ -247,7 +247,7 @@ export default function AdminQuotes() {
       supabase.from('profiles').select('role').eq('id', session.user.id).single(),
       supabase
         .from('quotes')
-        .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, status, valid_until, notes, created_at, calculator_breakdown, shift_schedule, clients(name)')
+        .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, status, valid_until, notes, created_at, archived_at, calculator_breakdown, shift_schedule, clients(name)')
         .order('created_at', { ascending: false }),
       supabase.from('clients').select('id, name').order('name'),
       supabase.from('pricing_settings').select('*').single(),
@@ -394,7 +394,7 @@ export default function AdminQuotes() {
     const { data } = await supabase
       .from('quotes')
       .insert(payload)
-      .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, status, valid_until, notes, created_at, calculator_breakdown, shift_schedule, clients(name)')
+      .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, status, valid_until, notes, created_at, archived_at, calculator_breakdown, shift_schedule, clients(name)')
       .single();
 
     setCreating(false);
@@ -437,6 +437,18 @@ export default function AdminQuotes() {
     URL.revokeObjectURL(url);
   };
 
+  // Reversible, so no confirmation - the whole point of archiving is
+  // that it isn't the destructive option.
+  const setArchived = async (quote, archived) => {
+    const archived_at = archived ? new Date().toISOString() : null;
+
+    const { error } = await supabase.from('quotes').update({ archived_at }).eq('id', quote.id);
+    if (error) { toast.error(archived ? 'Could not archive the quote.' : 'Could not restore the quote.'); return; }
+
+    setQuotes((prev) => prev.map((q) => (q.id === quote.id ? { ...q, archived_at } : q)));
+    toast.success(archived ? 'Quote archived.' : 'Quote restored.');
+  };
+
   const deleteQuote = async (quoteId) => {
     if (!(await confirm('Delete this quote?', { danger: true }))) return;
     const { error } = await supabase.from('quotes').delete().eq('id', quoteId);
@@ -446,9 +458,12 @@ export default function AdminQuotes() {
   };
 
   const filteredQuotes = useMemo(() => {
-    if (filter === 'decided') return quotes.filter((q) => q.status !== 'draft' && q.status !== 'sent');
-    if (filter === 'all') return quotes;
-    return quotes.filter((q) => q.status === 'draft' || q.status === 'sent');
+    if (filter === 'archived') return quotes.filter((q) => q.archived_at);
+
+    const live = quotes.filter((q) => !q.archived_at);
+    if (filter === 'decided') return live.filter((q) => q.status !== 'draft' && q.status !== 'sent');
+    if (filter === 'all') return live;
+    return live.filter((q) => q.status === 'draft' || q.status === 'sent');
   }, [quotes, filter]);
 
   if (loading) return <div className="page-inner">Loading...</div>;
@@ -847,9 +862,12 @@ export default function AdminQuotes() {
         <button className={filter === 'open' ? 'btn-primary' : 'btn-secondary'} onClick={() => setFilter('open')}>Open</button>
         <button className={filter === 'decided' ? 'btn-primary' : 'btn-secondary'} onClick={() => setFilter('decided')}>Decided</button>
         <button className={filter === 'all' ? 'btn-primary' : 'btn-secondary'} onClick={() => setFilter('all')}>All</button>
+        <button className={filter === 'archived' ? 'btn-primary' : 'btn-secondary'} onClick={() => setFilter('archived')}>Archived</button>
       </div>
 
-      {filteredQuotes.length === 0 && <p className="empty-state">Nothing here.</p>}
+      {filteredQuotes.length === 0 && (
+        <p className="empty-state">{filter === 'archived' ? 'No archived quotes.' : 'Nothing here.'}</p>
+      )}
 
       <div className="job-list">
         {filteredQuotes.map((quote) => {
@@ -869,6 +887,7 @@ export default function AdminQuotes() {
                       quote.prospect_name
                     )}
                     {!quote.client_id && <span className="badge scheduled" style={{ marginLeft: 8, verticalAlign: 'middle' }}>prospect</span>}
+                    {quote.archived_at && <span className="badge missed" style={{ marginLeft: 8, verticalAlign: 'middle' }}>archived</span>}
                   </h2>
                   <p className="job-time">{quote.description}</p>
                   <p className="job-time">
@@ -931,7 +950,14 @@ export default function AdminQuotes() {
                   </select>
                   <button className="btn-secondary" onClick={() => downloadQuoteFile(quote, 'pdf')} title="Download this quote as a PDF to send to the client">PDF</button>
                   <button className="btn-secondary" onClick={() => downloadQuoteFile(quote, 'docx')} title="Download this quote as a Word document you can edit first">Word</button>
-                  <button className="btn-secondary" onClick={() => deleteQuote(quote.id)} title="Delete this quote">Delete</button>
+                  {quote.archived_at ? (
+                    <>
+                      <button className="btn-secondary" onClick={() => setArchived(quote, false)} title="Put this quote back in the working list">Restore</button>
+                      <button className="btn-secondary" onClick={() => deleteQuote(quote.id)} title="Delete this quote permanently">Delete</button>
+                    </>
+                  ) : (
+                    <button className="btn-secondary" onClick={() => setArchived(quote, true)} title="File this quote away without deleting it">Archive</button>
+                  )}
                 </div>
               </div>
             </div>

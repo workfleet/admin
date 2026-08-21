@@ -31,7 +31,7 @@ export default function QuoteHistory() {
 
     const { data } = await supabase
       .from('quotes')
-      .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, status, valid_until, notes, created_at, calculator_input, calculator_breakdown, shift_schedule, clients(name)')
+      .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, status, valid_until, notes, created_at, archived_at, calculator_input, calculator_breakdown, shift_schedule, clients(name)')
       .order('created_at', { ascending: false });
 
     setQuotes(data || []);
@@ -107,6 +107,9 @@ export default function QuoteHistory() {
                     {quote.client_id ? (
                       <Link href={`/admin/clients/${quote.client_id}`} style={{ color: 'inherit' }} onClick={(e) => e.stopPropagation()}>{recipient}</Link>
                     ) : recipient}
+                    {quote.archived_at && (
+                      <span className="badge missed" style={{ marginLeft: 6, verticalAlign: 'middle' }}>archived</span>
+                    )}
                   </td>
                   <td style={{ padding: '8px 6px', color: 'var(--muted)', maxWidth: 320 }}>{quote.description}</td>
                   <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{b ? `${b.totalHours}h` : '—'}</td>
