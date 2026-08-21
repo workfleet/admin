@@ -31,6 +31,15 @@ const EMPTY_GARDEN_ADDONS = Object.fromEntries(
   GARDEN_ADDON_TYPES.flatMap((a) => [[a.key, false], [`${a.key}Qty`, 1]])
 );
 
+// One question instead of two independent checkboxes. They were never
+// really independent - a quote is priced one way or the other - and
+// having both tickable at once was the bulk of the form's complexity.
+const PRICING_MODES = [
+  { value: 'manual', label: 'I’ll enter the price myself' },
+  { value: 'calculator', label: 'Work it out from the property (one-off job)' },
+  { value: 'schedule', label: 'Set out a shift pattern (staffed contract)' },
+];
+
 const EMPTY_CALC_INPUT = {
   serviceType: 'cleaning',
   propertyAddress: '',
@@ -214,11 +223,15 @@ export default function AdminQuotes() {
   const [notes, setNotes] = useState('');
   const [creating, setCreating] = useState(false);
 
-  const [useCalculator, setUseCalculator] = useState(false);
+  const [pricingMode, setPricingMode] = useState('manual');
+  // One address for the whole quote - it used to be asked twice, once by
+  // the calculator and once by the shift-pattern editor.
+  const [siteAddress, setSiteAddress] = useState('');
   const [calcInput, setCalcInput] = useState(EMPTY_CALC_INPUT);
-
-  const [useShiftSchedule, setUseShiftSchedule] = useState(false);
   const [shiftSchedule, setShiftSchedule] = useState(EMPTY_SHIFT_SCHEDULE);
+
+  const useCalculator = pricingMode === 'calculator';
+  const useShiftSchedule = pricingMode === 'schedule';
 
   const [expandedQuoteId, setExpandedQuoteId] = useState(null);
 
@@ -277,9 +290,9 @@ export default function AdminQuotes() {
     setPrice('');
     setValidUntil('');
     setNotes('');
-    setUseCalculator(false);
+    setPricingMode('manual');
+    setSiteAddress('');
     setCalcInput(EMPTY_CALC_INPUT);
-    setUseShiftSchedule(false);
     setShiftSchedule(EMPTY_SHIFT_SCHEDULE);
   };
 
@@ -320,8 +333,7 @@ export default function AdminQuotes() {
   };
 
   const useScheduleDescription = () => {
-    const address = shiftSchedule.siteAddress || calcInput.propertyAddress;
-    if (scheduleSummary) setDescription(shiftScheduleDescription(scheduleSummary, address));
+    if (scheduleSummary) setDescription(shiftScheduleDescription(scheduleSummary, siteAddress));
   };
 
   const applyPropertyType = (propertyType) => {
@@ -350,7 +362,7 @@ export default function AdminQuotes() {
   };
 
   const useGeneratedDescription = () => {
-    if (breakdown) setDescription(defaultQuoteDescription(calcInput, breakdown, calcInput.propertyAddress));
+    if (breakdown) setDescription(defaultQuoteDescription(calcInput, breakdown, siteAddress));
   };
 
   const createQuote = async (e) => {
@@ -372,11 +384,11 @@ export default function AdminQuotes() {
       valid_until: validUntil || null,
       notes: notes.trim() || null,
       created_by: session.user.id,
-      calculator_input: useCalculator ? calcInput : null,
+      calculator_input: useCalculator ? { ...calcInput, propertyAddress: siteAddress } : null,
       calculator_breakdown: useCalculator ? breakdown : null,
       // Only stored once it prices something - a half-filled pattern
       // would put an empty schedule section into the quote document.
-      shift_schedule: scheduleSummary ? shiftSchedule : null,
+      shift_schedule: scheduleSummary ? { ...shiftSchedule, siteAddress } : null,
     };
 
     const { data } = await supabase
@@ -538,15 +550,22 @@ export default function AdminQuotes() {
                 </>
               )}
 
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 400, marginTop: 4 }}>
-                <input
-                  type="checkbox"
-                  checked={useCalculator}
-                  onChange={(e) => setUseCalculator(e.target.checked)}
-                  style={{ width: 'auto' }}
+              <div className="field" style={{ marginTop: 4 }}>
+                <label className="field-label">Site address (optional)</label>
+                <AddressAutocomplete
+                  value={siteAddress}
+                  onChange={setSiteAddress}
+                  onSelect={({ address }) => setSiteAddress(address)}
+                  placeholder="Start typing an address..."
                 />
-                Calculate price automatically
-              </label>
+              </div>
+
+              <div className="field">
+                <label className="field-label">How is this priced?</label>
+                <select value={pricingMode} onChange={(e) => setPricingMode(e.target.value)}>
+                  {PRICING_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                </select>
+              </div>
 
               {useCalculator && (
                 <div style={{ border: '1px solid var(--hairline)', borderRadius: 12, padding: 14, marginTop: 4 }}>
@@ -555,16 +574,6 @@ export default function AdminQuotes() {
                     <select value={calcInput.serviceType} onChange={(e) => setServiceType(e.target.value)}>
                       {SERVICE_TYPES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                     </select>
-                  </div>
-
-                  <div className="field">
-                    <label className="field-label">Property address</label>
-                    <AddressAutocomplete
-                      value={calcInput.propertyAddress}
-                      onChange={(text) => setCalcInput((c) => ({ ...c, propertyAddress: text }))}
-                      onSelect={({ address }) => setCalcInput((c) => ({ ...c, propertyAddress: address }))}
-                      placeholder="Start typing an address..."
-                    />
                   </div>
 
                   {calcInput.serviceType === 'gardening' && (
@@ -734,32 +743,12 @@ export default function AdminQuotes() {
                 </div>
               )}
 
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 400, marginTop: 10 }}>
-                <input
-                  type="checkbox"
-                  checked={useShiftSchedule}
-                  onChange={(e) => setUseShiftSchedule(e.target.checked)}
-                  style={{ width: 'auto' }}
-                />
-                Set out a shift pattern (staffed contracts)
-              </label>
-
               {useShiftSchedule && (
                 <div style={{ border: '1px solid var(--hairline)', borderRadius: 12, padding: 14, marginTop: 4 }}>
                   <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
                     Each shift is priced on its own hours and rate, so premium hours (early mornings, weekends)
                     can be charged differently from daytime cover. The document sets them out shift by shift.
                   </p>
-
-                  <div className="field">
-                    <label className="field-label">Site address</label>
-                    <AddressAutocomplete
-                      value={shiftSchedule.siteAddress || ''}
-                      onChange={(text) => setShiftSchedule((prev) => ({ ...prev, siteAddress: text }))}
-                      onSelect={({ address }) => setShiftSchedule((prev) => ({ ...prev, siteAddress: address }))}
-                      placeholder="Start typing an address..."
-                    />
-                  </div>
 
                   {shiftSchedule.patterns.map((pattern, i) => (
                     <ShiftPatternRow
