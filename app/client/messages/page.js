@@ -94,7 +94,7 @@ export default function ClientMessages() {
                 style={{
                   alignSelf: m.sender === 'client' ? 'flex-end' : 'flex-start',
                   maxWidth: '70%',
-                  background: m.sender === 'client' ? 'var(--brand-primary)' : '#f1f5f9',
+                  background: m.sender === 'client' ? 'var(--wf-graphite)' : 'var(--wf-ash)',
                   color: m.sender === 'client' ? 'white' : 'inherit',
                   borderRadius: 14,
                   padding: '8px 12px',

@@ -375,36 +375,36 @@ export default function AdminDashboard() {
       <div className="stat-row">
         <div className="stat-card">
           <div className="stat-card-top">
-            <div className="stat-card-icon" style={{ background: '#dbeafe' }}><ClipboardList size={18} color="#1e40af" /></div>
+            <div className="stat-card-icon" style={{ background: 'var(--wf-ash)' }}><ClipboardList size={18} color="var(--wf-steel)" /></div>
           </div>
           <div className="stat-number">{stats.todaysJobs}</div>
           <div className="stat-label">Today's jobs · {stats.todaysCompleted} completed</div>
         </div>
         <div className="stat-card">
           <div className="stat-card-top">
-            <div className="stat-card-icon" style={{ background: '#dcfce7' }}><Users size={18} color="#166534" /></div>
+            <div className="stat-card-icon" style={{ background: 'rgba(52, 199, 123, 0.16)' }}><Users size={18} color="var(--wf-verified-ink)" /></div>
           </div>
           <div className="stat-number">{stats.staffWorking}</div>
           <div className="stat-label">Staff working now</div>
         </div>
         <div className="stat-card">
           <div className="stat-card-top">
-            <div className="stat-card-icon" style={{ background: '#f3e8ff' }}><Building2 size={18} color="#7e22ce" /></div>
+            <div className="stat-card-icon" style={{ background: 'var(--wf-ash)' }}><Building2 size={18} color="var(--wf-steel)" /></div>
           </div>
           <div className="stat-number">{stats.clients}</div>
           <div className="stat-label">Clients</div>
         </div>
         <div className="stat-card">
           <div className="stat-card-top">
-            <div className="stat-card-icon" style={{ background: '#ffedd5' }}><MapPin size={18} color="#c2410c" /></div>
+            <div className="stat-card-icon" style={{ background: 'var(--wf-ash)' }}><MapPin size={18} color="var(--wf-steel)" /></div>
           </div>
           <div className="stat-number">{stats.sites}</div>
           <div className="stat-label">Sites</div>
         </div>
         <div className="stat-card">
           <div className="stat-card-top">
-            <div className="stat-card-icon" style={{ background: stats.unassigned > 0 ? '#fee2e2' : '#f1f5f9' }}>
-              <UserX size={18} color={stats.unassigned > 0 ? '#991b1b' : '#64748b'} />
+            <div className="stat-card-icon" style={{ background: stats.unassigned > 0 ? 'rgba(216, 30, 52, 0.12)' : 'var(--wf-ash)' }}>
+              <UserX size={18} color={stats.unassigned > 0 ? 'var(--wf-overdue)' : 'var(--wf-steel)'} />
             </div>
           </div>
           <div className="stat-number">{stats.unassigned}</div>
@@ -464,7 +464,7 @@ export default function AdminDashboard() {
               return (
                 <div key={item.id} className="dash-row" style={{ cursor: 'default' }}>
                   <div>
-                    <div className="dash-row-title" style={item.urgent ? { color: '#991b1b' } : undefined}>
+                    <div className="dash-row-title" style={item.urgent ? { color: 'var(--wf-overdue)' } : undefined}>
                       {item.title} — <Link href={item.href} style={{ color: 'var(--brand-link)', textDecoration: 'none' }}>{item.name}</Link>
                     </div>
                     <div className="dash-row-subtitle">{item.subtitle}</div>
@@ -476,7 +476,7 @@ export default function AdminDashboard() {
             return (
               <Link key={item.id} href={item.href} className="dash-row">
                 <div>
-                  <div className="dash-row-title" style={item.urgent ? { color: '#991b1b' } : undefined}>{item.title}</div>
+                  <div className="dash-row-title" style={item.urgent ? { color: 'var(--wf-overdue)' } : undefined}>{item.title}</div>
                   <div className="dash-row-subtitle">{item.subtitle}</div>
                 </div>
               </Link>
@@ -529,7 +529,7 @@ export default function AdminDashboard() {
             style={{ cursor: staffGlance.working.length > 0 ? 'pointer' : 'default' }}
             onClick={() => staffGlance.working.length > 0 && setGlanceDetail({ title: 'Working now', names: staffGlance.working })}
           >
-            <span className="dash-glance-dot" style={{ background: '#22c55e' }} />
+            <span className="dash-glance-dot" style={{ background: 'var(--wf-verified)' }} />
             <strong>{staffGlance.working.length}</strong> Working now
           </div>
           <div
@@ -537,7 +537,7 @@ export default function AdminDashboard() {
             style={{ cursor: staffGlance.holiday.length > 0 ? 'pointer' : 'default' }}
             onClick={() => staffGlance.holiday.length > 0 && setGlanceDetail({ title: 'On holiday / leave', names: staffGlance.holiday })}
           >
-            <span className="dash-glance-dot" style={{ background: '#f59e0b' }} />
+            <span className="dash-glance-dot" style={{ background: 'var(--wf-steel)' }} />
             <strong>{staffGlance.holiday.length}</strong> On holiday / leave
           </div>
           <div
@@ -545,7 +545,7 @@ export default function AdminDashboard() {
             style={{ cursor: staffGlance.off.length > 0 ? 'pointer' : 'default' }}
             onClick={() => staffGlance.off.length > 0 && setGlanceDetail({ title: 'Not working today', names: staffGlance.off })}
           >
-            <span className="dash-glance-dot" style={{ background: '#cbd5e1' }} />
+            <span className="dash-glance-dot" style={{ background: 'var(--wf-steel)' }} />
             <strong>{staffGlance.off.length}</strong> Not working today
           </div>
           <Link href="/admin/cleaners" className="dash-panel-link" style={{ display: 'inline-block', marginTop: 8 }}>
@@ -593,7 +593,7 @@ export default function AdminDashboard() {
             <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 16px' }}>
               Requested {new Date(detailItem.at).toLocaleString()}
             </p>
-            <div className="card" style={{ background: '#f8fafc', boxShadow: 'none', margin: '0 0 16px' }}>
+            <div className="card" style={{ background: 'var(--wf-ash)', boxShadow: 'none', margin: '0 0 16px' }}>
               <p style={{ fontSize: 14.5, margin: 0, lineHeight: 1.5 }}>{detailItem.description}</p>
             </div>
             {detailItem.jobAddress && (

@@ -627,7 +627,7 @@ export default function ClientDetail() {
                     noticeStart.setDate(noticeStart.getDate() - (client.contract_notice_days || 0));
                     const dueForAttention = new Date() >= noticeStart;
                     return (
-                      <span style={dueForAttention ? { color: 'crimson', fontWeight: 600 } : undefined}>
+                      <span style={dueForAttention ? { color: 'var(--wf-overdue)', fontWeight: 600 } : undefined}>
                         Renews {renewal.toLocaleDateString()}
                       </span>
                     );
@@ -836,7 +836,7 @@ export default function ClientDetail() {
               <div key={r.id} className="task-row" style={{ justifyContent: 'space-between' }}>
                 <div>
                   <div style={{ fontSize: 14 }}>
-                    <span style={overdue ? { color: 'crimson', fontWeight: 600 } : { fontWeight: 600 }}>
+                    <span style={overdue ? { color: 'var(--wf-overdue)', fontWeight: 600 } : { fontWeight: 600 }}>
                       {new Date(r.due_date).toLocaleDateString()}
                     </span>
                     {r.recurs_yearly && <span style={{ color: 'var(--muted)', fontSize: 12.5 }}> · yearly</span>}

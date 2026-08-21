@@ -152,7 +152,7 @@ export default function CleanerDashboard() {
       </div>
 
       {notifications.length > 0 && (
-        <div className="card" style={{ background: '#fffbeb' }}>
+        <div className="card" style={{ background: 'var(--wf-ash)' }}>
           <h2>Notifications</h2>
           {notifications.map((n) => (
             <div key={n.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, margin: '4px 0' }}>
@@ -217,7 +217,7 @@ export default function CleanerDashboard() {
                   style={{
                     display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px',
                     marginBottom: 10, maxHeight: 260, overflowY: 'auto',
-                    border: '1px solid var(--hairline)', borderRadius: 10, padding: '10px 12px', background: '#f8fafc',
+                    border: '1px solid var(--hairline)', borderRadius: 10, padding: '10px 12px', background: 'var(--wf-ash)',
                   }}
                 >
                   {KIT_PRODUCTS.map((product) => (
@@ -261,7 +261,7 @@ export default function CleanerDashboard() {
                   required
                   style={{
                     width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10,
-                    background: '#f8fafc', fontSize: 14, fontFamily: 'inherit', marginBottom: 10, resize: 'vertical',
+                    background: 'var(--wf-ash)', fontSize: 14, fontFamily: 'inherit', marginBottom: 10, resize: 'vertical',
                   }}
                 />
               </>

@@ -210,7 +210,7 @@ export default function AdminTasks() {
                       {task.due_date && (
                         <>
                           {' · due '}
-                          <span style={isOverdue(task) ? { color: 'crimson', fontWeight: 600 } : undefined}>
+                          <span style={isOverdue(task) ? { color: 'var(--wf-overdue)', fontWeight: 600 } : undefined}>
                             {new Date(task.due_date).toLocaleDateString()}
                           </span>
                         </>

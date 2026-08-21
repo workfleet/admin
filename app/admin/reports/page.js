@@ -256,7 +256,7 @@ export default function AdminReports() {
                       rows={4}
                       style={{
                         width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10,
-                        background: '#f8fafc', fontSize: 14, fontFamily: 'inherit', marginBottom: 10, resize: 'vertical',
+                        background: 'var(--wf-ash)', fontSize: 14, fontFamily: 'inherit', marginBottom: 10, resize: 'vertical',
                       }}
                     />
                     <div style={{ display: 'flex', gap: 8 }}>
@@ -281,7 +281,7 @@ export default function AdminReports() {
                         {generating ? 'Generating...' : report ? 'Regenerate Report' : 'Generate Report'}
                       </button>
                     </div>
-                    {error && <p style={{ color: 'crimson', fontSize: 13, marginTop: 8 }}>{error}</p>}
+                    {error && <p style={{ color: 'var(--wf-overdue)', fontSize: 13, marginTop: 8 }}>{error}</p>}
                   </>
                 )
               )}

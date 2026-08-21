@@ -216,7 +216,7 @@ export default function QuoteHistory() {
                   </div>
                 </div>
 
-                <div style={{ marginTop: 16, background: '#f8fafc', borderRadius: 10, padding: 12 }}>
+                <div style={{ marginTop: 16, background: 'var(--wf-ash)', borderRadius: 10, padding: 12 }}>
                   <label>Price Breakdown</label>
                   <div style={{ fontSize: 13.5, color: 'var(--muted)', lineHeight: 1.9, marginTop: 4 }}>
                     <div>

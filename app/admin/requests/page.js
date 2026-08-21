@@ -536,7 +536,7 @@ export default function AdminRequests() {
                       placeholder="e.g. Dropped off new supplies at the van this morning"
                       rows={2}
                       autoFocus
-                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10, background: '#f8fafc', fontSize: 14, fontFamily: 'inherit', marginBottom: 8, resize: 'vertical' }}
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10, background: 'var(--wf-ash)', fontSize: 14, fontFamily: 'inherit', marginBottom: 8, resize: 'vertical' }}
                     />
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button className="btn-secondary" onClick={() => setResolvingId(null)}>Cancel</button>
@@ -605,7 +605,7 @@ export default function AdminRequests() {
                       placeholder={decidingStatus === 'approved' ? "e.g. Enjoy your holiday!" : "e.g. Can't cover this week, please pick another date"}
                       rows={2}
                       autoFocus
-                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10, background: '#f8fafc', fontSize: 14, fontFamily: 'inherit', marginBottom: 8, resize: 'vertical' }}
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10, background: 'var(--wf-ash)', fontSize: 14, fontFamily: 'inherit', marginBottom: 8, resize: 'vertical' }}
                     />
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button className="btn-secondary" onClick={() => setDecidingId(null)}>Cancel</button>
@@ -704,7 +704,7 @@ export default function AdminRequests() {
                       placeholder={decidingExtensionAction === 'approved' ? 'e.g. No problem, take the time you need' : "e.g. Can't extend today, but here's another slot"}
                       rows={2}
                       autoFocus
-                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10, background: '#f8fafc', fontSize: 14, fontFamily: 'inherit', marginBottom: 8, resize: 'vertical' }}
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10, background: 'var(--wf-ash)', fontSize: 14, fontFamily: 'inherit', marginBottom: 8, resize: 'vertical' }}
                     />
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button className="btn-secondary" onClick={() => setDecidingExtensionId(null)}>Cancel</button>
@@ -776,7 +776,7 @@ export default function AdminRequests() {
                         placeholder="e.g. No problem, we've moved it"
                         rows={2}
                         autoFocus
-                        style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10, background: '#f8fafc', fontSize: 14, fontFamily: 'inherit', marginBottom: 8, resize: 'vertical' }}
+                        style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10, background: 'var(--wf-ash)', fontSize: 14, fontFamily: 'inherit', marginBottom: 8, resize: 'vertical' }}
                       />
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button className="btn-secondary" onClick={() => setDecidingRescheduleId(null)}>Cancel</button>
@@ -836,7 +836,7 @@ export default function AdminRequests() {
                       placeholder="e.g. Added to Friday's clean"
                       rows={2}
                       autoFocus
-                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10, background: '#f8fafc', fontSize: 14, fontFamily: 'inherit', marginBottom: 8, resize: 'vertical' }}
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10, background: 'var(--wf-ash)', fontSize: 14, fontFamily: 'inherit', marginBottom: 8, resize: 'vertical' }}
                     />
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button className="btn-secondary" onClick={() => setResolvingClientRequestId(null)}>Cancel</button>
@@ -898,7 +898,7 @@ export default function AdminRequests() {
                       placeholder="e.g. No problem, enjoy your holiday"
                       rows={2}
                       autoFocus
-                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10, background: '#f8fafc', fontSize: 14, fontFamily: 'inherit', marginBottom: 8, resize: 'vertical' }}
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10, background: 'var(--wf-ash)', fontSize: 14, fontFamily: 'inherit', marginBottom: 8, resize: 'vertical' }}
                     />
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button className="btn-secondary" onClick={() => setDecidingPauseId(null)}>Cancel</button>

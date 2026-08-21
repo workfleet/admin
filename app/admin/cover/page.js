@@ -247,7 +247,7 @@ export default function AdminCover() {
           <div key={offer.id} className="task-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
               <div style={{ display: 'flex', gap: 10, minWidth: 0 }}>
-                <LifeBuoy size={18} color="#92400e" style={{ flexShrink: 0, marginTop: 2 }} />
+                <LifeBuoy size={18} color="var(--wf-steel)" style={{ flexShrink: 0, marginTop: 2 }} />
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>
                     {offer.jobs ? formatWhen(offer.jobs.scheduled_at) : 'Shift removed'}
@@ -290,7 +290,7 @@ export default function AdminCover() {
             </div>
 
             {assigningOfferId === offer.id && (
-              <div style={{ background: '#f8fafc', borderRadius: 10, padding: 12 }}>
+              <div style={{ background: 'var(--wf-ash)', borderRadius: 10, padding: 12 }}>
                 <div className="field">
                   <label className="field-label">Assign directly</label>
                   <select value={assignCleanerId} onChange={(e) => setAssignCleanerId(e.target.value)}>

@@ -85,7 +85,7 @@ export default function AddressAutocomplete({ value, onChange, onSelect, placeho
             right: 0,
             marginTop: -6,
             background: 'white',
-            border: '1px solid var(--hairline, #e2e8f0)',
+            border: '1px solid var(--hairline, rgba(32, 35, 39, 0.14))',
             borderRadius: 10,
             boxShadow: 'var(--shadow-md, 0 8px 20px rgba(0,0,0,0.1))',
             zIndex: 20,
@@ -93,9 +93,9 @@ export default function AddressAutocomplete({ value, onChange, onSelect, placeho
             overflowY: 'auto',
           }}
         >
-          {loading && <div style={{ padding: '10px 12px', fontSize: 13, color: 'var(--muted, #64748b)' }}>Searching...</div>}
+          {loading && <div style={{ padding: '10px 12px', fontSize: 13, color: 'var(--muted, #6B727B)' }}>Searching...</div>}
           {!loading && suggestions.length === 0 && (
-            <div style={{ padding: '10px 12px', fontSize: 13, color: 'var(--muted, #64748b)' }}>
+            <div style={{ padding: '10px 12px', fontSize: 13, color: 'var(--muted, #6B727B)' }}>
               No match - try including the house number, or type the full address manually.
             </div>
           )}
@@ -103,7 +103,7 @@ export default function AddressAutocomplete({ value, onChange, onSelect, placeho
             <div
               key={s.place_id}
               onClick={() => handleSelect(s)}
-              style={{ padding: '10px 12px', fontSize: 13.5, cursor: 'pointer', borderBottom: '1px solid var(--hairline, #f1f5f9)' }}
+              style={{ padding: '10px 12px', fontSize: 13.5, cursor: 'pointer', borderBottom: '1px solid var(--hairline, rgba(32, 35, 39, 0.14))' }}
               onMouseDown={(e) => e.preventDefault()}
             >
               {s.display_name}

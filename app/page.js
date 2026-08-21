@@ -134,7 +134,7 @@ export default function LoginPage() {
           onChange={(e) => setPassword(e.target.value)}
           required
         />
-        {error && <p style={{ color: 'crimson', fontSize: 14 }}>{error}</p>}
+        {error && <p style={{ color: 'var(--wf-overdue)', fontSize: 14 }}>{error}</p>}
         {info && <p style={{ color: 'var(--wf-verified-ink)', fontSize: 14 }}>{info}</p>}
         <button type="submit" disabled={loading}>
           {loading ? 'Please wait...' : 'Log in'}

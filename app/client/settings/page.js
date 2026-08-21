@@ -141,7 +141,7 @@ export default function ClientSettings() {
               onChange={(e) => setAccessNotesDraft((prev) => ({ ...prev, [p.id]: e.target.value }))}
               placeholder="e.g. Alarm code 4521, key safe by the front door, code 0000"
               rows={2}
-              style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10, background: '#f8fafc', fontSize: 14, fontFamily: 'inherit', marginBottom: 8, resize: 'vertical' }}
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10, background: 'var(--wf-ash)', fontSize: 14, fontFamily: 'inherit', marginBottom: 8, resize: 'vertical' }}
             />
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <button className="btn-secondary" onClick={() => saveAccessNotes(p.id)} disabled={savingPropertyId === p.id} title="Save these access notes - your cleaners see them on the job">

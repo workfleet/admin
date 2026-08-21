@@ -150,7 +150,7 @@ export default function CleanerMessages() {
                     style={{
                       alignSelf: mine ? 'flex-end' : 'flex-start',
                       maxWidth: '85%',
-                      background: mine ? 'var(--brand-primary)' : '#f1f5f9',
+                      background: mine ? 'var(--wf-graphite)' : 'var(--wf-ash)',
                       color: mine ? 'white' : 'inherit',
                       borderRadius: 14,
                       padding: '8px 12px',

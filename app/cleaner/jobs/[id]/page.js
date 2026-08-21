@@ -363,7 +363,7 @@ export default function JobDetailPage() {
           </button>
         )}
         {!checkin && isHistory && <p style={{ fontSize: 14, color: 'var(--muted)' }}>No check-in was recorded.</p>}
-        {checkInError && <p style={{ color: 'crimson', fontSize: 13, marginTop: 8 }}>{checkInError}</p>}
+        {checkInError && <p style={{ color: 'var(--wf-overdue)', fontSize: 13, marginTop: 8 }}>{checkInError}</p>}
         {checkin && (
           <p style={{ fontSize: 14 }}>
             Checked in at {new Date(checkin.checked_in_at).toLocaleTimeString()}
@@ -519,7 +519,7 @@ export default function JobDetailPage() {
       <div className="card">
         <h2>Photos</h2>
         {!isHistory && photos.length === 0 && (
-          <p style={{ fontSize: 13.5, color: '#92400e', background: '#fef3c7', padding: '8px 12px', borderRadius: 10, margin: '0 0 10px' }}>
+          <p style={{ fontSize: 13.5, color: 'var(--wf-overdue)', background: 'rgba(216, 30, 52, 0.12)', padding: '8px 12px', borderRadius: 10, margin: '0 0 10px' }}>
             📷 Remember to take photos before you check out — you won't be able to add them afterwards.
           </p>
         )}

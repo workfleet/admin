@@ -224,7 +224,7 @@ export default function AdminMessages() {
                     <div style={{ marginTop: 12, borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12, maxHeight: 320, overflowY: 'auto' }}>
                         {t.messages.map((m) => (
-                          <div key={m.id} style={{ alignSelf: m.sender === 'admin' ? 'flex-end' : 'flex-start', maxWidth: '85%', background: m.sender === 'admin' ? 'var(--brand-primary)' : '#f1f5f9', color: m.sender === 'admin' ? 'white' : 'inherit', borderRadius: 14, padding: '8px 12px' }}>
+                          <div key={m.id} style={{ alignSelf: m.sender === 'admin' ? 'flex-end' : 'flex-start', maxWidth: '85%', background: m.sender === 'admin' ? 'var(--wf-graphite)' : 'var(--wf-ash)', color: m.sender === 'admin' ? 'white' : 'inherit', borderRadius: 14, padding: '8px 12px' }}>
                             <div style={{ fontSize: 14 }}>{m.body}</div>
                             <div style={{ fontSize: 11, opacity: 0.75, marginTop: 2 }}>{m.sender === 'admin' ? 'You' : t.name} · {new Date(m.created_at).toLocaleString()}</div>
                           </div>
@@ -289,7 +289,7 @@ export default function AdminMessages() {
                         {c.messages.map((m) => {
                           const mine = m.sender_id === myId;
                           return (
-                            <div key={m.id} style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '85%', background: mine ? 'var(--brand-primary)' : '#f1f5f9', color: mine ? 'white' : 'inherit', borderRadius: 14, padding: '8px 12px' }}>
+                            <div key={m.id} style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '85%', background: mine ? 'var(--wf-graphite)' : 'var(--wf-ash)', color: mine ? 'white' : 'inherit', borderRadius: 14, padding: '8px 12px' }}>
                               {!mine && c.type === 'group' && <div style={{ fontSize: 11.5, fontWeight: 700, opacity: 0.8 }}>{m.profiles?.full_name || 'Team member'}</div>}
                               <div style={{ fontSize: 14 }}>{m.body}</div>
                               <div style={{ fontSize: 11, opacity: 0.75, marginTop: 2 }}>{mine ? 'You' : (c.type === 'group' ? '' : c.name) } {new Date(m.created_at).toLocaleString()}</div>

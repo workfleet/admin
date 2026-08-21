@@ -478,7 +478,7 @@ export default function CleanerProfile() {
               <div>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>{c.name}</div>
                 {c.expiry_date && (
-                  <div style={{ fontSize: 12.5, color: expired ? 'crimson' : soon ? '#b45309' : 'var(--muted)' }}>
+                  <div style={{ fontSize: 12.5, color: expired ? 'var(--wf-overdue)' : soon ? 'var(--wf-graphite)' : 'var(--muted)' }}>
                     {expired ? 'Expired' : 'Expires'} {new Date(c.expiry_date).toLocaleDateString()}
                   </div>
                 )}
@@ -547,7 +547,7 @@ export default function CleanerProfile() {
             <div key={r.id} className="task-row" style={{ justifyContent: 'space-between' }}>
               <div>
                 <div style={{ fontSize: 14 }}>
-                  <span style={overdue ? { color: 'crimson', fontWeight: 600 } : { fontWeight: 600 }}>
+                  <span style={overdue ? { color: 'var(--wf-overdue)', fontWeight: 600 } : { fontWeight: 600 }}>
                     {new Date(r.due_date).toLocaleDateString()}
                   </span>
                   {r.recurs_yearly && <span style={{ color: 'var(--muted)', fontSize: 12.5 }}> · yearly</span>}

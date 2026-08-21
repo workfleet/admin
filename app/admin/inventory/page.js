@@ -224,7 +224,7 @@ export default function AdminInventory() {
               {shoppingListItems.map((p) => (
                 <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 13.5 }}>
                   <span>{p.name}{p.supplier && <span style={{ color: 'var(--muted)' }}> · {p.supplier}</span>}</span>
-                  <span style={{ color: 'crimson' }}>{formatQty(p.stock_level)} / {formatQty(p.reorder_threshold)}</span>
+                  <span style={{ color: 'var(--wf-overdue)' }}>{formatQty(p.stock_level)} / {formatQty(p.reorder_threshold)}</span>
                 </div>
               ))}
             </div>
@@ -252,7 +252,7 @@ export default function AdminInventory() {
             <div key={p.id} className="task-row" style={{ justifyContent: 'space-between' }}>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>{p.name}</div>
-                <div style={{ fontSize: 12, color: low ? 'crimson' : 'var(--muted)' }}>
+                <div style={{ fontSize: 12, color: low ? 'var(--wf-overdue)' : 'var(--muted)' }}>
                   {low && 'Low stock · '}Reorder at {formatQty(p.reorder_threshold)}
                   {p.location && ` · ${p.location}`}
                   {p.supplier && ` · ${p.supplier}`}
