@@ -38,7 +38,12 @@ export async function GET(request, { params }) {
   const { data: settings } = await supabaseAdmin.from('company_settings').select('*').limit(1).single();
   const company = companyFromSettings(settings);
 
-  const buffer = await Packer.toBuffer(buildQuoteDocx(quote, company));
+  const { data: template } = await supabaseAdmin
+    .from('quote_template_sections')
+    .select('key, title, body, position, document, service_types, generated, enabled')
+    .order('position');
+
+  const buffer = await Packer.toBuffer(buildQuoteDocx(quote, company, template));
 
   return new NextResponse(buffer, {
     headers: {

@@ -565,6 +565,11 @@ export default function AdminQuotes() {
           <Link href="/admin/quotes/history" className="btn-secondary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
             History
           </Link>
+          {role === 'admin' && (
+            <Link href="/admin/quotes/wording" className="btn-secondary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }} title="Change the wording of the sections that appear on every quote">
+              Wording
+            </Link>
+          )}
           {role === 'admin' && companySettings && (
             <button className="btn-secondary" onClick={() => (showCompanySettings ? setShowCompanySettings(false) : startEditCompany())} title="Change the company name, address and contact details printed on quotes">
               {showCompanySettings ? 'Cancel' : 'Company Details'}
