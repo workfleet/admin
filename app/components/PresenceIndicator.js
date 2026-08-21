@@ -122,7 +122,7 @@ export default function PresenceIndicator({ iconColor = 'var(--muted)' }) {
           <span
             style={{
               position: 'absolute', top: 3, right: 3, width: 8, height: 8, borderRadius: '50%',
-              background: '#22c55e', border: '1.5px solid white',
+              background: 'var(--wf-verified)', border: '1.5px solid white',
             }}
           />
         )}
@@ -145,7 +145,7 @@ export default function PresenceIndicator({ iconColor = 'var(--muted)' }) {
           )}
           {sorted.map((u) => (
             <div key={u.profile_id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 6px' }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--wf-verified)', flexShrink: 0 }} />
               <span style={{ fontSize: 13.5, flex: 1 }}>{u.profiles?.full_name || 'Unknown'}</span>
               {u.profiles?.role && u.profiles.role !== 'cleaner' && (
                 <span className="badge scheduled" style={{ fontSize: 10, padding: '1px 6px' }}>{ROLE_LABELS[u.profiles.role] || u.profiles.role}</span>

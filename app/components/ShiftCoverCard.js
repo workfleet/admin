@@ -155,7 +155,7 @@ export default function ShiftCoverCard({ userId, onChange }) {
       )}
 
       {available.length > 0 && (
-        <div className="card" style={{ background: '#f0f9ff' }}>
+        <div className="card" style={{ background: 'var(--wf-ash)' }}>
           <h2>Shifts needing cover ({available.length})</h2>
           <p style={{ fontSize: 13, color: 'var(--muted)', margin: '-4px 0 10px' }}>
             First to accept gets it.
@@ -163,7 +163,7 @@ export default function ShiftCoverCard({ userId, onChange }) {
           {available.map((offer) => (
             <div key={offer.id} className="task-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
               <div style={{ display: 'flex', gap: 10 }}>
-                <LifeBuoy size={18} color="#0369a1" style={{ flexShrink: 0, marginTop: 2 }} />
+                <LifeBuoy size={18} color="var(--wf-steel)" style={{ flexShrink: 0, marginTop: 2 }} />
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>{formatWhen(offer.jobs.scheduled_at)}</div>
                   <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>

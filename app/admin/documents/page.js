@@ -202,7 +202,7 @@ export default function AdminDocuments() {
             style={{
               display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px',
               marginBottom: 14, maxHeight: 200, overflowY: 'auto',
-              border: '1px solid var(--hairline)', borderRadius: 10, padding: '10px 12px', background: '#f8fafc',
+              border: '1px solid var(--hairline)', borderRadius: 10, padding: '10px 12px', background: 'var(--wf-ash)',
             }}
           >
             {cleaners.length === 0 && <p style={{ fontSize: 13, color: 'var(--muted)', margin: 0 }}>No active cleaners found.</p>}

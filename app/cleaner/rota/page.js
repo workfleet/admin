@@ -235,7 +235,7 @@ export default function CleanerRota() {
         {showForm && (
           <form onSubmit={submitRequest} style={{ marginTop: 12 }}>
             {formError && (
-              <p style={{ fontSize: 13, color: '#991b1b', background: '#fee2e2', padding: '8px 12px', borderRadius: 10, margin: '0 0 10px' }}>
+              <p style={{ fontSize: 13, color: 'var(--wf-overdue)', background: 'rgba(216, 30, 52, 0.12)', padding: '8px 12px', borderRadius: 10, margin: '0 0 10px' }}>
                 {formError}
               </p>
             )}

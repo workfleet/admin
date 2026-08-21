@@ -329,7 +329,7 @@ export default function OnboardPage() {
         Please fill in your details, upload your ID, and sign below.
       </p>
 
-      <div className="card" style={{ background: '#f8fafc' }}>
+      <div className="card" style={{ background: 'var(--wf-ash)' }}>
         <h2>How we use your information</h2>
         <p style={{ fontSize: 13.5, color: 'var(--ink-soft)', whiteSpace: 'pre-wrap', margin: 0 }}>
           {PRIVACY_NOTICE}
@@ -349,7 +349,7 @@ export default function OnboardPage() {
               value={form.email}
               onChange={updateField('email')}
               readOnly={emailLocked}
-              style={emailLocked ? { background: '#f1f5f9', color: 'var(--muted)' } : undefined}
+              style={emailLocked ? { background: 'var(--wf-ash)', color: 'var(--muted)' } : undefined}
               required
             />
           </div>
@@ -435,7 +435,7 @@ export default function OnboardPage() {
                 style={{
                   padding: 14,
                   borderTop: i === 0 ? 'none' : '1px solid var(--hairline)',
-                  background: '#f8fafc',
+                  background: 'var(--wf-ash)',
                 }}
               >
                 <strong style={{ fontSize: 14 }}>{policy.title}</strong>
@@ -462,7 +462,7 @@ export default function OnboardPage() {
               fontSize: 13.5,
               color: 'var(--ink-soft)',
               whiteSpace: 'pre-wrap',
-              background: '#f8fafc',
+              background: 'var(--wf-ash)',
               border: '1px solid var(--hairline)',
               borderRadius: 10,
               padding: 14,
@@ -490,7 +490,7 @@ export default function OnboardPage() {
           </div>
         </div>
 
-        {formError && <p style={{ color: 'crimson', fontSize: 14, marginBottom: 10 }}>{formError}</p>}
+        {formError && <p style={{ color: 'var(--wf-overdue)', fontSize: 14, marginBottom: 10 }}>{formError}</p>}
 
         <button type="submit" disabled={submitting || !policiesAgreed || !agreed || !signedName.trim()} style={{ width: '100%' }}>
           {submitting ? 'Submitting...' : 'Create Account & Submit'}

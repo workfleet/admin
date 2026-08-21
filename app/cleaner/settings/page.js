@@ -67,7 +67,7 @@ export default function CleanerSettings() {
           onChange={(e) => setConfirmPassword(e.target.value)}
           placeholder="Re-enter password"
         />
-        {error && <p style={{ color: '#c0392b', fontSize: 14 }}>{error}</p>}
+        {error && <p style={{ color: 'var(--wf-overdue)', fontSize: 14 }}>{error}</p>}
         {message && <p style={{ color: 'var(--wf-verified-ink)', fontSize: 14 }}>{message}</p>}
         <button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Update Password'}</button>
       </form>

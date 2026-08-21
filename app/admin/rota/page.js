@@ -1088,7 +1088,7 @@ export default function AdminRota() {
                 rows={3}
                 style={{
                   width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10,
-                  background: '#f8fafc', fontSize: 14, fontFamily: 'inherit', resize: 'vertical',
+                  background: 'var(--wf-ash)', fontSize: 14, fontFamily: 'inherit', resize: 'vertical',
                 }}
               />
             </div>
@@ -1103,7 +1103,7 @@ export default function AdminRota() {
             >
               {savingJob ? 'Saving...' : 'Save Changes'}
             </button>
-            {jobSaveError && <p style={{ color: 'crimson', fontSize: 13, marginTop: 8 }}>{jobSaveError}</p>}
+            {jobSaveError && <p style={{ color: 'var(--wf-overdue)', fontSize: 13, marginTop: 8 }}>{jobSaveError}</p>}
           </div>
 
           <div style={{ marginTop: 16 }}>

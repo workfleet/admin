@@ -25,7 +25,9 @@
   /* states */
   --wf-verified:    #34C77B;   /* proven only: clocked in, task done, photo */
   --wf-progress:    #6B727B;   /* on site, not finished */
-  --wf-overdue:     #C0392F;   /* darkened so it never reads as the coral button */
+  --wf-overdue:     #D81E34;   /* brighter and pulled 13 degrees off coral's hue -
+                                 separation by hue, not by darkness, so it stops
+                                 muddling with the coral button */
 
   /* lines */
   --wf-line:        rgba(32, 35, 39, 0.14);

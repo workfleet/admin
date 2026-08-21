@@ -267,7 +267,7 @@ export default function AdminKeys() {
         {outNow.map(({ key, holding }) => (
           <div key={key.id} className="task-row" style={{ justifyContent: 'space-between', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-              <KeyRound size={18} color={isOverdue(holding) ? '#991b1b' : 'var(--muted)'} style={{ flexShrink: 0 }} />
+              <KeyRound size={18} color={isOverdue(holding) ? 'var(--wf-overdue)' : 'var(--muted)'} style={{ flexShrink: 0 }} />
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>
                   {holding.holder?.full_name || 'Unknown holder'}
@@ -383,7 +383,7 @@ export default function AdminKeys() {
                   </div>
 
                   {issuingKeyId === key.id && (
-                    <form onSubmit={(e) => issueKey(e, key)} style={{ background: '#f8fafc', borderRadius: 10, padding: 12 }}>
+                    <form onSubmit={(e) => issueKey(e, key)} style={{ background: 'var(--wf-ash)', borderRadius: 10, padding: 12 }}>
                       <div className="field">
                         <label className="field-label">Issue to</label>
                         <select
@@ -425,7 +425,7 @@ export default function AdminKeys() {
                   )}
 
                   {historyKeyId === key.id && (
-                    <div style={{ background: '#f8fafc', borderRadius: 10, padding: 12 }}>
+                    <div style={{ background: 'var(--wf-ash)', borderRadius: 10, padding: 12 }}>
                       {history.map((h) => (
                         <div key={h.id} style={{ fontSize: 12.5, color: 'var(--muted)', padding: '3px 0' }}>
                           {h.holder?.full_name || 'Unknown'} · {formatDate(h.issued_at)} → {formatDate(h.returned_at)}

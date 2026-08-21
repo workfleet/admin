@@ -92,7 +92,7 @@ export default function KeyHoldingsCard({ userId }) {
               Signed for by {h.acknowledged_signature} on {new Date(h.acknowledged_at).toLocaleDateString()}
             </div>
           ) : (
-            <div style={{ background: '#fffbeb', borderRadius: 10, padding: 12 }}>
+            <div style={{ background: 'var(--wf-ash)', borderRadius: 10, padding: 12 }}>
               <label className="field-label">Type your full name to confirm you have this</label>
               <input
                 value={signatures[h.id] || ''}

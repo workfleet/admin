@@ -87,7 +87,7 @@ export default function EnablePush({ iconColor = 'var(--muted)' }) {
       title={subscribed ? 'Push notifications enabled on this device' : 'Enable push notifications for emergency alerts'}
       style={{ background: 'transparent', border: 'none', padding: 6, cursor: subscribed ? 'default' : 'pointer', display: 'flex', alignItems: 'center' }}
     >
-      {subscribed ? <BellRing size={20} color="#22c55e" /> : <Bell size={20} color={iconColor} />}
+      {subscribed ? <BellRing size={20} color="var(--wf-verified)" /> : <Bell size={20} color={iconColor} />}
     </button>
   );
 }

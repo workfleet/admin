@@ -732,7 +732,7 @@ export default function AdminQuotes() {
                   )}
 
                   {breakdown && (
-                    <div style={{ background: '#f8fafc', borderRadius: 10, padding: 12, marginTop: 12 }}>
+                    <div style={{ background: 'var(--wf-ash)', borderRadius: 10, padding: 12, marginTop: 12 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                         <strong style={{ fontSize: 22 }}>{formatPrice(breakdown.finalPrice)}</strong>
                         <span className="badge scheduled">{breakdown.pricePosition}</span>
@@ -799,7 +799,7 @@ export default function AdminQuotes() {
                   </div>
 
                   {scheduleSummary && (
-                    <div style={{ background: '#f8fafc', borderRadius: 10, padding: 12 }}>
+                    <div style={{ background: 'var(--wf-ash)', borderRadius: 10, padding: 12 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                         <strong style={{ fontSize: 22 }}>{formatPrice(scheduleSummary.weeklyCharge)}/week</strong>
                         <span style={{ fontSize: 13, color: 'var(--muted)' }}>{scheduleSummary.weeklyHours} hours per week</span>
@@ -924,7 +924,7 @@ export default function AdminQuotes() {
               </div>
 
               {isExpanded && b && (
-                <div style={{ background: '#f8fafc', borderRadius: 10, padding: 12, marginTop: 10, fontSize: 13, color: 'var(--muted)', lineHeight: 1.8 }}>
+                <div style={{ background: 'var(--wf-ash)', borderRadius: 10, padding: 12, marginTop: 10, fontSize: 13, color: 'var(--muted)', lineHeight: 1.8 }}>
                   <div>{b.totalHours}h estimated · {b.chargeableHours}h chargeable · {formatPrice(b.hourlyEquivalent)}/hr equivalent · {b.pricePosition}</div>
                   <div>Profit {formatPrice(b.profit)} ({(b.marginPct * 100).toFixed(1)}%) — {b.marginWarning}</div>
                   <div>Labour {formatPrice(b.cleanerWageCost)} · Holiday {formatPrice(b.holidayCost)} · NI {formatPrice(b.niCost)} · Pension {formatPrice(b.pensionCost)}</div>

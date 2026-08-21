@@ -228,7 +228,7 @@ export default function AdminCleaners() {
                 </p>
               </div>
             </div>
-            {createError && <p style={{ color: 'crimson', fontSize: 14, margin: '0 0 10px' }}>{createError}</p>}
+            {createError && <p style={{ color: 'var(--wf-overdue)', fontSize: 14, margin: '0 0 10px' }}>{createError}</p>}
             <div className="job-form-actions">
               <button type="button" className="btn-secondary" onClick={() => setShowAddForm(false)}>Cancel</button>
               <button type="submit" className="btn-primary" disabled={creating}>{creating ? 'Adding...' : 'Add Staff'}</button>
@@ -238,7 +238,7 @@ export default function AdminCleaners() {
       )}
 
       {justCreated && (
-        <div className="card" style={{ background: '#f0fdf4' }}>
+        <div className="card" style={{ background: 'rgba(52, 199, 123, 0.10)' }}>
           <p style={{ fontSize: 13.5, margin: 0 }}>
             <strong>{justCreated.full_name}</strong> has been added. Share these login details with them directly:
           </p>

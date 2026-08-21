@@ -169,7 +169,7 @@ export default function ClientDashboard() {
       <div className="stat-row">
         <div className="stat-card">
           <div className="stat-card-top">
-            <div className="stat-card-icon" style={{ background: '#dbeafe' }}><CalendarClock size={18} color="#1e40af" /></div>
+            <div className="stat-card-icon" style={{ background: 'var(--wf-ash)' }}><CalendarClock size={18} color="var(--wf-steel)" /></div>
           </div>
           <div className="stat-number" style={{ fontSize: upcoming[0] ? 20 : 28 }}>
             {upcoming[0] ? new Date(upcoming[0].scheduled_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : 'None'}
@@ -178,21 +178,21 @@ export default function ClientDashboard() {
         </div>
         <div className="stat-card">
           <div className="stat-card-top">
-            <div className="stat-card-icon" style={{ background: '#dcfce7' }}><CheckCircle2 size={18} color="#166534" /></div>
+            <div className="stat-card-icon" style={{ background: 'rgba(52, 199, 123, 0.16)' }}><CheckCircle2 size={18} color="var(--wf-verified-ink)" /></div>
           </div>
           <div className="stat-number">{cleansThisMonth}</div>
           <div className="stat-label">Cleans This Month</div>
         </div>
         <div className="stat-card">
           <div className="stat-card-top">
-            <div className="stat-card-icon" style={{ background: openReschedules > 0 ? '#fef3c7' : '#f1f5f9' }}><MessageSquareWarning size={18} color={openReschedules > 0 ? '#92400e' : '#64748b'} /></div>
+            <div className="stat-card-icon" style={{ background: openReschedules > 0 ? 'rgba(216, 30, 52, 0.12)' : 'var(--wf-ash)' }}><MessageSquareWarning size={18} color={openReschedules > 0 ? 'var(--wf-overdue)' : 'var(--wf-steel)'} /></div>
           </div>
           <div className="stat-number">{openReschedules}</div>
           <div className="stat-label">Open Requests</div>
         </div>
         <div className="stat-card">
           <div className="stat-card-top">
-            <div className="stat-card-icon" style={{ background: '#fef3c7' }}><Star size={18} color="#b45309" /></div>
+            <div className="stat-card-icon" style={{ background: 'var(--wf-ash)' }}><Star size={18} color="var(--wf-steel)" /></div>
           </div>
           <div className="stat-number">{avgRating ? avgRating.toFixed(1) : '—'}</div>
           <div className="stat-label">Average Rating Given</div>
@@ -212,7 +212,7 @@ export default function ClientDashboard() {
             rows={3}
             style={{
               width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10,
-              background: '#f8fafc', fontSize: 14, fontFamily: 'inherit', marginBottom: 10, resize: 'vertical',
+              background: 'var(--wf-ash)', fontSize: 14, fontFamily: 'inherit', marginBottom: 10, resize: 'vertical',
             }}
           />
           <button type="submit" disabled={submittingRequest || !requestText.trim()}>
