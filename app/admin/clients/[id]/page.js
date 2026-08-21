@@ -671,7 +671,7 @@ export default function ClientDetail() {
                   <div>{p.address}</div>
                   {p.notes && <div style={{ fontSize: 12, color: 'var(--muted)' }}>{p.notes}</div>}
                   {p.client_access_notes && (
-                    <div style={{ fontSize: 12, color: 'var(--brand-primary)', marginTop: 2 }}>
+                    <div style={{ fontSize: 12, color: 'var(--ink)', marginTop: 2 }}>
                       Client-provided access notes: {p.client_access_notes}
                     </div>
                   )}

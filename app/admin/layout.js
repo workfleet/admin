@@ -9,6 +9,7 @@ import { getSessionAndProfile } from '../../lib/authGate';
 import PresenceIndicator from '../components/PresenceIndicator';
 import EmergencyBanner from '../components/EmergencyBanner';
 import EnablePush from '../components/EnablePush';
+import Logo from '../components/Logo';
 
 // Cleaners/Onboarding manage staff accounts directly (adding, deactivating,
 // reviewing onboarding ID documents) - kept admin-only, hidden from
@@ -88,8 +89,7 @@ export default function AdminLayout({ children }) {
       <div className="admin-shell">
       <div className="admin-topbar">
         <div className="admin-topbar-brand">
-          <div className="sidebar-logo">WF</div>
-          <div className="sidebar-brand-name">Workfleet</div>
+          <Logo size={28} tone="light" showWordmark />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <EnablePush iconColor="white" />
@@ -104,9 +104,8 @@ export default function AdminLayout({ children }) {
 
       <aside className={`sidebar ${drawerOpen ? 'sidebar-open' : ''}`}>
         <div className="sidebar-brand">
-          <div className="sidebar-logo">WF</div>
-          <div>
-            <div className="sidebar-brand-name">Workfleet</div>
+          <div className="sidebar-brand-lockup">
+            <Logo size={30} tone="light" showWordmark />
             <div className="sidebar-brand-sub">Operations</div>
           </div>
           <EnablePush />

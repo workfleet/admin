@@ -82,7 +82,7 @@ export default function EmergencyLocationPage() {
 
       <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
         {alert.status === 'acknowledged' ? (
-          <p style={{ fontSize: 13.5, color: 'var(--brand-primary)', margin: 0 }}>Responded - the cleaner has been notified.</p>
+          <p style={{ fontSize: 13.5, color: 'var(--wf-verified-ink)', margin: 0 }}>Responded - the cleaner has been notified.</p>
         ) : (
           <button type="button" onClick={respond} disabled={responding} style={{ flex: 1 }}>
             {responding ? 'Responding...' : 'Respond'}

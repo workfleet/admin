@@ -146,7 +146,7 @@ export default function CleanerDashboard() {
       {anniversary && <WorkAnniversaryPopup name={anniversary.name} years={anniversary.years} />}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>Home</h1>
-        <Link href="/cleaner/notifications" style={{ fontSize: 13, fontWeight: 600, color: 'var(--brand-primary)', textDecoration: 'none' }}>
+        <Link href="/cleaner/notifications" style={{ fontSize: 13, fontWeight: 600, color: 'var(--brand-link)', textDecoration: 'none' }}>
           Notifications
         </Link>
       </div>

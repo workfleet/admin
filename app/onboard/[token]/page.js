@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { POLICY_SECTIONS } from '../../../lib/companyPolicies';
+import Logo from '../../components/Logo';
 
 // CrewConnect's actual zero-hours worker contract (supplied by admin).
 // Worker name/address are filled in from what they've entered above; pay
@@ -300,7 +301,7 @@ export default function OnboardPage() {
     };
     return (
       <div className="container">
-        <h1>Workfleet</h1>
+        <h1 className="brand-mark"><Logo size={36} showWordmark /></h1>
         <div className="card">{messages[errorReason] || messages.error}</div>
       </div>
     );
@@ -309,7 +310,7 @@ export default function OnboardPage() {
   if (status === 'done') {
     return (
       <div className="container">
-        <h1>Workfleet</h1>
+        <h1 className="brand-mark"><Logo size={36} showWordmark /></h1>
         <div className="card">
           <h2>Thanks — you're all set</h2>
           <p style={{ fontSize: 14, color: 'var(--muted)' }}>

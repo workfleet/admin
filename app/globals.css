@@ -1,34 +1,50 @@
+@import './brand.css';
+
 * { box-sizing: border-box; }
 
+/* ============================================
+   Semantic aliases -> Route W
+
+   The app was built against these names (--muted alone appears 188
+   times), so the brand lands by re-pointing them at brand.css rather
+   than by rewriting every rule. brand.css owns the tokens; nothing is
+   redefined here, so that file stays re-syncable when the sheet moves on.
+   ============================================ */
+
 :root {
-  /* Matched to crewconnect.ltd's brand: teal accent, charcoal-navy dark,
-     Poppins, fully-rounded pill buttons. */
-  --brand-primary: #2fa5a9;
-  --brand-primary-dark: #23797c;
-  --brand-accent: #2fa5a9;
-  --brand-accent-soft: #e6f5f5;
-  --sidebar-bg: #1e2526;
-  --sidebar-text: #cbd5d6;
-  --ink: #0f172a;
-  --ink-soft: #334155;
-  --muted: #64748b;
-  --border: #e2e8f0;
-  --bg: #fafafa;
-  --surface: #ffffff;
-  --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
-  --radius-pill: 999px;
-  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-md: 0 12px 28px rgba(15, 23, 42, 0.10), 0 3px 8px rgba(15, 23, 42, 0.06);
-  --hairline: rgba(15, 23, 42, 0.06);
+  /* Two additions, both text-only. Coral and verified are fill and border
+     colours in the sheet - as small text on white they are 2.8:1 and
+     2.2:1, well under the 4.5:1 minimum. These keep the hue and clear it
+     on both white and ash. Fills, bars and borders still use the sheet's
+     exact values. */
+  --wf-coral-ink:    #C2402E;  /* 5.2:1 on white, 4.5:1 on ash */
+  --wf-verified-ink: #207B4C;  /* 5.3:1 on white, 4.5:1 on ash */
+
+  --brand-primary: var(--wf-coral);          /* action fills */
+  --brand-primary-dark: var(--wf-coral-dark); /* action fill, hover */
+  --brand-link: var(--wf-coral-ink);         /* action text on light */
+  --brand-accent: var(--wf-graphite);        /* structure: focus, selection */
+  --brand-accent-soft: rgba(32, 35, 39, 0.07);
+  --sidebar-bg: var(--wf-graphite);
+  --sidebar-text: rgba(255, 255, 255, 0.6);
+  --ink: var(--wf-graphite);
+  --ink-soft: var(--wf-slate);
+  --muted: var(--wf-steel);
+  --border: var(--wf-line);
+  --bg: var(--wf-ash);
+  --surface: var(--wf-white);
+  --radius-sm: var(--wf-radius-sm);
+  --radius-md: var(--wf-radius);
+  --radius-lg: var(--wf-radius);
+  --radius-pill: 20px;
+  --shadow-sm: 0 1px 2px rgba(32, 35, 39, 0.06);
+  --shadow-md: 0 10px 24px rgba(32, 35, 39, 0.12), 0 2px 6px rgba(32, 35, 39, 0.07);
+  --hairline: var(--wf-line);
 }
 
+/* Ground, colour, family, size and weight all come from brand.css. */
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--ink);
-  -webkit-font-smoothing: antialiased;
 }
 
 .container {
@@ -46,7 +62,7 @@ body {
   bottom: 0;
   left: 0;
   right: 0;
-  background: white;
+  background: var(--wf-white);
   border-top: 1px solid var(--hairline);
   box-shadow: var(--shadow-md);
   display: flex;
@@ -74,7 +90,9 @@ body {
 }
 
 .bottom-nav-link.active {
-  color: var(--brand-primary);
+  color: var(--wf-graphite);
+  font-weight: 600;
+  box-shadow: inset 0 2px 0 var(--wf-coral);
 }
 
 /* ---- Emergency alert (lone worker panic button + admin banner) ---- */
@@ -150,7 +168,7 @@ body {
 }
 
 .emergency-banner-ack {
-  background: white;
+  background: var(--wf-white);
   color: #dc2626;
   border: none;
   border-radius: 8px;
@@ -259,7 +277,7 @@ body {
   .client-drawer-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(15, 23, 42, 0.5);
+    background: rgba(35, 38, 42, 0.55);
     z-index: 70;
   }
   .client-sidebar {
@@ -314,19 +332,10 @@ body {
 }
 
 .brand-mark {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #45c1c5, var(--brand-primary-dark));
-  color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 800;
-  font-size: 18px;
-  letter-spacing: 0.02em;
-  margin: 0 auto 16px;
-  box-shadow: var(--shadow-md);
+  margin: 0 auto 14px;
 }
 
 .login-page h1 {
@@ -350,7 +359,7 @@ body {
 }
 
 .login-page a {
-  color: var(--brand-primary);
+  color: var(--brand-link);
   font-weight: 600;
   text-decoration: none;
 }
@@ -361,21 +370,23 @@ body {
 
 .card {
   background: var(--surface);
-  border: none;
-  border-radius: var(--radius-lg);
-  padding: 20px 22px;
+  border: 1px solid var(--wf-line);
+  border-radius: var(--wf-radius);
+  padding: 20px;
   margin-bottom: 14px;
   box-shadow: var(--shadow-sm);
 }
 
 button {
   background: var(--brand-primary);
-  color: white;
+  color: var(--wf-on-coral);
+  font-family: var(--wf-display);
   border: none;
-  border-radius: var(--radius-pill);
-  padding: 11px 22px;
-  font-size: 14.5px;
+  border-radius: var(--wf-radius-sm);
+  padding: 12px 20px;
+  font-size: 15px;
   font-weight: 600;
+  letter-spacing: -0.01em;
   cursor: pointer;
   transition: background 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease;
 }
@@ -389,16 +400,23 @@ button:active:not(:disabled) {
 }
 
 button:disabled {
-  background: #cbd5e1;
+  background: var(--wf-steel);
+  color: var(--wf-white);
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
-input, select {
+button:focus-visible {
+  outline: 3px solid var(--wf-graphite);
+  outline-offset: 2px;
+}
+
+input, select, textarea {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-sm);
-  background: #f8fafc;
+  background: var(--wf-white);
   margin-bottom: 10px;
   font-size: 14.5px;
   font-family: inherit;
@@ -406,9 +424,15 @@ input, select {
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 
-input:focus, select:focus {
+textarea {
+  min-height: 96px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+input:focus, select:focus, textarea:focus {
   outline: none;
-  background: white;
+  background: var(--wf-white);
   border-color: var(--brand-accent);
   box-shadow: 0 0 0 3px var(--brand-accent-soft);
 }
@@ -423,8 +447,9 @@ label {
   margin-bottom: 6px;
 }
 
-h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); }
-h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
+/* Heading sizes come from brand.css. Only the in-app spacing rhythm is
+   set here. */
+h2 { margin: 0 0 8px; }
 
 .task-row {
   display: flex;
@@ -455,7 +480,7 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
 .job-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.5);
+  background: rgba(35, 38, 42, 0.55);
   z-index: 200;
   display: flex;
   align-items: flex-start;
@@ -474,15 +499,23 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
 
 .badge {
   display: inline-block;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 700;
+  font-family: var(--wf-data);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 20px;
+  border: 1px solid currentColor;
+  background: transparent;
 }
-.badge.scheduled { background: #fef3c7; color: #92400e; }
-.badge.in_progress { background: #dbeafe; color: #1e40af; }
-.badge.completed { background: #d1fae5; color: #065f46; }
-.badge.missed { background: #fee2e2; color: #991b1b; }
+/* Green means proven and red means missed; anything still in flight reads
+   as neutral steel. Both use the text-safe tones - at 10px uppercase the
+   sheet's #34C77B is 2.2:1 on white. */
+.badge.scheduled { color: var(--wf-progress); }
+.badge.in_progress { color: var(--wf-graphite); }
+.badge.completed { color: var(--wf-verified-ink); }
+.badge.missed { color: var(--wf-overdue); }
 
 /* ---- Admin shell / sidebar layout ---- */
 .admin-shell {
@@ -515,28 +548,42 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
 .sidebar-logo {
   width: 36px;
   height: 36px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #45c1c5, var(--brand-primary-dark));
-  color: white;
+  border-radius: var(--wf-radius);
+  background: var(--wf-slate);
+  color: var(--wf-white);
   display: flex;
   align-items: center;
   justify-content: center;
+  font-family: var(--wf-display);
   font-weight: 800;
   font-size: 13px;
   flex-shrink: 0;
 }
 
 .sidebar-brand-name {
-  font-weight: 700;
-  font-size: 15px;
-  color: white;
+  font-family: var(--wf-display);
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: -0.04em;
+  color: var(--wf-white);
   line-height: 1.2;
 }
 
 .sidebar-brand-sub {
-  font-size: 12px;
-  color: var(--sidebar-text);
-  opacity: 0.6;
+  font-family: var(--wf-data);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(247, 248, 248, 0.5);
+}
+
+/* Stacks the wordmark over its portal label. */
+.sidebar-brand-lockup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
 }
 
 .sidebar-nav {
@@ -571,12 +618,12 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  border-radius: var(--wf-radius-sm);
   color: var(--sidebar-text);
   text-decoration: none;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 300;
   transition: background 0.15s ease;
 }
 
@@ -585,9 +632,10 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
 }
 
 .sidebar-link.active {
-  background: var(--brand-accent);
-  color: white;
-  font-weight: 700;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-weight: 500;
+  box-shadow: inset 3px 0 0 var(--wf-coral);
 }
 
 .sidebar-icon {
@@ -652,7 +700,7 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
 }
 
 .back-button:hover {
-  color: var(--brand-primary);
+  color: var(--brand-link);
 }
 
 /* ---- Stat cards ---- */
@@ -680,10 +728,13 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
 }
 
 .stat-number {
+  font-family: var(--wf-data);
+  font-variant-numeric: tabular-nums;
   font-size: 28px;
-  font-weight: 800;
+  font-weight: 600;
   color: var(--ink);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
 }
 
 .stat-label {
@@ -747,7 +798,7 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
 .dash-panel-link {
   font-size: 13px;
   font-weight: 600;
-  color: var(--brand-primary);
+  color: var(--brand-link);
   text-decoration: none;
   white-space: nowrap;
 }
@@ -808,11 +859,11 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
 
 .btn-primary {
   background: var(--brand-primary);
-  color: white;
-  border: 2px solid var(--brand-primary);
-  border-radius: var(--radius-pill);
-  padding: 10px 20px;
-  font-size: 14px;
+  color: var(--wf-on-coral);
+  border: 1px solid var(--brand-primary);
+  border-radius: var(--wf-radius-sm);
+  padding: 12px 20px;
+  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
@@ -824,20 +875,20 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
 }
 
 .btn-secondary {
-  background: white;
-  color: var(--ink-soft);
-  border: 2px solid var(--hairline);
-  border-radius: var(--radius-pill);
-  padding: 10px 20px;
-  font-size: 14px;
-  font-weight: 600;
+  background: transparent;
+  color: var(--wf-graphite);
+  border: 1px solid var(--wf-line);
+  border-radius: var(--wf-radius-sm);
+  padding: 12px 20px;
+  font-size: 15px;
+  font-weight: 500;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .btn-secondary:hover {
-  background: #f8fafc;
-  border-color: #cbd5e1;
+  background: var(--wf-white);
+  border-color: var(--wf-steel);
 }
 
 .btn-secondary:disabled {
@@ -857,7 +908,7 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
 .confirm-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.5);
+  background: rgba(35, 38, 42, 0.55);
   z-index: 400;
   display: flex;
   align-items: center;
@@ -866,7 +917,7 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
 }
 
 .confirm-modal {
-  background: white;
+  background: var(--wf-white);
   border-radius: var(--radius-md);
   padding: 24px;
   width: 100%;
@@ -905,7 +956,7 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
   display: flex;
   align-items: center;
   gap: 8px;
-  background: white;
+  background: var(--wf-white);
   border-radius: var(--radius-sm);
   padding: 12px 16px;
   box-shadow: var(--shadow-md);
@@ -997,7 +1048,7 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
 }
 
 .dismiss-btn:hover {
-  background: rgba(15, 23, 42, 0.06);
+  background: var(--wf-line);
   color: var(--ink);
 }
 
@@ -1037,10 +1088,10 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
 }
 
 .duration-chip {
-  background: #f8fafc;
+  background: var(--wf-white);
   color: var(--ink-soft);
   border: 1px solid var(--hairline);
-  border-radius: 999px;
+  border-radius: var(--wf-radius);
   padding: 8px 14px;
   font-size: 13px;
   font-weight: 600;
@@ -1053,9 +1104,9 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
 }
 
 .duration-chip.active {
-  background: var(--brand-primary);
-  border-color: var(--brand-primary);
-  color: white;
+  background: var(--wf-graphite);
+  border-color: var(--wf-graphite);
+  color: var(--wf-white);
 }
 
 .duration-custom-select {
@@ -1116,7 +1167,7 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
   .admin-drawer-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(15, 23, 42, 0.5);
+    background: rgba(35, 38, 42, 0.55);
     z-index: 70;
   }
   .sidebar {
@@ -1288,7 +1339,7 @@ h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
 }
 
 .calendar-job.selected {
-  outline: 2px solid var(--brand-primary);
+  outline: 2px solid var(--wf-graphite);
 }
 
 .calendar-job[draggable="true"] {

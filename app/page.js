@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
 import { signOutAndClearPresence } from '../lib/signOut';
 import { getSessionAndProfile } from '../lib/authGate';
+import Logo from './components/Logo';
 
 // The hard-navigation below depends on Supabase actually having written
 // the new session to localStorage first - normally near-instant, but
@@ -116,8 +117,7 @@ export default function LoginPage() {
 
   return (
     <div className="container login-page">
-      <div className="brand-mark">WF</div>
-      <h1>Workfleet</h1>
+      <h1 className="brand-mark"><Logo size={44} showWordmark /></h1>
       <p className="login-subtitle">Sign in to manage your crew</p>
       <form className="card" onSubmit={handleLogin}>
         <label>Email</label>
@@ -135,7 +135,7 @@ export default function LoginPage() {
           required
         />
         {error && <p style={{ color: 'crimson', fontSize: 14 }}>{error}</p>}
-        {info && <p style={{ color: 'var(--brand-primary-dark)', fontSize: 14 }}>{info}</p>}
+        {info && <p style={{ color: 'var(--wf-verified-ink)', fontSize: 14 }}>{info}</p>}
         <button type="submit" disabled={loading}>
           {loading ? 'Please wait...' : 'Log in'}
         </button>

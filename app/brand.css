@@ -1,0 +1,234 @@
+/* ============================================================
+   WorkFleet — brand.css
+   Route W · Coral on Graphite · Poppins + Inter
+
+   Save as: app/brand.css
+   Then add to the very top of app/globals.css:
+       @import './brand.css';
+   ============================================================ */
+
+/* ---------- 1. TOKENS ---------- */
+
+:root {
+  /* neutrals */
+  --wf-graphite:    #202327;   /* sidebar, headers, field app, body text */
+  --wf-slate:       #2E333A;   /* raised surfaces and hovers on dark */
+  --wf-steel:       #6B727B;   /* secondary text, borders, inactive */
+  --wf-ash:         #EDEEF0;   /* page background behind white cards */
+  --wf-white:       #FFFFFF;   /* cards and tables */
+
+  /* action — coral means ONE thing: tap this */
+  --wf-coral:       #FF6B5B;
+  --wf-coral-dark:  #E8523F;   /* hover and pressed */
+  --wf-on-coral:    #202327;   /* text sitting on coral */
+
+  /* states */
+  --wf-verified:    #34C77B;   /* proven only: clocked in, task done, photo */
+  --wf-progress:    #6B727B;   /* on site, not finished */
+  --wf-overdue:     #C0392F;   /* darkened so it never reads as the coral button */
+
+  /* lines */
+  --wf-line:        rgba(32, 35, 39, 0.14);
+  --wf-line-dark:   rgba(255, 255, 255, 0.15);
+
+  /* type — set --font-poppins / --font-inter in layout.js via next/font */
+  --wf-display: var(--font-poppins), Poppins, system-ui, sans-serif;
+  --wf-data:    var(--font-inter), Inter, system-ui, sans-serif;
+
+  /* shape */
+  --wf-radius-sm:  6px;
+  --wf-radius:     10px;
+  --wf-radius-lg:  20px;   /* app icon tile */
+}
+
+/* ---------- 2. BASE ---------- */
+
+body {
+  background: var(--wf-ash);
+  color: var(--wf-graphite);
+  font-family: var(--wf-display);
+  font-size: 16px;
+  font-weight: 300;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--wf-display);
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  margin: 0;
+}
+
+h1 { font-size: clamp(28px, 5vw, 46px); letter-spacing: -0.04em; }
+h2 { font-size: clamp(22px, 3.4vw, 32px); }
+h3 { font-size: 20px; }
+
+strong, b { font-weight: 600; }
+
+/* Anything numeric goes in Inter with tabular figures.
+   Poppins' figures aren't tabular — columns wobble without this. */
+.wf-num,
+.wf-data,
+td.num,
+.wf-time,
+.wf-money {
+  font-family: var(--wf-data);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.wf-label {
+  font-family: var(--wf-data);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--wf-steel);
+}
+
+/* ---------- 3. BUTTONS ---------- */
+
+/* Primary. ONE per screen. */
+.wf-btn {
+  display: inline-block;
+  background: var(--wf-coral);
+  color: var(--wf-on-coral);
+  font-family: var(--wf-display);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  padding: 13px 22px;
+  border: none;
+  border-radius: var(--wf-radius-sm);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.wf-btn:hover  { background: var(--wf-coral-dark); }
+.wf-btn:active { transform: translateY(1px); }
+.wf-btn:focus-visible {
+  outline: 3px solid var(--wf-graphite);
+  outline-offset: 2px;
+}
+.wf-btn:disabled {
+  background: var(--wf-steel);
+  color: var(--wf-white);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Secondary — everything that isn't the main action */
+.wf-btn-quiet {
+  display: inline-block;
+  background: transparent;
+  color: var(--wf-graphite);
+  font-family: var(--wf-display);
+  font-size: 15px;
+  font-weight: 500;
+  padding: 12px 20px;
+  border: 1px solid var(--wf-line);
+  border-radius: var(--wf-radius-sm);
+  cursor: pointer;
+}
+.wf-btn-quiet:hover { background: var(--wf-ash); }
+
+/* Full-width, for the cleaner's phone */
+.wf-btn-block {
+  display: block;
+  width: 100%;
+  text-align: center;
+  padding: 16px;
+  font-size: 17px;
+}
+
+/* ---------- 4. STATUS PILLS ---------- */
+
+.wf-pill {
+  display: inline-block;
+  font-family: var(--wf-data);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 20px;
+  border: 1px solid currentColor;
+}
+.wf-pill-verified { color: var(--wf-verified); }
+.wf-pill-progress { color: var(--wf-progress); }
+.wf-pill-overdue  { color: var(--wf-overdue); }
+
+/* ---------- 5. CARDS AND TABLES ---------- */
+
+.wf-card {
+  background: var(--wf-white);
+  border: 1px solid var(--wf-line);
+  border-radius: var(--wf-radius);
+  padding: 20px;
+}
+
+.wf-stat .n {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+.wf-stat .t {
+  font-family: var(--wf-data);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--wf-steel);
+  margin-top: 2px;
+}
+
+.wf-table { width: 100%; border-collapse: collapse; }
+.wf-table th {
+  font-family: var(--wf-data);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--wf-steel);
+  text-align: left;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--wf-line);
+}
+.wf-table td {
+  font-size: 14px;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--wf-line);
+}
+.wf-table td.num { text-align: right; }
+
+/* ---------- 6. DARK SURFACES ---------- */
+
+.wf-dark {
+  background: var(--wf-graphite);
+  color: var(--wf-white);
+}
+.wf-dark .wf-label { color: rgba(255, 255, 255, 0.5); }
+
+.wf-sidebar {
+  background: var(--wf-graphite);
+  color: var(--wf-white);
+  padding: 22px 16px;
+}
+.wf-sidebar nav a {
+  display: block;
+  font-size: 14px;
+  font-weight: 300;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 9px 11px;
+  border-radius: var(--wf-radius-sm);
+  text-decoration: none;
+}
+.wf-sidebar nav a:hover { background: rgba(255, 255, 255, 0.07); color: #fff; }
+.wf-sidebar nav a.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-weight: 500;
+  box-shadow: inset 3px 0 0 var(--wf-coral);
+}

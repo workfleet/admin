@@ -3,8 +3,12 @@
 // offline-first app. It only ever touches the couple of static assets
 // listed below - HTML, JS bundles, and API calls all pass straight
 // through untouched, so nobody ever gets stuck on stale cached app code.
-const CACHE_NAME = 'workfleet-v1';
-const STATIC_ASSETS = ['/icon.svg'];
+// Bumped again for Route W - the cached icon is coral on graphite now.
+const CACHE_NAME = 'workfleet-v3';
+// Not '/icon.svg' - Next reserves that path for its own metadata route
+// and answers it with a 500, which made cache.addAll() reject and the
+// whole service-worker install fail.
+const STATIC_ASSETS = ['/brand-mark.svg'];
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -34,7 +38,7 @@ self.addEventListener('push', (event) => {
   const data = event.data.json();
 
   event.waitUntil(
-    self.registration.showNotification(data.title || 'Workfleet', {
+    self.registration.showNotification(data.title || 'WorkFleet', {
       body: data.body || '',
       icon: '/icon-192.png',
       badge: '/icon-192.png',

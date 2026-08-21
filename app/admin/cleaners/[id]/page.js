@@ -451,7 +451,7 @@ export default function CleanerProfile() {
           <p className="empty-state">Not enough history yet to score this cleaner.</p>
         ) : (
           <>
-            <p style={{ fontSize: 28, fontWeight: 800, margin: '4px 0 10px', color: 'var(--brand-primary)' }}>
+            <p style={{ fontFamily: 'var(--wf-data)', fontSize: 28, fontWeight: 500, margin: '4px 0 10px', color: 'var(--ink)' }}>
               {reliability.overall.toFixed(0)}<span style={{ fontSize: 15, color: 'var(--muted)', fontWeight: 600 }}> / 100</span>
             </p>
             {reliability.parts.map((p) => (
@@ -612,7 +612,7 @@ export default function CleanerProfile() {
       <div className="card" style={{ cursor: 'pointer' }} onClick={() => setShowClockIns((s) => !s)}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 style={{ margin: 0 }}>Clock-in Summary</h2>
-          <span style={{ fontSize: 13, color: 'var(--brand-primary)', fontWeight: 600 }}>{showClockIns ? 'Hide' : 'Show'}</span>
+          <span style={{ fontSize: 13, color: 'var(--brand-link)', fontWeight: 600 }}>{showClockIns ? 'Hide' : 'Show'}</span>
         </div>
         {showClockIns && (
           <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 10 }}>

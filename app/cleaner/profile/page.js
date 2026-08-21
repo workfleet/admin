@@ -65,7 +65,7 @@ export default function CleanerProfile() {
         <label>Member since</label>
         <input value={profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : ''} disabled />
 
-        {saved && <p style={{ color: 'var(--brand-primary-dark)', fontSize: 14 }}>Saved.</p>}
+        {saved && <p style={{ color: 'var(--wf-verified-ink)', fontSize: 14 }}>Saved.</p>}
         <button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save Changes'}</button>
       </form>
     </div>

@@ -208,7 +208,7 @@ export async function POST(request) {
       to = await adminAndSupervisorEmails();
       if (to.length === 0) return NextResponse.json({ skipped: 'no_email' });
       subject = `EMERGENCY ALERT from ${payload.cleanerName}`;
-      text = `${payload.cleanerName} has raised an emergency alert from the Workfleet app. Call them back immediately.`;
+      text = `${payload.cleanerName} has raised an emergency alert from the WorkFleet app. Call them back immediately.`;
     } else if (payload.type === 'time_extension_decided') {
       const email = await emailForUserId(payload.cleanerId);
       if (!email) return NextResponse.json({ skipped: 'no_email' });

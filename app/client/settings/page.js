@@ -120,7 +120,7 @@ export default function ClientSettings() {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
             <button type="submit" disabled={savingDetails}>{savingDetails ? 'Saving...' : 'Save Details'}</button>
-            {detailsSaved && <span style={{ fontSize: 13, color: 'var(--brand-primary)' }}>Saved</span>}
+            {detailsSaved && <span style={{ fontSize: 13, color: 'var(--wf-verified-ink)' }}>Saved</span>}
           </div>
         </form>
       </div>
@@ -147,7 +147,7 @@ export default function ClientSettings() {
               <button className="btn-secondary" onClick={() => saveAccessNotes(p.id)} disabled={savingPropertyId === p.id}>
                 {savingPropertyId === p.id ? 'Saving...' : 'Save'}
               </button>
-              {savedPropertyId === p.id && <span style={{ fontSize: 13, color: 'var(--brand-primary)' }}>Saved</span>}
+              {savedPropertyId === p.id && <span style={{ fontSize: 13, color: 'var(--wf-verified-ink)' }}>Saved</span>}
             </div>
           </div>
         ))}

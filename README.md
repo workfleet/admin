@@ -1,4 +1,4 @@
-# Workfleet
+# WorkFleet
 
 A cleaning company CRM: cleaners check in to jobs, work through a to-do list,
 upload photos, and clients log in to see the record. Admins manage clients,

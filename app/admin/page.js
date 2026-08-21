@@ -465,7 +465,7 @@ export default function AdminDashboard() {
                 <div key={item.id} className="dash-row" style={{ cursor: 'default' }}>
                   <div>
                     <div className="dash-row-title" style={item.urgent ? { color: '#991b1b' } : undefined}>
-                      {item.title} — <Link href={item.href} style={{ color: 'var(--brand-primary)', textDecoration: 'none' }}>{item.name}</Link>
+                      {item.title} — <Link href={item.href} style={{ color: 'var(--brand-link)', textDecoration: 'none' }}>{item.name}</Link>
                     </div>
                     <div className="dash-row-subtitle">{item.subtitle}</div>
                   </div>
