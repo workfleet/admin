@@ -163,6 +163,16 @@ export default function AdminRota() {
     loadLookups();
   }, []);
 
+  // The dashboard's "+ New Job" links here with the form already open. Read on
+  // mount rather than via useSearchParams, which would need the page wrapped in
+  // a Suspense boundary to keep prerendering.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('new') === '1') {
+      setShowForm(true);
+      window.history.replaceState(null, '', '/admin/rota');
+    }
+  }, []);
+
   useEffect(() => {
     loadJobs();
   }, [weekStart]);

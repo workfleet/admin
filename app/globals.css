@@ -690,6 +690,32 @@ h3 { font-size: 15px; line-height: 1.35; }
   gap: 12px;
 }
 
+/* The greeting carries no information, so it shouldn't be the loudest thing on
+   the page. Sized down and set beside the date on one line, which leaves the
+   panels to lead and reclaims a row of vertical space. */
+.dash-header-row {
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.dash-greeting {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.dash-greeting h1 {
+  font-size: 20px;
+  margin: 0;
+}
+
+.dash-greeting-date {
+  font-family: var(--wf-data);
+  font-size: 13px;
+  color: var(--muted);
+}
+
 .back-button {
   display: inline-flex;
   align-items: center;
@@ -718,18 +744,15 @@ h3 { font-size: 15px; line-height: 1.35; }
 
 .stat-card {
   background: var(--surface);
-  border: none;
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-lg);
-  padding: 22px 24px;
+  padding: 20px 22px;
   box-shadow: var(--shadow-sm);
   flex: 1;
-  min-width: 130px;
-  transition: box-shadow 0.15s ease, transform 0.15s ease;
-}
-
-.stat-card:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
+  /* Wide enough that the longest label still clears the padding once the row
+     packs down to its tightest - the labels don't wrap, so anything narrower
+     truncates them instead. */
+  min-width: 150px;
 }
 
 .stat-number {
@@ -743,10 +766,26 @@ h3 { font-size: 15px; line-height: 1.35; }
 }
 
 .stat-label {
-  font-size: 13px;
-  color: var(--muted);
+  font-family: var(--wf-data);
+  font-size: 11px;
   font-weight: 600;
-  margin-top: 4px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 6px;
+  /* One line each, so the five read as a row rather than a ragged block. The
+     ellipsis is a backstop for a label longer than min-width allows for. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stat-sublabel {
+  font-family: var(--wf-data);
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 3px;
+  min-height: 17px;
 }
 
 .stat-card-top {
@@ -772,7 +811,6 @@ h3 { font-size: 15px; line-height: 1.35; }
   grid-template-columns: 1.3fr 1fr;
   gap: 16px;
   margin-bottom: 16px;
-  align-items: start;
 }
 
 .dash-grid-3 {
@@ -780,12 +818,38 @@ h3 { font-size: 15px; line-height: 1.35; }
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
   margin-bottom: 16px;
-  align-items: start;
+}
+
+/* Panels in a dashboard row stretch to a shared height, so the card becomes a
+   column and the list inside it takes up the slack. .card's own bottom margin
+   would otherwise stack on top of the grid gap and leave the rows unevenly
+   spaced down the page. */
+.dash-grid-2 > .card,
+.dash-grid-3 > .card {
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Capped so a long list sets its own bounds rather than the height of the
+   whole row - the neighbouring panel stretches to meet it either way. */
+.dash-panel-list {
+  flex: 1;
+  min-height: 0;
+  max-height: 360px;
+  overflow-y: auto;
 }
 
 @media (max-width: 900px) {
   .dash-grid-2, .dash-grid-3 {
     grid-template-columns: 1fr;
+  }
+
+  /* Stacked, there's no neighbouring panel to keep level, so let the lists run
+     their full length rather than nesting a scroll area inside the page. */
+  .dash-panel-list {
+    max-height: none;
+    overflow-y: visible;
   }
 }
 
