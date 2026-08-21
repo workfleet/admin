@@ -33,6 +33,10 @@ export default function JobDetailPage() {
   const [checkInError, setCheckInError] = useState('');
   const [checkingIn, setCheckingIn] = useState(false);
   const [checklistItems, setChecklistItems] = useState([]);
+  const [coverOffer, setCoverOffer] = useState(null);
+  const [showCoverForm, setShowCoverForm] = useState(false);
+  const [coverReason, setCoverReason] = useState('');
+  const [submittingCover, setSubmittingCover] = useState(false);
 
   useEffect(() => {
     loadJob();
@@ -82,12 +86,20 @@ export default function JobDetailPage() {
       .eq('cleaner_id', session.user.id)
       .maybeSingle();
 
+    const { data: offerData } = await supabase
+      .from('shift_offers')
+      .select('id, status, released_by, created_at')
+      .eq('job_id', id)
+      .eq('status', 'open')
+      .maybeSingle();
+
     setJob(jobData);
     setTasks(taskData || []);
     setPhotos(await withSignedUrls(photoData || []));
     setCheckin(checkinData);
     setExtensionRequests(extensionData || []);
     setChecklistItems(checklistData || []);
+    setCoverOffer(offerData || null);
   };
 
   // photos.url stores the job-photos storage path (not a public URL) since
@@ -237,6 +249,51 @@ export default function JobDetailPage() {
     });
   };
 
+  // Releasing a shift for cover does NOT unassign this cleaner - they
+  // stay on it until someone actually claims it, so an unfilled request
+  // can never leave the client with nobody booked in. See 0070.
+  const requestCover = async (e) => {
+    e.preventDefault();
+    const confirmed = await confirm(
+      "Ask for cover on this shift? It stays yours until someone else picks it up, and the office will be told straight away.",
+      { title: "Can't make this shift" }
+    );
+    if (!confirmed) return;
+
+    setSubmittingCover(true);
+    const { data, error } = await supabase
+      .from('shift_offers')
+      .insert({
+        job_id: id,
+        released_by: userId,
+        opened_by: userId,
+        reason: coverReason.trim() || null,
+      })
+      .select('id, status, released_by, created_at')
+      .single();
+
+    setSubmittingCover(false);
+    if (error || !data) {
+      toast.error("Couldn't send that - cover may already have been requested for this shift.");
+      return;
+    }
+
+    setCoverOffer(data);
+    setShowCoverForm(false);
+    setCoverReason('');
+    toast.success('Sent. Other cleaners can now pick this shift up.');
+
+    const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', userId).single();
+    notify({
+      type: 'shift_cover_needed',
+      cleanerName: profile?.full_name || 'A cleaner',
+      releasedByCleanerId: userId,
+      address: job.properties?.address,
+      scheduledAt: job.scheduled_at,
+      reason: coverReason.trim() || null,
+    });
+  };
+
   const toggleTask = async (task) => {
     const updated = {
       completed: !task.completed,
@@ -317,6 +374,47 @@ export default function JobDetailPage() {
           <button onClick={handleCheckOut}>Check Out</button>
         )}
       </div>
+
+      {!checkin && !isHistory && new Date(job.scheduled_at) > new Date() && (
+        <div className="card">
+          {coverOffer ? (
+            <>
+              <h2>Cover requested</h2>
+              <p style={{ fontSize: 13.5, color: 'var(--muted)', margin: '4px 0 0' }}>
+                This shift has been offered to the rest of the team. It's still yours until
+                someone picks it up - you'll be told as soon as they do.
+              </p>
+            </>
+          ) : (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2 style={{ margin: 0 }}>Can't Make This Shift?</h2>
+                <button className="btn-secondary" onClick={() => setShowCoverForm((s) => !s)}>
+                  {showCoverForm ? 'Cancel' : 'Ask for cover'}
+                </button>
+              </div>
+              <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>
+                The shift stays yours until someone else takes it - tell the office as early as you can.
+              </p>
+
+              {showCoverForm && (
+                <form onSubmit={requestCover} style={{ marginTop: 12 }}>
+                  <label>Reason (optional)</label>
+                  <input
+                    value={coverReason}
+                    onChange={(e) => setCoverReason(e.target.value)}
+                    placeholder="e.g. Off sick, childcare fell through"
+                    style={{ marginBottom: 10 }}
+                  />
+                  <button type="submit" disabled={submittingCover} style={{ width: '100%' }}>
+                    {submittingCover ? 'Sending...' : 'Request Cover'}
+                  </button>
+                </form>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {checkin && !checkin.checked_out_at && !isHistory && (
         <div className="card">

@@ -35,7 +35,9 @@ export function ConfirmProvider({ children }) {
         <div className="confirm-overlay" onClick={() => settle(false)}>
           <div className="confirm-modal" onClick={(e) => e.stopPropagation()}>
             {state.title && <h2>{state.title}</h2>}
-            <p>{state.message}</p>
+            {/* pre-wrap so a message can list items on their own lines;
+                single-line messages are unaffected. */}
+            <p style={{ whiteSpace: 'pre-wrap' }}>{state.message}</p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button type="button" className="btn-secondary" onClick={() => settle(false)}>
                 {state.cancelLabel}

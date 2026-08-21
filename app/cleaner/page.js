@@ -9,6 +9,8 @@ import { getSessionWithRetry } from '../../lib/authGate';
 import { purgeOldNotifications } from '../../lib/notifications';
 import { getWorkAnniversaryYears } from '../../lib/workAnniversary';
 import WorkAnniversaryPopup from '../components/WorkAnniversaryPopup';
+import ShiftCoverCard from '../components/ShiftCoverCard';
+import KeyHoldingsCard from '../components/KeyHoldingsCard';
 import BackButton from '../components/BackButton';
 import { KIT_PRODUCTS } from '../../lib/kitProducts';
 
@@ -19,6 +21,7 @@ export default function CleanerDashboard() {
   const [myRequests, setMyRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [anniversary, setAnniversary] = useState(null);
+  const [userId, setUserId] = useState(null);
 
   const [requestType, setRequestType] = useState(null); // null | 'kit_topup' | 'issue'
   const [requestJobId, setRequestJobId] = useState('');
@@ -35,6 +38,7 @@ export default function CleanerDashboard() {
   const loadData = async () => {
     const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
+    setUserId(session.user.id);
 
     const { data: ownProfile } = await supabase
       .from('profiles').select('full_name, created_at').eq('id', session.user.id).single();
@@ -165,6 +169,10 @@ export default function CleanerDashboard() {
           ))}
         </div>
       )}
+
+      <ShiftCoverCard userId={userId} onChange={loadData} />
+
+      <KeyHoldingsCard userId={userId} />
 
       <div className="card">
         <h2>Need something?</h2>

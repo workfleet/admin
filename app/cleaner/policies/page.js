@@ -43,6 +43,18 @@ const HELP_SECTIONS = [
     body: 'On your Home tab, use the "Need something?" section to request a kit top-up or report a problem, like faulty equipment. Admin will resolve it and you\'ll see their note once it\'s sorted.',
   },
   {
+    title: 'If You Can’t Make a Shift',
+    body: 'Open the job and tap "Ask for cover" as early as you can. The shift is offered to everyone else who’s free, and the office is told straight away. It stays your shift until someone actually takes it, so don’t assume it’s covered until you get the notification saying so.',
+  },
+  {
+    title: 'Picking Up Extra Shifts',
+    body: 'Shifts that need cover show on your Home tab. First to tap "I’ll take it" gets it. You won’t be able to take one that clashes with a job you’re already on, or that falls on approved time off.',
+  },
+  {
+    title: 'Keys You’re Holding',
+    body: 'Any key, fob or access code signed out to you shows on your Home tab. When one is issued, type your name to confirm you’ve got it — that goes on the record. Hand everything back to the office when you finish with it, or when you leave.',
+  },
+  {
     title: 'Notifications',
     body: 'Notifications appear on your Home tab for things like new shifts being assigned or a time off request being decided. Dismiss ones you\'ve seen with the X — dismissed notifications aren\'t lost, they move into your Notification History (tap "Notifications" next to My Jobs) where they\'re kept for 30 days.',
   },

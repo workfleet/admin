@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Download, Folder, Package, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Download, Folder, Package, KeyRound, LifeBuoy, Menu, X } from 'lucide-react';
 import { signOutAndClearPresence } from '../../lib/signOut';
 import { getSessionAndProfile } from '../../lib/authGate';
 import PresenceIndicator from '../components/PresenceIndicator';
@@ -16,6 +16,7 @@ import EnablePush from '../components/EnablePush';
 const NAV_ITEMS = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/rota', label: 'Rota', icon: Calendar },
+  { href: '/admin/cover', label: 'Shift Cover', icon: LifeBuoy },
   { href: '/admin/clients', label: 'Clients', icon: Building2 },
   { href: '/admin/quotes', label: 'Quotes', icon: PoundSterling },
   { href: '/admin/cleaners', label: 'Cleaners', icon: Users, adminOnly: true },
@@ -23,6 +24,7 @@ const NAV_ITEMS = [
   { href: '/admin/templates', label: 'Templates', icon: ListChecks },
   { href: '/admin/documents', label: 'Documents', icon: Folder },
   { href: '/admin/inventory', label: 'Inventory', icon: Package },
+  { href: '/admin/keys', label: 'Key Register', icon: KeyRound },
   { href: '/admin/tasks', label: 'Team Tasks', icon: ListTodo },
   { href: '/admin/reports', label: 'Reports', icon: FileText },
   { href: '/admin/data-reports', label: 'Data Reports', icon: Download },

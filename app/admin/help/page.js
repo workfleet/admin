@@ -40,6 +40,14 @@ const HELP_SECTIONS = [
     body: 'Reports pulls together job history and summaries you can use for reviews or client updates.',
   },
   {
+    title: 'Covering a Shift Someone Can\'t Make',
+    body: 'When a cleaner taps "Ask for cover" on a shift, it appears under Shift Cover and is offered to every other cleaner who is free — the first to accept takes it over. The shift stays with the original cleaner until someone actually picks it up, so nothing is ever left uncovered. You can also open a cover request yourself from that page, assign someone directly, or cancel the request.',
+  },
+  {
+    title: 'Key Register — Who Has What',
+    body: 'Key Register lists every key, fob and access code per site, who is holding each one, and the full handover history. Issue a key to a staff member and they are asked to sign for it in the app; record it back in when they return it. Removing a staff account is blocked while they still have keys signed out. Never type an actual alarm code or key-safe number in here — the register records who was given it, not the code itself.',
+  },
+  {
     title: 'Payroll — Hours Worked',
     body: 'Your Dashboard has a Payroll section that totals completed job hours per cleaner for This Week, Last Week, This Month or Last Month — use it when running payroll.',
   },

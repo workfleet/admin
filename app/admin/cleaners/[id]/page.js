@@ -293,11 +293,16 @@ export default function CleanerProfile() {
       { title: 'Remove account', danger: true, confirmLabel: 'Remove' }
     ))) return;
 
+    await sendRemoval(false);
+  };
+
+  const sendRemoval = async (force) => {
     setRemoving(true);
     const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch(`/api/admin/cleaners/${id}/remove`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${session.access_token}` },
+      headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force }),
     });
     setRemoving(false);
 
@@ -306,9 +311,26 @@ export default function CleanerProfile() {
       setRemovedEmail(body.releasedEmail);
       setCleaner((c) => ({ ...c, active: false }));
       toast.success('Account removed.');
-    } else {
-      toast.error("Couldn't remove this account. Please try again.");
+      return;
     }
+
+    // They still hold company keys. Removing anyway is allowed, but only
+    // as a second, explicit decision with the list in front of you.
+    if (res.status === 409) {
+      const body = await res.json().catch(() => ({}));
+      if (body.error === 'keys_outstanding') {
+        const list = (body.keys || []).map((k) => `• ${k.label} (${k.address})`).join('\n');
+        const proceed = await confirm(
+          `${cleaner.full_name || 'This person'} still has company keys signed out:\n\n${list}\n\n` +
+          `Record them back in on the Key Register first. Remove the account anyway?`,
+          { title: 'Keys not returned', danger: true, confirmLabel: 'Remove anyway' }
+        );
+        if (proceed) await sendRemoval(true);
+        return;
+      }
+    }
+
+    toast.error("Couldn't remove this account. Please try again.");
   };
 
   const startEditAdjustment = () => {

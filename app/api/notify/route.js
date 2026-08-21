@@ -61,6 +61,16 @@ async function pushToUserIds(userIds, payload) {
   }
 }
 
+// Cover offers go to every active cleaner except the person who
+// released the shift - they're the one thing here where being a few
+// minutes late to look at the app costs someone the shift.
+async function pushActiveCleaners(excludeUserId, push) {
+  const { data: cleaners } = await supabaseAdmin
+    .from('profiles').select('id').eq('role', 'cleaner').eq('active', true);
+  const ids = (cleaners || []).map((c) => c.id).filter((id) => id !== excludeUserId);
+  await pushToUserIds(ids, push);
+}
+
 async function pushAdminsAndSupervisors(cleanerName) {
   const { data: staff } = await supabaseAdmin.from('profiles').select('id').in('role', ['admin', 'supervisor']);
   await pushToUserIds((staff || []).map((s) => s.id), {
@@ -77,7 +87,23 @@ export async function POST(request) {
 
   const payload = await request.json();
 
-  if (payload.type === 'emergency_alert') {
+  if (payload.type === 'shift_cover_needed') {
+    await pushActiveCleaners(payload.releasedByCleanerId, {
+      title: 'Shift needs cover',
+      body: `${payload.address || 'A shift'} on ${new Date(payload.scheduledAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} - first to accept takes it.`,
+      tag: 'shift-cover',
+      url: '/cleaner',
+    });
+  } else if (payload.type === 'shift_cover_filled') {
+    if (payload.releasedByCleanerId) {
+      await pushToUserIds([payload.releasedByCleanerId], {
+        title: 'Your shift is covered',
+        body: `Someone has picked up your shift at ${payload.address || 'the site'}.`,
+        tag: 'shift-cover-filled',
+        url: '/cleaner',
+      });
+    }
+  } else if (payload.type === 'emergency_alert') {
     await pushAdminsAndSupervisors(payload.cleanerName);
   } else if (payload.type === 'emergency_alert_acknowledged') {
     await pushToUserIds([payload.cleanerId], {
@@ -153,6 +179,25 @@ export async function POST(request) {
       subject = `Your time off request was ${payload.status}`;
       text = `Your request for ${payload.startDate} to ${payload.endDate} was ${payload.status}.`
         + (payload.note ? `\n\nNote from admin: ${payload.note}` : '');
+    } else if (payload.type === 'shift_cover_needed') {
+      to = await adminEmails();
+      if (to.length === 0) return NextResponse.json({ skipped: 'no_email' });
+      subject = payload.cleanerName
+        ? `${payload.cleanerName} needs cover for a shift`
+        : 'Cover needed for a shift';
+      text = `${payload.cleanerName || 'Admin'} has opened a cover request for `
+        + `${payload.address || 'a shift'} on ${new Date(payload.scheduledAt).toLocaleString()}.`
+        + (payload.reason ? `\n\nReason: ${payload.reason}` : '')
+        + `\n\nThe shift is still assigned to them until someone else picks it up.`;
+    } else if (payload.type === 'shift_cover_filled') {
+      if (!payload.releasedByCleanerId) return NextResponse.json({ skipped: 'no_recipient' });
+      const email = await emailForUserId(payload.releasedByCleanerId);
+      if (!email) return NextResponse.json({ skipped: 'no_email' });
+      to = [email];
+      subject = 'Your shift has been covered';
+      text = `Your shift at ${payload.address || 'the site'} on `
+        + `${new Date(payload.scheduledAt).toLocaleString()} has been picked up by another cleaner. `
+        + `You're no longer assigned to it.`;
     } else if (payload.type === 'time_extension_requested') {
       to = await adminEmails();
       if (to.length === 0) return NextResponse.json({ skipped: 'no_email' });
