@@ -3,13 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ClipboardList, Users, Building2, MapPin, UserX } from 'lucide-react';
+import { ClipboardList, Users, Inbox, Clock, UserX } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../lib/authGate';
 import { getWorkAnniversaryYears } from '../../lib/workAnniversary';
 import { needsReorder } from '../../lib/inventory';
 import WorkAnniversaryPopup from '../components/WorkAnniversaryPopup';
-import BackButton from '../components/BackButton';
 
 function formatTimeRange(scheduledAt, durationMinutes) {
   const start = new Date(scheduledAt);
@@ -102,7 +101,7 @@ export default function AdminDashboard() {
   const [anniversary, setAnniversary] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const [stats, setStats] = useState({ todaysJobs: 0, todaysCompleted: 0, staffWorking: 0, clients: 0, sites: 0, unassigned: 0 });
+  const [stats, setStats] = useState({ todaysJobs: 0, todaysCompleted: 0, staffWorking: 0, openRequests: 0, jobHours: 0, unassigned: 0 });
   const [todaysJobs, setTodaysJobs] = useState([]);
   const [upcomingJobs, setUpcomingJobs] = useState([]);
   const [attention, setAttention] = useState([]);
@@ -189,8 +188,6 @@ export default function AdminDashboard() {
     in30Days.setDate(in30Days.getDate() + 30);
 
     const [
-      { count: clientsCount },
-      { count: sitesCount },
       { data: activeCleaners },
       { data: todaysJobsData },
       { data: nearTermJobs },
@@ -203,8 +200,6 @@ export default function AdminDashboard() {
       { data: contractClients },
       { data: allProducts },
     ] = await Promise.all([
-      supabase.from('clients').select('*', { count: 'exact', head: true }),
-      supabase.from('properties').select('*', { count: 'exact', head: true }),
       supabase.from('profiles').select('id, full_name').eq('role', 'cleaner').eq('active', true),
       supabase.from('jobs')
         .select('id, scheduled_at, status, duration_minutes, properties(address, clients(name)), job_assignments(cleaner_id, profiles(full_name))')
@@ -249,12 +244,17 @@ export default function AdminDashboard() {
     const todaysCompleted = (todaysJobsData || []).filter((j) => j.status === 'completed').length;
     const todaysUnassigned = (todaysJobsData || []).filter((j) => (j.job_assignments || []).length === 0).length;
 
+    // Total length of the day's work, not staff-hours - a job with two cleaners
+    // on it is still one slot in the day. Staff Hours below does the splitting.
+    const jobHours = (todaysJobsData || [])
+      .reduce((mins, j) => mins + (j.duration_minutes || 0), 0) / 60;
+
     setStats({
       todaysJobs: (todaysJobsData || []).length,
       todaysCompleted,
       staffWorking: (openCheckins || []).length,
-      clients: clientsCount || 0,
-      sites: sitesCount || 0,
+      openRequests: (openRequests || []).length,
+      jobHours,
       unassigned: todaysUnassigned,
     });
     setTodaysJobs(todaysJobsData || []);
@@ -398,15 +398,22 @@ export default function AdminDashboard() {
 
   return (
     <div className="page-inner">
-      <BackButton />
       {anniversary && <WorkAnniversaryPopup name={anniversary.name} years={anniversary.years} />}
-      <div className="page-header-row">
-        <div>
+      <div className="page-header-row dash-header-row">
+        <div className="dash-greeting">
           <h1>{timeGreeting}, {greetingName}</h1>
-          <p className="page-subtitle">
+          <span className="dash-greeting-date">
             {new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
-          </p>
+          </span>
         </div>
+        <Link
+          href="/admin/rota?new=1"
+          className="btn-primary"
+          style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap' }}
+          title="Schedule a new job and assign staff to it"
+        >
+          + New Job
+        </Link>
       </div>
 
       <div className="stat-row">
@@ -420,7 +427,9 @@ export default function AdminDashboard() {
         </div>
         <div className="stat-card">
           <div className="stat-card-top">
-            <div className="stat-card-icon" style={{ background: 'rgba(52, 199, 123, 0.16)' }}><Users size={18} color="var(--wf-verified-ink)" /></div>
+            <div className="stat-card-icon" style={{ background: stats.staffWorking > 0 ? 'rgba(52, 199, 123, 0.16)' : 'var(--wf-ash)' }}>
+              <Users size={18} color={stats.staffWorking > 0 ? 'var(--wf-verified-ink)' : 'var(--wf-steel)'} />
+            </div>
           </div>
           <div className="stat-number">{stats.staffWorking}</div>
           <div className="stat-label">Working now</div>
@@ -428,19 +437,19 @@ export default function AdminDashboard() {
         </div>
         <div className="stat-card">
           <div className="stat-card-top">
-            <div className="stat-card-icon" style={{ background: 'var(--wf-ash)' }}><Building2 size={18} color="var(--wf-steel)" /></div>
+            <div className="stat-card-icon" style={{ background: 'var(--wf-ash)' }}><Inbox size={18} color="var(--wf-steel)" /></div>
           </div>
-          <div className="stat-number">{stats.clients}</div>
-          <div className="stat-label">Clients</div>
-          <div className="stat-sublabel" />
+          <div className="stat-number">{stats.openRequests}</div>
+          <div className="stat-label">Requests</div>
+          <div className="stat-sublabel">open</div>
         </div>
         <div className="stat-card">
           <div className="stat-card-top">
-            <div className="stat-card-icon" style={{ background: 'var(--wf-ash)' }}><MapPin size={18} color="var(--wf-steel)" /></div>
+            <div className="stat-card-icon" style={{ background: 'var(--wf-ash)' }}><Clock size={18} color="var(--wf-steel)" /></div>
           </div>
-          <div className="stat-number">{stats.sites}</div>
-          <div className="stat-label">Sites</div>
-          <div className="stat-sublabel" />
+          <div className="stat-number">{stats.jobHours.toFixed(1)}</div>
+          <div className="stat-label">Job hours</div>
+          <div className="stat-sublabel">scheduled today</div>
         </div>
         <div className="stat-card">
           <div className="stat-card-top">

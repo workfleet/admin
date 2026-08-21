@@ -690,6 +690,32 @@ h3 { font-size: 15px; line-height: 1.35; }
   gap: 12px;
 }
 
+/* The greeting carries no information, so it shouldn't be the loudest thing on
+   the page. Sized down and set beside the date on one line, which leaves the
+   panels to lead and reclaims a row of vertical space. */
+.dash-header-row {
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.dash-greeting {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.dash-greeting h1 {
+  font-size: 20px;
+  margin: 0;
+}
+
+.dash-greeting-date {
+  font-family: var(--wf-data);
+  font-size: 13px;
+  color: var(--muted);
+}
+
 .back-button {
   display: inline-flex;
   align-items: center;
@@ -723,7 +749,10 @@ h3 { font-size: 15px; line-height: 1.35; }
   padding: 20px 22px;
   box-shadow: var(--shadow-sm);
   flex: 1;
-  min-width: 130px;
+  /* Wide enough that the longest label still clears the padding once the row
+     packs down to its tightest - the labels don't wrap, so anything narrower
+     truncates them instead. */
+  min-width: 150px;
 }
 
 .stat-number {
@@ -744,7 +773,11 @@ h3 { font-size: 15px; line-height: 1.35; }
   text-transform: uppercase;
   color: var(--muted);
   margin-top: 6px;
+  /* One line each, so the five read as a row rather than a ragged block. The
+     ellipsis is a backstop for a label longer than min-width allows for. */
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stat-sublabel {
