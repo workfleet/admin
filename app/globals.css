@@ -447,9 +447,14 @@ label {
   margin-bottom: 6px;
 }
 
-/* Heading sizes come from brand.css. Only the in-app spacing rhythm is
-   set here. */
-h2 { margin: 0 0 8px; }
+/* brand.css sizes headings for marketing pages - an h1 there is
+   clamp(28px, 5vw, 46px). In the app they're page titles sitting above
+   dense tables and cards, so they're scaled back to UI sizes here.
+   Family, weight and tracking still come from brand.css; only size and
+   leading are overridden. */
+h1 { font-size: 26px; line-height: 1.25; }
+h2 { font-size: 18px; line-height: 1.3; margin: 0 0 8px; }
+h3 { font-size: 15px; line-height: 1.35; }
 
 .task-row {
   display: flex;
