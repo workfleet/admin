@@ -18,6 +18,29 @@ function formatTimeRange(scheduledAt, durationMinutes) {
   return `${fmt(start)} – ${fmt(end)}`;
 }
 
+// Sorted by urgency then date, a category with a lot of rows in it - a dozen
+// expiring certs, say - fills every visible slot and hides everything else.
+// Sort inside each kind as before, then deal the kinds out round-robin so the
+// top of the list always spans what's actually going on. Kinds appear in the
+// order their most pressing item would have come in the flat sort.
+function interleaveByKind(items) {
+  const byUrgencyThenDate = (a, b) => (b.urgent - a.urgent) || (new Date(a.at) - new Date(b.at));
+  const groups = [];
+  const groupIndex = new Map();
+  items.slice().sort(byUrgencyThenDate).forEach((item) => {
+    if (!groupIndex.has(item.kind)) {
+      groupIndex.set(item.kind, groups.length);
+      groups.push([]);
+    }
+    groups[groupIndex.get(item.kind)].push(item);
+  });
+  const out = [];
+  for (let i = 0; groups.some((g) => g.length > i); i += 1) {
+    groups.forEach((g) => { if (g[i]) out.push(g[i]); });
+  }
+  return out;
+}
+
 // Payroll weeks run Friday through the following Thursday (inclusive),
 // matching the rota's actual weekly cycle - "This Week" is always
 // recomputed from the current time, so it naturally resets right at
@@ -249,6 +272,8 @@ export default function AdminDashboard() {
     setStaffGlance({ working, holiday, off, total: (activeCleaners || []).length });
 
     const unassignedNearTerm = (nearTermJobs || []).filter((j) => (j.job_assignments || []).length === 0);
+    const lowStock = (allProducts || []).filter(needsReorder);
+    const outOfStock = lowStock.filter((p) => p.stock_level === 0);
     const attentionItems = [
       ...(openRequests || []).map((r) => ({
         id: `req-${r.id}`,
@@ -316,19 +341,31 @@ export default function AdminDashboard() {
           urgent: new Date(c.contract_renewal_date) < startOfDay,
           at: c.contract_renewal_date,
         })),
-      ...(allProducts || [])
-        .filter(needsReorder)
-        .map((p) => ({
-          id: `stock-${p.id}`,
-          kind: 'stock',
-          title: 'Low stock',
-          subtitle: `${p.name} · ${p.stock_level} left (reorder at ${p.reorder_threshold})`,
-          href: '/admin/inventory',
-          urgent: p.stock_level === 0,
-          at: new Date().toISOString(),
-        })),
-    ].sort((a, b) => (b.urgent - a.urgent) || (new Date(a.at) - new Date(b.at)));
-    setAttention(attentionItems);
+      // One row for the lot. Listed individually these crowd out every other
+      // kind of item, and the fix for all of them is the same trip to Inventory.
+      ...(lowStock.length > 0 ? [{
+        id: 'stock-low',
+        kind: 'stock',
+        title: lowStock.length === 1
+          ? 'Low stock'
+          : `${lowStock.length} items low on stock`,
+        subtitle: lowStock.length === 1
+          ? `${lowStock[0].name} · ${lowStock[0].stock_level} left (reorder at ${lowStock[0].reorder_threshold})`
+          : [
+              // Only worth calling out when it's some of them - if every item
+              // is at zero the count just repeats the title.
+              outOfStock.length > 0 && outOfStock.length < lowStock.length
+                ? `${outOfStock.length} out of stock`
+                : null,
+              lowStock.slice(0, 3).map((p) => p.name).join(', ')
+                + (lowStock.length > 3 ? ` +${lowStock.length - 3} more` : ''),
+            ].filter(Boolean).join(' · '),
+        href: '/admin/inventory',
+        urgent: outOfStock.length > 0,
+        at: new Date().toISOString(),
+      }] : []),
+    ];
+    setAttention(interleaveByKind(attentionItems));
 
     setLoading(false);
   };
@@ -378,14 +415,16 @@ export default function AdminDashboard() {
             <div className="stat-card-icon" style={{ background: 'var(--wf-ash)' }}><ClipboardList size={18} color="var(--wf-steel)" /></div>
           </div>
           <div className="stat-number">{stats.todaysJobs}</div>
-          <div className="stat-label">Today's jobs · {stats.todaysCompleted} completed</div>
+          <div className="stat-label">Today's jobs</div>
+          <div className="stat-sublabel">{stats.todaysCompleted} completed</div>
         </div>
         <div className="stat-card">
           <div className="stat-card-top">
             <div className="stat-card-icon" style={{ background: 'rgba(52, 199, 123, 0.16)' }}><Users size={18} color="var(--wf-verified-ink)" /></div>
           </div>
           <div className="stat-number">{stats.staffWorking}</div>
-          <div className="stat-label">Staff working now</div>
+          <div className="stat-label">Working now</div>
+          <div className="stat-sublabel" />
         </div>
         <div className="stat-card">
           <div className="stat-card-top">
@@ -393,6 +432,7 @@ export default function AdminDashboard() {
           </div>
           <div className="stat-number">{stats.clients}</div>
           <div className="stat-label">Clients</div>
+          <div className="stat-sublabel" />
         </div>
         <div className="stat-card">
           <div className="stat-card-top">
@@ -400,6 +440,7 @@ export default function AdminDashboard() {
           </div>
           <div className="stat-number">{stats.sites}</div>
           <div className="stat-label">Sites</div>
+          <div className="stat-sublabel" />
         </div>
         <div className="stat-card">
           <div className="stat-card-top">
@@ -408,7 +449,8 @@ export default function AdminDashboard() {
             </div>
           </div>
           <div className="stat-number">{stats.unassigned}</div>
-          <div className="stat-label">Unassigned today</div>
+          <div className="stat-label">Unassigned</div>
+          <div className="stat-sublabel">today</div>
         </div>
       </div>
 
@@ -418,70 +460,74 @@ export default function AdminDashboard() {
             <h2>Today's Jobs</h2>
             <Link href="/admin/rota" className="dash-panel-link">View full schedule &rarr;</Link>
           </div>
-          {todaysJobs.length === 0 && <p className="empty-state">No jobs scheduled today.</p>}
-          {todaysJobs.map((job) => {
-            const names = (job.job_assignments || []).map((a) => a.profiles?.full_name).filter(Boolean);
-            const unassigned = names.length === 0;
-            return (
-              <div key={job.id} className="dash-row" onClick={() => router.push('/admin/rota')}>
-                <div>
-                  <div className="dash-row-title">{job.properties?.clients?.name || job.properties?.address}</div>
-                  <div className="dash-row-subtitle">
-                    {formatTimeRange(job.scheduled_at, job.duration_minutes)} · {unassigned ? 'Unassigned' : names.join(', ')}
+          <div className="dash-panel-list">
+            {todaysJobs.length === 0 && <p className="empty-state">No jobs scheduled today.</p>}
+            {todaysJobs.map((job) => {
+              const names = (job.job_assignments || []).map((a) => a.profiles?.full_name).filter(Boolean);
+              const unassigned = names.length === 0;
+              return (
+                <div key={job.id} className="dash-row" onClick={() => router.push('/admin/rota')}>
+                  <div>
+                    <div className="dash-row-title">{job.properties?.clients?.name || job.properties?.address}</div>
+                    <div className="dash-row-subtitle">
+                      {formatTimeRange(job.scheduled_at, job.duration_minutes)} · {unassigned ? 'Unassigned' : names.join(', ')}
+                    </div>
                   </div>
+                  <span className={`badge ${unassigned ? 'missed' : job.status}`}>
+                    {unassigned ? 'Assign Cleaner' : job.status.replace('_', ' ')}
+                  </span>
                 </div>
-                <span className={`badge ${unassigned ? 'missed' : job.status}`}>
-                  {unassigned ? 'Assign Cleaner' : job.status.replace('_', ' ')}
-                </span>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
 
         <div className="card">
           <div className="dash-panel-header">
             <h2>Needs Attention</h2>
           </div>
-          {attention.length === 0 && <p className="empty-state">Nothing needs attention right now.</p>}
-          {attention.slice(0, 6).map((item) => {
-            if (item.kind === 'request') {
-              return (
-                <div key={item.id} className="dash-row" onClick={() => setDetailItem(item)}>
-                  <input
-                    type="checkbox"
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={() => completeTodo(item.rawId)}
-                    style={{ width: 18, height: 18, marginRight: 10, flexShrink: 0 }}
-                  />
-                  <div style={{ flex: 1 }}>
-                    <div className="dash-row-title">{item.title}</div>
-                    <div className="dash-row-subtitle">{item.subtitle}</div>
-                  </div>
-                </div>
-              );
-            }
-            if (item.kind === 'reminder') {
-              return (
-                <div key={item.id} className="dash-row" style={{ cursor: 'default' }}>
-                  <div>
-                    <div className="dash-row-title" style={item.urgent ? { color: 'var(--wf-overdue)' } : undefined}>
-                      {item.title} — <Link href={item.href} style={{ color: 'var(--brand-link)', textDecoration: 'none' }}>{item.name}</Link>
+          <div className="dash-panel-list">
+            {attention.length === 0 && <p className="empty-state">Nothing needs attention right now.</p>}
+            {attention.slice(0, 6).map((item) => {
+              if (item.kind === 'request') {
+                return (
+                  <div key={item.id} className="dash-row" onClick={() => setDetailItem(item)}>
+                    <input
+                      type="checkbox"
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={() => completeTodo(item.rawId)}
+                      style={{ width: 18, height: 18, marginRight: 10, flexShrink: 0 }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div className="dash-row-title">{item.title}</div>
+                      <div className="dash-row-subtitle">{item.subtitle}</div>
                     </div>
+                  </div>
+                );
+              }
+              if (item.kind === 'reminder') {
+                return (
+                  <div key={item.id} className="dash-row" style={{ cursor: 'default' }}>
+                    <div>
+                      <div className="dash-row-title" style={item.urgent ? { color: 'var(--wf-overdue)' } : undefined}>
+                        {item.title} — <Link href={item.href} style={{ color: 'var(--brand-link)', textDecoration: 'none' }}>{item.name}</Link>
+                      </div>
+                      <div className="dash-row-subtitle">{item.subtitle}</div>
+                    </div>
+                    <button className="btn-secondary" onClick={() => completeReminder(item)} title="Mark this reminder done and clear it off your dashboard">Done</button>
+                  </div>
+                );
+              }
+              return (
+                <Link key={item.id} href={item.href} className="dash-row">
+                  <div>
+                    <div className="dash-row-title" style={item.urgent ? { color: 'var(--wf-overdue)' } : undefined}>{item.title}</div>
                     <div className="dash-row-subtitle">{item.subtitle}</div>
                   </div>
-                  <button className="btn-secondary" onClick={() => completeReminder(item)} title="Mark this reminder done and clear it off your dashboard">Done</button>
-                </div>
+                </Link>
               );
-            }
-            return (
-              <Link key={item.id} href={item.href} className="dash-row">
-                <div>
-                  <div className="dash-row-title" style={item.urgent ? { color: 'var(--wf-overdue)' } : undefined}>{item.title}</div>
-                  <div className="dash-row-subtitle">{item.subtitle}</div>
-                </div>
-              </Link>
-            );
-          })}
+            })}
+          </div>
           {attention.length > 6 && (
             <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '8px 0 0' }}>+{attention.length - 6} more</p>
           )}
@@ -548,7 +594,7 @@ export default function AdminDashboard() {
             <span className="dash-glance-dot" style={{ background: 'var(--wf-steel)' }} />
             <strong>{staffGlance.off.length}</strong> Not working today
           </div>
-          <Link href="/admin/cleaners" className="dash-panel-link" style={{ display: 'inline-block', marginTop: 8 }}>
+          <Link href="/admin/cleaners" className="dash-panel-link" style={{ display: 'inline-block', alignSelf: 'flex-start', marginTop: 8 }}>
             View staff &rarr;
           </Link>
         </div>
@@ -558,25 +604,27 @@ export default function AdminDashboard() {
             <h2>Upcoming Jobs</h2>
             <Link href="/admin/rota" className="dash-panel-link">View calendar &rarr;</Link>
           </div>
-          {upcomingJobs.length === 0 && <p className="empty-state">Nothing scheduled in the next week.</p>}
-          {upcomingJobs.map((job) => {
-            const names = (job.job_assignments || []).map((a) => a.profiles?.full_name).filter(Boolean);
-            const unassigned = names.length === 0;
-            return (
-              <div key={job.id} className="dash-row" onClick={() => router.push('/admin/rota')}>
-                <div>
-                  <div className="dash-row-title">{job.properties?.clients?.name || job.properties?.address}</div>
-                  <div className="dash-row-subtitle">
-                    {new Date(job.scheduled_at).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
-                    {' · '}{new Date(job.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+          <div className="dash-panel-list">
+            {upcomingJobs.length === 0 && <p className="empty-state">Nothing scheduled in the next week.</p>}
+            {upcomingJobs.map((job) => {
+              const names = (job.job_assignments || []).map((a) => a.profiles?.full_name).filter(Boolean);
+              const unassigned = names.length === 0;
+              return (
+                <div key={job.id} className="dash-row" onClick={() => router.push('/admin/rota')}>
+                  <div>
+                    <div className="dash-row-title">{job.properties?.clients?.name || job.properties?.address}</div>
+                    <div className="dash-row-subtitle">
+                      {new Date(job.scheduled_at).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
+                      {' · '}{new Date(job.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                    </div>
                   </div>
+                  <span className={`badge ${unassigned ? 'missed' : 'scheduled'}`}>
+                    {unassigned ? 'Needs Cleaner' : 'Scheduled'}
+                  </span>
                 </div>
-                <span className={`badge ${unassigned ? 'missed' : 'scheduled'}`}>
-                  {unassigned ? 'Needs Cleaner' : 'Scheduled'}
-                </span>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
 
