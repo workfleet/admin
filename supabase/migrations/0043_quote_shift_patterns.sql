@@ -1,0 +1,27 @@
+-- Staffed-contract quoting. The room-benchmark calculator (0042) prices a
+-- single visit and works backwards from hours to a margin-clearing price.
+-- A cleaning contract is sold the other way round: an agreed standing
+-- pattern of shifts at an agreed rate per hour, with the weekly charge
+-- falling out of it - which is what a commercial buyer expects to see set
+-- out shift by shift in the quotation.
+--
+-- Kept as jsonb alongside calculator_input rather than as its own table:
+-- the patterns are a snapshot of what was proposed on the day, never
+-- queried across quotes, and are meaningless apart from their quote.
+--
+-- Shape (see lib/shiftSchedule.js):
+--   {
+--     "initialWeeks": { "min": 4, "max": 6 },
+--     "patterns": [{
+--       "id": "...", "label": "Early-morning cleaning",
+--       "days": ["mon","wed","thu","fri","sat"],
+--       "start": "02:00", "end": "05:00",
+--       "operatives": 1, "rate": 35.00,
+--       "recurrence": "weekly" | "occasional",
+--       "occasionLabel": "bank holiday", "note": "..."
+--     }]
+--   }
+--
+-- Null for quotes with no shift pattern, which is most of them - one-off
+-- domestic cleans have nothing to set out.
+alter table quotes add column shift_schedule jsonb;

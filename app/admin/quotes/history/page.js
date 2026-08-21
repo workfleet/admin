@@ -7,6 +7,7 @@ import { supabase } from '../../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../../lib/authGate';
 import { formatPriceGBP, quoteReference, quoteRecipientName } from '../../../../lib/companyBranding';
 import { ROOM_TYPES, ADDON_TYPES, OVEN_OPTIONS } from '../../../../lib/quoteCalculator';
+import { summariseShiftSchedule } from '../../../../lib/shiftSchedule';
 import BackButton from '../../../components/BackButton';
 
 const STATUS_LABELS = { draft: 'Draft', sent: 'Sent', accepted: 'Accepted', declined: 'Declined', expired: 'Expired' };
@@ -30,7 +31,7 @@ export default function QuoteHistory() {
 
     const { data } = await supabase
       .from('quotes')
-      .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, status, valid_until, notes, created_at, calculator_input, calculator_breakdown, clients(name)')
+      .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, status, valid_until, notes, created_at, calculator_input, calculator_breakdown, shift_schedule, clients(name)')
       .order('created_at', { ascending: false });
 
     setQuotes(data || []);
@@ -156,6 +157,30 @@ export default function QuoteHistory() {
               </div>
             )}
 
+            {(() => {
+              const sched = summariseShiftSchedule(selectedQuote.shift_schedule);
+              if (!sched) return null;
+              return (
+                <div style={{ marginTop: 16 }}>
+                  <label>Shift Pattern (read only)</label>
+                  <div style={{ fontSize: 13.5, color: 'var(--muted)', lineHeight: 1.9, marginTop: 4 }}>
+                    {sched.patterns.map((p, i) => (
+                      <div key={i}>
+                        {p.label || 'Shift'}: {p.timeRange}
+                        {p.occasional
+                          ? ` — ${p.hoursPerOccasion}h per ${p.occasionLabel || 'occurrence'} at ${formatPriceGBP(p.rate)}/hr = ${formatPriceGBP(p.chargePerOccasion)}`
+                          : ` — ${p.daysDescription} — ${p.hoursPerWeek}h/week at ${formatPriceGBP(p.rate)}/hr = ${formatPriceGBP(p.weeklyCharge)}/week`}
+                      </div>
+                    ))}
+                    <div style={{ fontWeight: 600, color: 'var(--ink)', marginTop: 4 }}>
+                      {sched.weeklyHours}h per week — {formatPriceGBP(sched.weeklyCharge)}/week
+                      {sched.contractValues.map((c) => ` · ${c.weeks}wk ${formatPriceGBP(c.value)}`).join('')}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {selectedQuote.calculator_input && selectedQuote.calculator_breakdown ? (
               <>
                 <div style={{ marginTop: 16 }}>
@@ -212,13 +237,13 @@ export default function QuoteHistory() {
                         {' '}(cleaner pay {formatPriceGBP(selectedQuote.calculator_breakdown.ovenCleanerPay)})
                       </div>
                     )}
-                    <div style={{ fontWeight: 600, color: 'var(--brand-primary-dark)', marginTop: 4 }}>
+                    <div style={{ fontWeight: 600, color: 'var(--ink)', marginTop: 4 }}>
                       Profit {formatPriceGBP(selectedQuote.calculator_breakdown.profit)} ({(selectedQuote.calculator_breakdown.marginPct * 100).toFixed(1)}%) — {selectedQuote.calculator_breakdown.marginWarning}
                     </div>
                   </div>
                 </div>
               </>
-            ) : (
+            ) : selectedQuote.shift_schedule ? null : (
               <p className="empty-state" style={{ marginTop: 16 }}>This quote was entered manually — no calculator breakdown available.</p>
             )}
           </div>

@@ -14,6 +14,10 @@ import {
   SERVICE_TYPES, GARDEN_SIZE_OPTIONS, GARDEN_ADDON_TYPES, COMMERCIAL_FREQUENCY_OPTIONS,
   calculateQuote, defaultQuoteDescription,
 } from '../../../lib/quoteCalculator';
+import {
+  WEEKDAYS, RECURRENCE_OPTIONS, EMPTY_SHIFT_PATTERN, EMPTY_SHIFT_SCHEDULE,
+  shiftHours, summariseShiftSchedule, shiftScheduleDescription,
+} from '../../../lib/shiftSchedule';
 import BackButton from '../../components/BackButton';
 
 const STATUS_LABELS = { draft: 'Draft', sent: 'Sent', accepted: 'Accepted', declined: 'Declined', expired: 'Expired' };
@@ -61,6 +65,128 @@ const PRICING_FIELDS = [
   { key: 'minimum_callout_hours', label: 'Minimum call-out hours', step: '0.5' },
 ];
 
+// One row of the shift-pattern editor. Every figure it shows is derived
+// live from the fields beside it, so the admin can see 3 hours x 5 days
+// become GBP 525 a week before the quote is written.
+function ShiftPatternRow({ pattern, index, onChange, onRemove }) {
+  const set = (patch) => onChange({ ...pattern, ...patch });
+  const occasional = pattern.recurrence === 'occasional';
+  const hours = shiftHours(pattern.start, pattern.end);
+  const shifts = occasional ? 1 : (pattern.days || []).length;
+  const operatives = Number(pattern.operatives) || 0;
+  const rate = Number(pattern.rate) || 0;
+  const totalHours = hours * shifts * operatives;
+
+  const toggleDay = (key) => {
+    const days = pattern.days || [];
+    set({ days: days.includes(key) ? days.filter((d) => d !== key) : [...days, key] });
+  };
+
+  return (
+    <div style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: 12, marginBottom: 10 }}>
+      <div className="field-row">
+        <div className="field">
+          <label className="field-label">Shift name</label>
+          <input
+            value={pattern.label}
+            onChange={(e) => set({ label: e.target.value })}
+            placeholder={index === 0 ? 'e.g. Early-morning cleaning' : 'e.g. Saturday daytime cleaning'}
+          />
+        </div>
+        <div className="field">
+          <label className="field-label">How often</label>
+          <select value={pattern.recurrence} onChange={(e) => set({ recurrence: e.target.value })}>
+            {RECURRENCE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {occasional ? (
+        <div className="field">
+          <label className="field-label">Charged per...</label>
+          <input
+            value={pattern.occasionLabel}
+            onChange={(e) => set({ occasionLabel: e.target.value })}
+            placeholder="e.g. bank holiday"
+          />
+        </div>
+      ) : (
+        <>
+          <label className="field-label" style={{ display: 'block' }}>Days</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+            {WEEKDAYS.map((d) => {
+              const on = (pattern.days || []).includes(d.key);
+              return (
+                <button
+                  key={d.key}
+                  type="button"
+                  className={on ? 'btn-primary' : 'btn-secondary'}
+                  onClick={() => toggleDay(d.key)}
+                  style={{ padding: '4px 10px', fontSize: 13 }}
+                >
+                  {d.short}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      <div className="field-row">
+        <div className="field">
+          <label className="field-label">Start</label>
+          <input type="time" value={pattern.start} onChange={(e) => set({ start: e.target.value })} />
+        </div>
+        <div className="field">
+          <label className="field-label">End</label>
+          <input type="time" value={pattern.end} onChange={(e) => set({ end: e.target.value })} />
+        </div>
+      </div>
+      <div className="field-row">
+        <div className="field">
+          <label className="field-label">Operatives per shift</label>
+          <input
+            type="number" min="1" step="1"
+            value={pattern.operatives}
+            onChange={(e) => set({ operatives: e.target.value })}
+          />
+        </div>
+        <div className="field">
+          <label className="field-label">Charge rate (£/hour)</label>
+          <input
+            type="number" min="0" step="0.01"
+            value={pattern.rate}
+            onChange={(e) => set({ rate: e.target.value })}
+            placeholder="e.g. 24.27"
+          />
+        </div>
+      </div>
+      <div className="field">
+        <label className="field-label">Note for the client (optional)</label>
+        <input
+          value={pattern.note}
+          onChange={(e) => set({ note: e.target.value })}
+          placeholder="e.g. The premium rate reflects the 2:00am start."
+        />
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 13, color: 'var(--muted)' }}>
+          {hours > 0 && shifts > 0 && operatives > 0
+            ? `${hours}h × ${shifts} ${occasional ? 'shift' : 'day' + (shifts === 1 ? '' : 's')}`
+              + (operatives > 1 ? ` × ${operatives} operatives` : '')
+              + ` = ${totalHours}h ${occasional ? 'per occurrence' : 'per week'}`
+              + (rate > 0 ? ` · ${formatPrice(totalHours * rate)}` : '')
+            : 'Fill in the days, times and rate to price this shift.'}
+        </span>
+        <button type="button" className="btn-secondary" onClick={onRemove} style={{ padding: '2px 10px', fontSize: 12 }}>
+          Remove
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminQuotes() {
   const router = useRouter();
   const confirm = useConfirm();
@@ -91,6 +217,9 @@ export default function AdminQuotes() {
   const [useCalculator, setUseCalculator] = useState(false);
   const [calcInput, setCalcInput] = useState(EMPTY_CALC_INPUT);
 
+  const [useShiftSchedule, setUseShiftSchedule] = useState(false);
+  const [shiftSchedule, setShiftSchedule] = useState(EMPTY_SHIFT_SCHEDULE);
+
   const [expandedQuoteId, setExpandedQuoteId] = useState(null);
 
   useEffect(() => {
@@ -105,7 +234,7 @@ export default function AdminQuotes() {
       supabase.from('profiles').select('role').eq('id', session.user.id).single(),
       supabase
         .from('quotes')
-        .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, status, valid_until, notes, created_at, calculator_breakdown, clients(name)')
+        .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, status, valid_until, notes, created_at, calculator_breakdown, shift_schedule, clients(name)')
         .order('created_at', { ascending: false }),
       supabase.from('clients').select('id, name').order('name'),
       supabase.from('pricing_settings').select('*').single(),
@@ -150,12 +279,50 @@ export default function AdminQuotes() {
     setNotes('');
     setUseCalculator(false);
     setCalcInput(EMPTY_CALC_INPUT);
+    setUseShiftSchedule(false);
+    setShiftSchedule(EMPTY_SHIFT_SCHEDULE);
   };
 
   const breakdown = useMemo(() => {
     if (!useCalculator || !pricingSettings) return null;
     return calculateQuote(calcInput, pricingSettings);
   }, [useCalculator, calcInput, pricingSettings]);
+
+  const scheduleSummary = useMemo(
+    () => (useShiftSchedule ? summariseShiftSchedule(shiftSchedule) : null),
+    [useShiftSchedule, shiftSchedule]
+  );
+
+  const addShiftPattern = () => {
+    setShiftSchedule((prev) => ({
+      ...prev,
+      patterns: [...prev.patterns, { ...EMPTY_SHIFT_PATTERN, id: `p${Date.now()}` }],
+    }));
+  };
+
+  const updateShiftPattern = (index, pattern) => {
+    setShiftSchedule((prev) => ({
+      ...prev,
+      patterns: prev.patterns.map((p, i) => (i === index ? pattern : p)),
+    }));
+  };
+
+  const removeShiftPattern = (index) => {
+    setShiftSchedule((prev) => ({ ...prev, patterns: prev.patterns.filter((_, i) => i !== index) }));
+  };
+
+  const setInitialWeeks = (key, value) => {
+    setShiftSchedule((prev) => ({ ...prev, initialWeeks: { ...prev.initialWeeks, [key]: value } }));
+  };
+
+  const useWeeklyChargeAsPrice = () => {
+    if (scheduleSummary) setPrice(String(scheduleSummary.weeklyCharge));
+  };
+
+  const useScheduleDescription = () => {
+    const address = shiftSchedule.siteAddress || calcInput.propertyAddress;
+    if (scheduleSummary) setDescription(shiftScheduleDescription(scheduleSummary, address));
+  };
 
   const applyPropertyType = (propertyType) => {
     const defaults = PROPERTY_TYPE_DEFAULTS[propertyType] || {};
@@ -207,12 +374,15 @@ export default function AdminQuotes() {
       created_by: session.user.id,
       calculator_input: useCalculator ? calcInput : null,
       calculator_breakdown: useCalculator ? breakdown : null,
+      // Only stored once it prices something - a half-filled pattern
+      // would put an empty schedule section into the quote document.
+      shift_schedule: scheduleSummary ? shiftSchedule : null,
     };
 
     const { data } = await supabase
       .from('quotes')
       .insert(payload)
-      .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, status, valid_until, notes, created_at, calculator_breakdown, clients(name)')
+      .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, status, valid_until, notes, created_at, calculator_breakdown, shift_schedule, clients(name)')
       .single();
 
     setCreating(false);
@@ -284,11 +454,11 @@ export default function AdminQuotes() {
             History
           </Link>
           {role === 'admin' && (
-            <button className="btn-secondary" onClick={() => (showPricingSettings ? setShowPricingSettings(false) : startEditPricing())}>
+            <button className="btn-secondary" onClick={() => (showPricingSettings ? setShowPricingSettings(false) : startEditPricing())} title="Change the rates the quote calculator works from">
               {showPricingSettings ? 'Cancel' : 'Pricing Settings'}
             </button>
           )}
-          <button className="btn-primary" onClick={() => setShowForm((s) => !s)}>
+          <button className="btn-primary" onClick={() => setShowForm((s) => !s)} title="Write a new quote for a client">
             {showForm ? 'Cancel' : '+ New Quote'}
           </button>
         </div>
@@ -556,8 +726,96 @@ export default function AdminQuotes() {
                         </p>
                       )}
                       <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                        <button type="button" className="btn-secondary" onClick={useCalculatedPrice}>Use this price</button>
-                        <button type="button" className="btn-secondary" onClick={useGeneratedDescription}>Use this description</button>
+                        <button type="button" className="btn-secondary" onClick={useCalculatedPrice} title="Copy the calculated price into the quote">Use this price</button>
+                        <button type="button" className="btn-secondary" onClick={useGeneratedDescription} title="Copy the suggested wording into the quote description">Use this description</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 400, marginTop: 10 }}>
+                <input
+                  type="checkbox"
+                  checked={useShiftSchedule}
+                  onChange={(e) => setUseShiftSchedule(e.target.checked)}
+                  style={{ width: 'auto' }}
+                />
+                Set out a shift pattern (staffed contracts)
+              </label>
+
+              {useShiftSchedule && (
+                <div style={{ border: '1px solid var(--hairline)', borderRadius: 12, padding: 14, marginTop: 4 }}>
+                  <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
+                    Each shift is priced on its own hours and rate, so premium hours (early mornings, weekends)
+                    can be charged differently from daytime cover. The document sets them out shift by shift.
+                  </p>
+
+                  <div className="field">
+                    <label className="field-label">Site address</label>
+                    <AddressAutocomplete
+                      value={shiftSchedule.siteAddress || ''}
+                      onChange={(text) => setShiftSchedule((prev) => ({ ...prev, siteAddress: text }))}
+                      onSelect={({ address }) => setShiftSchedule((prev) => ({ ...prev, siteAddress: address }))}
+                      placeholder="Start typing an address..."
+                    />
+                  </div>
+
+                  {shiftSchedule.patterns.map((pattern, i) => (
+                    <ShiftPatternRow
+                      key={pattern.id || i}
+                      pattern={pattern}
+                      index={i}
+                      onChange={(next) => updateShiftPattern(i, next)}
+                      onRemove={() => removeShiftPattern(i)}
+                    />
+                  ))}
+
+                  <button type="button" className="btn-secondary" onClick={addShiftPattern}>
+                    + Add shift pattern
+                  </button>
+
+                  <div className="field-row" style={{ marginTop: 14 }}>
+                    <div className="field">
+                      <label className="field-label">Initial contract period from (weeks)</label>
+                      <input
+                        type="number" min="0" step="1"
+                        value={shiftSchedule.initialWeeks.min}
+                        onChange={(e) => setInitialWeeks('min', e.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label className="field-label">...to (weeks)</label>
+                      <input
+                        type="number" min="0" step="1"
+                        value={shiftSchedule.initialWeeks.max}
+                        onChange={(e) => setInitialWeeks('max', e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  {scheduleSummary && (
+                    <div style={{ background: '#f8fafc', borderRadius: 10, padding: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                        <strong style={{ fontSize: 22 }}>{formatPrice(scheduleSummary.weeklyCharge)}/week</strong>
+                        <span style={{ fontSize: 13, color: 'var(--muted)' }}>{scheduleSummary.weeklyHours} hours per week</span>
+                      </div>
+                      {scheduleSummary.contractValues.length > 0 && (
+                        <p style={{ fontSize: 13, color: 'var(--muted)', margin: '6px 0 0' }}>
+                          {scheduleSummary.contractValues
+                            .map((c) => `${c.weeks} weeks ${formatPrice(c.value)}`)
+                            .join(' · ')}
+                          {' · approx. '}{formatPrice(scheduleSummary.monthlyCharge)}/month
+                        </p>
+                      )}
+                      {scheduleSummary.occasional.map((p, i) => (
+                        <p key={i} style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>
+                          {p.label || 'Ad-hoc cover'}: {formatPrice(p.chargePerOccasion)} per {p.occasionLabel || 'occurrence'}
+                        </p>
+                      ))}
+                      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                        <button type="button" className="btn-secondary" onClick={useWeeklyChargeAsPrice} title="Copy the weekly charge into the quote price">Use weekly charge as price</button>
+                        <button type="button" className="btn-secondary" onClick={useScheduleDescription} title="Copy a summary of the shift pattern into the quote description">Use this description</button>
                       </div>
                     </div>
                   )}
@@ -608,6 +866,7 @@ export default function AdminQuotes() {
         {filteredQuotes.map((quote) => {
           const isExpanded = expandedQuoteId === quote.id;
           const b = quote.calculator_breakdown;
+          const sched = summariseShiftSchedule(quote.shift_schedule);
           return (
             <div key={quote.id} className="card job-card" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
@@ -630,6 +889,15 @@ export default function AdminQuotes() {
                     {quote.valid_until && <>Valid until {new Date(quote.valid_until).toLocaleDateString()}{' · '}</>}
                     Quoted {new Date(quote.created_at).toLocaleDateString()}
                   </p>
+                  {sched && (
+                    <p className="job-time">
+                      {sched.weeklyHours} hrs/week across {sched.weekly.length} shift pattern{sched.weekly.length === 1 ? '' : 's'}
+                      {' · '}{formatPrice(sched.weeklyCharge)}/week
+                      {sched.contractValues.length > 0 && (
+                        <> · {sched.contractValues.map((c) => `${c.weeks}wk ${formatPrice(c.value)}`).join(' · ')}</>
+                      )}
+                    </p>
+                  )}
                   {quote.notes && <p className="job-time" style={{ fontStyle: 'italic' }}>{quote.notes}</p>}
                   {b && (
                     <button
@@ -672,9 +940,9 @@ export default function AdminQuotes() {
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
-                  <button className="btn-secondary" onClick={() => downloadQuoteFile(quote, 'pdf')}>PDF</button>
-                  <button className="btn-secondary" onClick={() => downloadQuoteFile(quote, 'docx')}>Word</button>
-                  <button className="btn-secondary" onClick={() => deleteQuote(quote.id)}>Delete</button>
+                  <button className="btn-secondary" onClick={() => downloadQuoteFile(quote, 'pdf')} title="Download this quote as a PDF to send to the client">PDF</button>
+                  <button className="btn-secondary" onClick={() => downloadQuoteFile(quote, 'docx')} title="Download this quote as a Word document you can edit first">Word</button>
+                  <button className="btn-secondary" onClick={() => deleteQuote(quote.id)} title="Delete this quote">Delete</button>
                 </div>
               </div>
             </div>
