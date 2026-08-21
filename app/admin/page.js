@@ -417,45 +417,41 @@ export default function AdminDashboard() {
       </div>
 
       <div className="stat-row">
-        <div className="stat-card">
+        <div className="stat-card stat-jobs">
           <div className="stat-card-top">
-            <div className="stat-card-icon" style={{ background: 'var(--wf-ash)' }}><ClipboardList size={18} color="var(--wf-steel)" /></div>
+            <div className="stat-card-icon"><ClipboardList size={18} /></div>
           </div>
           <div className="stat-number">{stats.todaysJobs}</div>
           <div className="stat-label">Today's jobs</div>
           <div className="stat-sublabel">{stats.todaysCompleted} completed</div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card stat-working">
           <div className="stat-card-top">
-            <div className="stat-card-icon" style={{ background: stats.staffWorking > 0 ? 'rgba(52, 199, 123, 0.16)' : 'var(--wf-ash)' }}>
-              <Users size={18} color={stats.staffWorking > 0 ? 'var(--wf-verified-ink)' : 'var(--wf-steel)'} />
-            </div>
+            <div className="stat-card-icon"><Users size={18} /></div>
           </div>
           <div className="stat-number">{stats.staffWorking}</div>
           <div className="stat-label">Working now</div>
           <div className="stat-sublabel" />
         </div>
-        <div className="stat-card">
+        <div className="stat-card stat-requests">
           <div className="stat-card-top">
-            <div className="stat-card-icon" style={{ background: 'var(--wf-ash)' }}><Inbox size={18} color="var(--wf-steel)" /></div>
+            <div className="stat-card-icon"><Inbox size={18} /></div>
           </div>
           <div className="stat-number">{stats.openRequests}</div>
           <div className="stat-label">Requests</div>
           <div className="stat-sublabel">open</div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card stat-hours">
           <div className="stat-card-top">
-            <div className="stat-card-icon" style={{ background: 'var(--wf-ash)' }}><Clock size={18} color="var(--wf-steel)" /></div>
+            <div className="stat-card-icon"><Clock size={18} /></div>
           </div>
           <div className="stat-number">{stats.jobHours.toFixed(1)}</div>
           <div className="stat-label">Job hours</div>
           <div className="stat-sublabel">scheduled today</div>
         </div>
-        <div className="stat-card">
+        <div className={`stat-card stat-unassigned${stats.unassigned > 0 ? ' is-alert' : ''}`}>
           <div className="stat-card-top">
-            <div className="stat-card-icon" style={{ background: stats.unassigned > 0 ? 'rgba(216, 30, 52, 0.12)' : 'var(--wf-ash)' }}>
-              <UserX size={18} color={stats.unassigned > 0 ? 'var(--wf-overdue)' : 'var(--wf-steel)'} />
-            </div>
+            <div className="stat-card-icon"><UserX size={18} /></div>
           </div>
           <div className="stat-number">{stats.unassigned}</div>
           <div className="stat-label">Unassigned</div>
@@ -465,7 +461,7 @@ export default function AdminDashboard() {
 
       <div className="dash-grid-2">
         <div className="card">
-          <div className="dash-panel-header">
+          <div className="dash-panel-header panel-today">
             <h2>Today's Jobs</h2>
             <Link href="/admin/rota" className="dash-panel-link">View full schedule &rarr;</Link>
           </div>
@@ -492,7 +488,7 @@ export default function AdminDashboard() {
         </div>
 
         <div className="card">
-          <div className="dash-panel-header">
+          <div className="dash-panel-header panel-attention">
             <h2>Needs Attention</h2>
           </div>
           <div className="dash-panel-list">
@@ -546,7 +542,7 @@ export default function AdminDashboard() {
       <div className="dash-grid-3" style={role === 'admin' ? undefined : { gridTemplateColumns: 'repeat(2, 1fr)' }}>
         {role === 'admin' && (
           <div className="card">
-            <div className="dash-panel-header">
+            <div className="dash-panel-header panel-hours">
               <h2>Staff Hours</h2>
               <select
                 value={payrollPeriod}
@@ -576,7 +572,7 @@ export default function AdminDashboard() {
         )}
 
         <div className="card">
-          <div className="dash-panel-header">
+          <div className="dash-panel-header panel-glance">
             <h2>Staff at a Glance</h2>
           </div>
           <div
@@ -592,7 +588,7 @@ export default function AdminDashboard() {
             style={{ cursor: staffGlance.holiday.length > 0 ? 'pointer' : 'default' }}
             onClick={() => staffGlance.holiday.length > 0 && setGlanceDetail({ title: 'On holiday / leave', names: staffGlance.holiday })}
           >
-            <span className="dash-glance-dot" style={{ background: 'var(--wf-steel)' }} />
+            <span className="dash-glance-dot" style={{ background: 'var(--wf-amber-ink)' }} />
             <strong>{staffGlance.holiday.length}</strong> On holiday / leave
           </div>
           <div
@@ -609,7 +605,7 @@ export default function AdminDashboard() {
         </div>
 
         <div className="card">
-          <div className="dash-panel-header">
+          <div className="dash-panel-header panel-upcoming">
             <h2>Upcoming Jobs</h2>
             <Link href="/admin/rota" className="dash-panel-link">View calendar &rarr;</Link>
           </div>
