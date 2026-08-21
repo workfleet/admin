@@ -146,9 +146,14 @@ export default function CleanerDashboard() {
       {anniversary && <WorkAnniversaryPopup name={anniversary.name} years={anniversary.years} />}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>Home</h1>
-        <Link href="/cleaner/notifications" style={{ fontSize: 13, fontWeight: 600, color: 'var(--brand-link)', textDecoration: 'none' }}>
-          Notifications
-        </Link>
+        <div style={{ display: 'flex', gap: 14 }}>
+          <Link href="/cleaner/hours" style={{ fontSize: 13, fontWeight: 600, color: 'var(--brand-link)', textDecoration: 'none' }}>
+            My Hours
+          </Link>
+          <Link href="/cleaner/notifications" style={{ fontSize: 13, fontWeight: 600, color: 'var(--brand-link)', textDecoration: 'none' }}>
+            Notifications
+          </Link>
+        </div>
       </div>
 
       {notifications.length > 0 && (

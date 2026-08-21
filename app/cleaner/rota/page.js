@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
+import { HOLIDAY_ACCRUAL_RATE, fetchAssigneeCounts, hoursWorked } from '../../../lib/hoursWorked';
 import BackButton from '../../components/BackButton';
 
 function groupByDate(jobs) {
@@ -45,18 +47,6 @@ function DayGroup({ date, jobs, router, dim, jobsMissingPhotos }) {
 }
 
 const EMPTY_FORM = { type: 'holiday', startDate: '', endDate: '', hours: '', reason: '' };
-const HOLIDAY_ACCRUAL_RATE = 0.1207; // UK statutory: 5.6 weeks / 46.4 working weeks
-
-// A job's duration is split evenly across everyone assigned to it - a
-// 2-hour job with 2 people counts as 1 hour each, not 2 hours each. This
-// must match the server-side enforce_holiday_balance() trigger exactly,
-// or the balance shown here would mislead staff about what they can request.
-function hoursWorked(jobs, assigneeCounts) {
-  return jobs
-    .filter((j) => j.status === 'completed')
-    .reduce((sum, j) => sum + (j.duration_minutes || 0) / (assigneeCounts[j.id] || 1), 0) / 60;
-}
-
 function holidayHoursUsed(timeOffRequests) {
   return timeOffRequests
     .filter((t) => t.type === 'holiday' && t.status === 'approved')
@@ -108,16 +98,7 @@ export default function CleanerRota() {
       .filter(Boolean)
       .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
 
-    // Need the full assignee count per job (not just "am I on it"), so a
-    // second query against every teammate's assignment rows for these jobs.
-    const jobIds = jobsData.map((j) => j.id);
-    const { data: allAssignments } = jobIds.length > 0
-      ? await supabase.from('job_assignments').select('job_id').in('job_id', jobIds)
-      : { data: [] };
-    const counts = {};
-    (allAssignments || []).forEach((row) => {
-      counts[row.job_id] = (counts[row.job_id] || 0) + 1;
-    });
+    const counts = await fetchAssigneeCounts(jobsData.map((j) => j.id));
 
     const inProgressIds = jobsData.filter((j) => j.status === 'in_progress').map((j) => j.id);
     if (inProgressIds.length > 0) {
@@ -231,6 +212,11 @@ export default function CleanerRota() {
           {used > 0 && ` · ${used.toFixed(1)}h taken`}
           {pending > 0 && ` · ${pending.toFixed(1)}h pending approval`}
         </p>
+        <p style={{ fontSize: 12.5, margin: '6px 0 0' }}>
+          <Link href="/cleaner/hours" style={{ color: 'var(--brand-link)', fontWeight: 600, textDecoration: 'none' }}>
+            See all your hours, month by month →
+          </Link>
+        </p>
 
         {showForm && (
           <form onSubmit={submitRequest} style={{ marginTop: 12 }}>
@@ -332,6 +318,10 @@ export default function CleanerRota() {
           <h2 style={{ marginTop: 24, marginBottom: 4 }}>History</h2>
           <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
             {past.length} job{past.length === 1 ? '' : 's'} completed · {worked.toFixed(1)}h worked
+            {' · '}
+            <Link href="/cleaner/hours" style={{ color: 'var(--brand-link)', fontWeight: 600, textDecoration: 'none' }}>
+              breakdown
+            </Link>
           </p>
           {Object.entries(pastGroups).map(([date, dayJobs]) => (
             <DayGroup key={date} date={date} jobs={dayJobs} router={router} dim />
