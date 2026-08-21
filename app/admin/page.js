@@ -417,46 +417,50 @@ export default function AdminDashboard() {
       </div>
 
       <div className="stat-row">
-        <div className="stat-card stat-jobs">
+        <Link href="/admin/rota" className="stat-card stat-jobs" title="Today's jobs and how many are done">
           <div className="stat-card-top">
             <div className="stat-card-icon"><ClipboardList size={18} /></div>
           </div>
           <div className="stat-number">{stats.todaysJobs}</div>
           <div className="stat-label">Today's jobs</div>
           <div className="stat-sublabel">{stats.todaysCompleted} completed</div>
-        </div>
-        <div className="stat-card stat-working">
+        </Link>
+        <Link href="/admin/cleaners" className="stat-card stat-working" title="Staff clocked in right now">
           <div className="stat-card-top">
             <div className="stat-card-icon"><Users size={18} /></div>
           </div>
           <div className="stat-number">{stats.staffWorking}</div>
           <div className="stat-label">Working now</div>
           <div className="stat-sublabel" />
-        </div>
-        <div className="stat-card stat-requests">
+        </Link>
+        <Link href="/admin/requests" className="stat-card stat-requests" title="Open kit top-ups, issues and time off">
           <div className="stat-card-top">
             <div className="stat-card-icon"><Inbox size={18} /></div>
           </div>
           <div className="stat-number">{stats.openRequests}</div>
           <div className="stat-label">Requests</div>
           <div className="stat-sublabel">open</div>
-        </div>
-        <div className="stat-card stat-hours">
+        </Link>
+        <Link href="/admin/rota" className="stat-card stat-hours" title="Total length of today's scheduled work">
           <div className="stat-card-top">
             <div className="stat-card-icon"><Clock size={18} /></div>
           </div>
           <div className="stat-number">{stats.jobHours.toFixed(1)}</div>
           <div className="stat-label">Job hours</div>
           <div className="stat-sublabel">scheduled today</div>
-        </div>
-        <div className={`stat-card stat-unassigned${stats.unassigned > 0 ? ' is-alert' : ''}`}>
+        </Link>
+        <Link
+          href="/admin/rota"
+          className={`stat-card stat-unassigned${stats.unassigned > 0 ? ' is-alert' : ''}`}
+          title="Today's jobs with nobody assigned"
+        >
           <div className="stat-card-top">
             <div className="stat-card-icon"><UserX size={18} /></div>
           </div>
           <div className="stat-number">{stats.unassigned}</div>
           <div className="stat-label">Unassigned</div>
           <div className="stat-sublabel">today</div>
-        </div>
+        </Link>
       </div>
 
       <div className="dash-grid-2">

@@ -778,6 +778,27 @@ h3 { font-size: 15px; line-height: 1.35; }
   min-width: 150px;
 }
 
+/* The cards are links now, so they get a hover state back - it was dropped
+   when they were inert and promising an action they didn't have. The border
+   picks up the card's own hue rather than a generic grey. */
+a.stat-card {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+a.stat-card:hover {
+  border-color: var(--stat-ink);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+a.stat-card:focus-visible {
+  outline: 3px solid var(--brand-accent);
+  outline-offset: 2px;
+}
+
 .stat-number {
   font-family: var(--wf-data);
   font-variant-numeric: tabular-nums;
