@@ -190,14 +190,18 @@ export default function TooltipLayer() {
             animation: 'wf-tip-in 120ms ease-out',
             maxWidth: MAX_WIDTH,
             padding: '8px 11px',
-            borderRadius: 9,
-            background: '#1f2937',
-            color: '#f8fafc',
+            borderRadius: 'var(--wf-radius-sm, 6px)',
+            background: 'var(--wf-graphite, #202327)',
+            color: 'var(--wf-white, #ffffff)',
+            // Graphite on graphite: over the sidebar the bubble would
+            // otherwise dissolve into the panel behind it.
+            border: '1px solid var(--wf-line-dark, rgba(255, 255, 255, 0.15))',
+            fontFamily: 'var(--wf-display, inherit)',
             fontSize: 12.5,
             lineHeight: 1.45,
             fontWeight: 500,
             textAlign: 'center',
-            boxShadow: '0 6px 20px rgba(15, 23, 42, 0.28)',
+            boxShadow: '0 10px 24px rgba(32, 35, 39, 0.28), 0 2px 6px rgba(32, 35, 39, 0.16)',
             pointerEvents: 'none',
             zIndex: 9999,
           }}
