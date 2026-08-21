@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { supabaseAdmin } from '../../../../../lib/supabaseAdmin';
-import { quoteReference } from '../../../../../lib/companyBranding';
+import { quoteReference, companyFromSettings } from '../../../../../lib/companyBranding';
 import QuotePdfDocument from '../../../../../lib/quotePdfDocument';
 
 // @react-pdf/renderer needs real Node APIs (fs, fontkit) - not the edge runtime.
@@ -32,7 +32,14 @@ export async function GET(request, { params }) {
 
   if (!quote) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
-  const buffer = await renderToBuffer(<QuotePdfDocument quote={quote} />);
+
+  // Letterhead and statutory detail come from settings, not from code.
+  // A missing row falls back to the compiled defaults rather than
+  // failing the download.
+  const { data: settings } = await supabaseAdmin.from('company_settings').select('*').limit(1).single();
+  const company = companyFromSettings(settings);
+
+  const buffer = await renderToBuffer(<QuotePdfDocument quote={quote} company={company} />);
 
   return new NextResponse(buffer, {
     headers: {

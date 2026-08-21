@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Packer } from 'docx';
 import { supabaseAdmin } from '../../../../../lib/supabaseAdmin';
-import { quoteReference } from '../../../../../lib/companyBranding';
+import { quoteReference, companyFromSettings } from '../../../../../lib/companyBranding';
 import { buildQuoteDocx } from '../../../../../lib/quoteDocxDocument';
 
 export const runtime = 'nodejs';
@@ -31,7 +31,14 @@ export async function GET(request, { params }) {
 
   if (!quote) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
-  const buffer = await Packer.toBuffer(buildQuoteDocx(quote));
+
+  // Letterhead and statutory detail come from settings, not from code.
+  // A missing row falls back to the compiled defaults rather than
+  // failing the download.
+  const { data: settings } = await supabaseAdmin.from('company_settings').select('*').limit(1).single();
+  const company = companyFromSettings(settings);
+
+  const buffer = await Packer.toBuffer(buildQuoteDocx(quote, company));
 
   return new NextResponse(buffer, {
     headers: {

@@ -18,6 +18,7 @@ import {
   WEEKDAYS, RECURRENCE_OPTIONS, EMPTY_SHIFT_PATTERN, EMPTY_SHIFT_SCHEDULE,
   shiftHours, summariseShiftSchedule, shiftScheduleDescription,
 } from '../../../lib/shiftSchedule';
+import { COMPANY_FIELDS } from '../../../lib/companyBranding';
 import BackButton from '../../components/BackButton';
 
 const STATUS_LABELS = { draft: 'Draft', sent: 'Sent', accepted: 'Accepted', declined: 'Declined', expired: 'Expired' };
@@ -207,6 +208,11 @@ export default function AdminQuotes() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('open'); // open | decided | all
 
+  const [companySettings, setCompanySettings] = useState(null);
+  const [showCompanySettings, setShowCompanySettings] = useState(false);
+  const [companyForm, setCompanyForm] = useState(null);
+  const [savingCompany, setSavingCompany] = useState(false);
+
   const [showPricingSettings, setShowPricingSettings] = useState(false);
   const [pricingForm, setPricingForm] = useState(null);
   const [savingPricing, setSavingPricing] = useState(false);
@@ -243,7 +249,7 @@ export default function AdminQuotes() {
     const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
-    const [{ data: ownProfile }, { data: quotesData }, { data: clientsData }, { data: pricingData }] = await Promise.all([
+    const [{ data: ownProfile }, { data: quotesData }, { data: clientsData }, { data: pricingData }, { data: companyData }] = await Promise.all([
       supabase.from('profiles').select('role').eq('id', session.user.id).single(),
       supabase
         .from('quotes')
@@ -251,12 +257,14 @@ export default function AdminQuotes() {
         .order('created_at', { ascending: false }),
       supabase.from('clients').select('id, name').order('name'),
       supabase.from('pricing_settings').select('*').single(),
+      supabase.from('company_settings').select('*').limit(1).single(),
     ]);
 
     setRole(ownProfile?.role || null);
     setQuotes(quotesData || []);
     setClients(clientsData || []);
     setPricingSettings(pricingData || null);
+    setCompanySettings(companyData || null);
     setLoading(false);
   };
 
@@ -278,6 +286,31 @@ export default function AdminQuotes() {
     setSavingPricing(false);
     if (data) setPricingSettings(data);
     setShowPricingSettings(false);
+  };
+
+  const startEditCompany = () => {
+    setCompanyForm({ ...companySettings });
+    setShowCompanySettings(true);
+  };
+
+  const saveCompanySettings = async (e) => {
+    e.preventDefault();
+    setSavingCompany(true);
+
+    const payload = Object.fromEntries(
+      COMPANY_FIELDS.map((f) => [f.column, (companyForm[f.column] || '').trim()])
+    );
+
+    const { data, error } = await supabase
+      .from('company_settings').update(payload).eq('id', companySettings.id)
+      .select('*').single();
+
+    setSavingCompany(false);
+    if (error) { toast.error('Could not save the company details.'); return; }
+
+    setCompanySettings(data);
+    setShowCompanySettings(false);
+    toast.success('Company details saved. New quotes will use them.');
   };
 
   const resetForm = () => {
@@ -480,6 +513,11 @@ export default function AdminQuotes() {
           <Link href="/admin/quotes/history" className="btn-secondary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
             History
           </Link>
+          {role === 'admin' && companySettings && (
+            <button className="btn-secondary" onClick={() => (showCompanySettings ? setShowCompanySettings(false) : startEditCompany())} title="Change the company name, address and contact details printed on quotes">
+              {showCompanySettings ? 'Cancel' : 'Company Details'}
+            </button>
+          )}
           {role === 'admin' && (
             <button className="btn-secondary" onClick={() => (showPricingSettings ? setShowPricingSettings(false) : startEditPricing())} title="Change the rates the quote calculator works from">
               {showPricingSettings ? 'Cancel' : 'Pricing Settings'}
@@ -490,6 +528,37 @@ export default function AdminQuotes() {
           </button>
         </div>
       </div>
+
+      {showCompanySettings && companyForm && (
+        <div className="card job-form-card">
+          <div className="job-form-header">
+            <h2>Company Details</h2>
+            <button className="job-form-close" type="button" onClick={() => setShowCompanySettings(false)}>×</button>
+          </div>
+          <form onSubmit={saveCompanySettings}>
+            <div className="job-form-body">
+              <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
+                These appear on the letterhead and footer of every quote you send. Changing them here
+                affects documents generated from now on — quotes already downloaded keep what they were printed with.
+              </p>
+              {COMPANY_FIELDS.map((f) => (
+                <div className="field" key={f.column}>
+                  <label className="field-label">{f.label}</label>
+                  <input
+                    value={companyForm[f.column] || ''}
+                    onChange={(e) => setCompanyForm((c) => ({ ...c, [f.column]: e.target.value }))}
+                    required
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="job-form-actions">
+              <button type="button" className="btn-secondary" onClick={() => setShowCompanySettings(false)}>Cancel</button>
+              <button type="submit" className="btn-primary" disabled={savingCompany}>{savingCompany ? 'Saving...' : 'Save Details'}</button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {showPricingSettings && pricingForm && (
         <div className="card job-form-card">
