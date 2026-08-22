@@ -17,6 +17,21 @@ function formatTimeRange(scheduledAt, durationMinutes) {
   return `${fmt(start)} – ${fmt(end)}`;
 }
 
+// due_date, start_date, end_date and expiry_date are date-only columns holding
+// plain calendar dates, so they have to be compared against the user's calendar
+// day. toISOString() is UTC, and through BST local midnight is 23:00 the day
+// before - so round-tripping a local date through it names YESTERDAY for the
+// whole of British Summer Time, not just around midnight. Build the string from
+// local parts instead.
+//
+// Note this is only right for a Date that means a local wall-clock moment. A
+// date-only string parsed with new Date() is already UTC midnight, and putting
+// it through here would shift it backwards in any zone behind UTC.
+function localDateString(d) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 // Sorted by urgency then date, a category with a lot of rows in it - a dozen
 // expiring certs, say - fills every visible slot and hides everything else.
 // Sort inside each kind as before, then deal the kinds out round-robin so the
@@ -220,7 +235,7 @@ export default function AdminDashboard() {
         .order('created_at', { ascending: true }),
       supabase.from('reminders')
         .select('id, client_id, staff_id, due_date, recurs_yearly, notes, clients(name), staff:profiles!reminders_staff_id_fkey(full_name)')
-        .lte('due_date', new Date().toISOString().slice(0, 10))
+        .lte('due_date', localDateString(new Date()))
         .order('due_date', { ascending: true }),
       supabase.from('checkins')
         .select('cleaner_id')
@@ -229,12 +244,12 @@ export default function AdminDashboard() {
       supabase.from('time_off_requests')
         .select('cleaner_id')
         .eq('status', 'approved')
-        .lte('start_date', startOfDay.toISOString().slice(0, 10))
-        .gte('end_date', startOfDay.toISOString().slice(0, 10)),
+        .lte('start_date', localDateString(startOfDay))
+        .gte('end_date', localDateString(startOfDay)),
       supabase.from('staff_certifications')
         .select('id, name, expiry_date, staff_id, profiles!staff_certifications_staff_id_fkey(full_name)')
         .not('expiry_date', 'is', null)
-        .lte('expiry_date', in30Days.toISOString().slice(0, 10)),
+        .lte('expiry_date', localDateString(in30Days)),
       supabase.from('clients')
         .select('id, name, contract_renewal_date, contract_notice_days')
         .not('contract_renewal_date', 'is', null),
