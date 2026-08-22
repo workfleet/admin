@@ -8,6 +8,7 @@ import { getSessionAndProfile } from '../../lib/authGate';
 import PresenceIndicator from '../components/PresenceIndicator';
 import EmergencyButton from '../components/EmergencyButton';
 import EnablePush from '../components/EnablePush';
+import InstallPrompt from '../components/InstallPrompt';
 
 const NAV_ITEMS = [
   { href: '/cleaner', label: 'Home', icon: Home },
@@ -59,6 +60,7 @@ export default function CleanerLayout({ children }) {
         <EnablePush />
       </div>
       <EmergencyButton />
+      <InstallPrompt />
       {children}
       <nav className="bottom-nav">
         {NAV_ITEMS.map((item) => {
