@@ -7,6 +7,7 @@ import { ClipboardList, Clock, UserX, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
+import { localDateString } from '../../../lib/localDate';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
@@ -247,7 +248,7 @@ export default function AdminRota() {
   useEffect(() => {
     if (!selectedJob) return;
     const d = new Date(selectedJob.scheduled_at);
-    setEditDate(d.toISOString().slice(0, 10));
+    setEditDate(localDateString(d));
     setEditHour(String(d.getHours()).padStart(2, '0'));
     setEditMinute(String(d.getMinutes() - (d.getMinutes() % 15)).padStart(2, '0'));
     setEditDuration(selectedJob.duration_minutes || 120);
@@ -446,7 +447,7 @@ export default function AdminRota() {
   // being visible after the fact on their Rota.
   const findTimeOffConflict = async (cleanerId, date) => {
     if (!cleanerId) return null;
-    const dateStr = date.toISOString().slice(0, 10);
+    const dateStr = localDateString(date);
 
     const { data } = await supabase
       .from('time_off_requests')
