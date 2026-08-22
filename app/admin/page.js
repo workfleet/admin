@@ -592,7 +592,7 @@ export default function AdminDashboard() {
             style={{ cursor: staffGlance.holiday.length > 0 ? 'pointer' : 'default' }}
             onClick={() => staffGlance.holiday.length > 0 && setGlanceDetail({ title: 'On holiday / leave', names: staffGlance.holiday })}
           >
-            <span className="dash-glance-dot" style={{ background: 'var(--wf-amber-ink)' }} />
+            <span className="dash-glance-dot" style={{ background: 'var(--wf-azure)' }} />
             <strong>{staffGlance.holiday.length}</strong> On holiday / leave
           </div>
           <div

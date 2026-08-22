@@ -20,25 +20,23 @@
   --wf-coral-ink:    #C2402E;  /* 5.2:1 on white, 4.5:1 on ash */
   --wf-verified-ink: #207B4C;  /* 5.3:1 on white, 4.5:1 on ash */
 
-  /* Supporting hues. The sheet's palette is deliberately narrow - coral for
-     action, green for proven, red for overdue - which leaves the dashboard's
-     stat row one flat grey block on a day where every figure is zero. These
-     four identify rather than signal: they tint a card so the five read as
-     five things, and say nothing about urgency. Kept well off coral's and
-     red's hues so neither loses its meaning. Each clears 4.5:1 on white and
-     on ash, and all four sit within 5.93-6.03:1 on white, so they carry the
-     same weight as each other and as the two inks above. */
-  --wf-blue-ink:     #2F5BD0;  /* 6.0:1 on white, 5.1:1 on ash */
-  --wf-amber-ink:    #8A5A00;  /* 5.9:1 on white, 5.1:1 on ash */
-  --wf-teal-ink:     #0F6E70;  /* 6.0:1 on white, 5.2:1 on ash */
-  --wf-violet-ink:   #7B4BB5;  /* 6.0:1 on white, 5.1:1 on ash */
+  /* One accent, not a spectrum. An earlier pass gave every stat card its own
+     hue, which lit the row up but read as five unrelated things. Azure is now
+     the only decorative colour; green and red keep their existing jobs -
+     proven, and needs attention - so the whole dashboard runs on three.
 
-  /* Tile fills. Vivid versions of the same hues, dropped to a wash - these sit
-     behind an icon, never behind text, so they aren't held to a ratio. */
-  --wf-blue-tint:     rgba(62, 123, 245, 0.14);
-  --wf-amber-tint:    rgba(232, 163, 61, 0.20);
+     These are the vivid values, used at full strength on icons and washed out
+     behind them. Figures are NOT tinted: they sit in graphite at 15.8:1, which
+     is both crisper and the main reason the row stopped looking mismatched. */
+  --wf-azure:      #1F6FEF;  /* icon on its own wash: 3.7:1 */
+  --wf-proven:     #149657;  /* icon on the green wash:  3.4:1 */
+
+  /* Teal is no longer used on the dashboard, but the cleaner hours page runs
+     on it - kept defined so that page keeps its colour. */
+  --wf-teal-ink:      #0F6E70;
   --wf-teal-tint:     rgba(31, 168, 171, 0.16);
-  --wf-violet-tint:   rgba(168, 123, 224, 0.18);
+
+  --wf-azure-tint:    rgba(31, 111, 239, 0.16);
   --wf-verified-tint: rgba(52, 199, 123, 0.16);
   --wf-overdue-tint:  rgba(216, 30, 52, 0.12);
   --wf-neutral-tint:  var(--wf-ash);
@@ -804,7 +802,7 @@ a.stat-card:focus-visible {
   font-variant-numeric: tabular-nums;
   font-size: 28px;
   font-weight: 600;
-  color: var(--stat-ink);
+  color: var(--ink);
   letter-spacing: -0.04em;
   line-height: 1.1;
 }
@@ -847,10 +845,10 @@ a.stat-card:focus-visible {
   --stat-ink: var(--wf-steel);
 }
 
-.stat-jobs       { --stat-tint: var(--wf-blue-tint);     --stat-ink: var(--wf-blue-ink); }
-.stat-working    { --stat-tint: var(--wf-verified-tint); --stat-ink: var(--wf-verified-ink); }
-.stat-requests   { --stat-tint: var(--wf-amber-tint);    --stat-ink: var(--wf-amber-ink); }
-.stat-hours      { --stat-tint: var(--wf-teal-tint);     --stat-ink: var(--wf-teal-ink); }
+.stat-jobs,
+.stat-requests,
+.stat-hours      { --stat-tint: var(--wf-azure-tint);    --stat-ink: var(--wf-azure); }
+.stat-working    { --stat-tint: var(--wf-verified-tint); --stat-ink: var(--wf-proven); }
 .stat-unassigned { --stat-tint: var(--wf-neutral-tint);  --stat-ink: var(--wf-steel); }
 
 /* Unassigned is the one card whose colour still means something, so it stays
@@ -939,11 +937,11 @@ a.stat-card:focus-visible {
   border-bottom: 2px solid var(--panel-accent);
 }
 
-.panel-today     { --panel-accent: var(--wf-blue-ink); }
-.panel-attention { --panel-accent: var(--wf-amber-ink); }
-.panel-hours     { --panel-accent: var(--wf-violet-ink); }
-.panel-glance    { --panel-accent: var(--wf-verified-ink); }
-.panel-upcoming  { --panel-accent: var(--wf-teal-ink); }
+.panel-today,
+.panel-attention,
+.panel-hours,
+.panel-glance,
+.panel-upcoming  { --panel-accent: var(--wf-azure); }
 
 .dash-panel-header h2 {
   margin: 0;
