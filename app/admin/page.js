@@ -405,12 +405,12 @@ export default function AdminDashboard() {
   return (
     <div className="page-inner">
       {anniversary && <WorkAnniversaryPopup name={anniversary.name} years={anniversary.years} />}
-      <div className="page-header-row dash-header-row">
-        <div className="dash-greeting">
+      <div className="page-header-row">
+        <div>
           <h1>{timeGreeting}, {greetingName}</h1>
-          <span className="dash-greeting-date">
+          <p className="page-subtitle">
             {new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
-          </span>
+          </p>
         </div>
         <Link
           href="/admin/rota?new=1"

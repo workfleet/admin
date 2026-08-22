@@ -711,32 +711,6 @@ h3 { font-size: 15px; line-height: 1.35; }
   gap: 12px;
 }
 
-/* The greeting carries no information, so it shouldn't be the loudest thing on
-   the page. Sized down and set beside the date on one line, which leaves the
-   panels to lead and reclaims a row of vertical space. */
-.dash-header-row {
-  align-items: center;
-  margin-bottom: 24px;
-}
-
-.dash-greeting {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.dash-greeting h1 {
-  font-size: 20px;
-  margin: 0;
-}
-
-.dash-greeting-date {
-  font-family: var(--wf-data);
-  font-size: 13px;
-  color: var(--muted);
-}
-
 .back-button {
   display: inline-flex;
   align-items: center;
