@@ -1019,7 +1019,7 @@ a.stat-card.is-alert:hover {
 
 /* A job with nobody on it gets a real button rather than a badge that looked
    pressable and wasn't. */
-.dash-row-action {
+.dash-row .dash-row-action {
   flex-shrink: 0;
   font-family: var(--wf-display);
   font-size: 13px;
@@ -2074,6 +2074,586 @@ a.stat-card.is-alert:hover {
   .calendar-foot-link {
     margin-left: 0;
   }
+}
+
+/* ============================================
+   Cleaner job screen
+
+   The field screen: one-handed, outdoors, poor signal. Three regions that
+   never move - a graphite app bar at the top, the job in the middle, and
+   one primary action pinned above the nav where a thumb already is. Every
+   state shows exactly one coral button; if you can see two things to press,
+   one of them is wrong.
+   ============================================ */
+
+.visit-screen {
+  display: flex;
+  flex-direction: column;
+  /* Tall enough that the action bar sits at the foot of a short job rather
+     than halfway up the screen, minus the shell's own nav clearance. */
+  min-height: calc(100vh - 76px);
+}
+
+/* ---- App bar ---- */
+.visit-appbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--wf-graphite);
+  color: var(--wf-white);
+  /* Clears the status bar when this is running as an installed app, and
+     collapses to ordinary padding in a browser tab. */
+  padding: calc(env(safe-area-inset-top) + 16px) 18px 14px;
+}
+
+.visit-appbar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.visit-appbar-back {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  color: var(--wf-white);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.visit-appbar-back:hover { background: none; }
+
+.visit-appbar-title {
+  font-family: var(--wf-display);
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Green on graphite, because it's a live state rather than a label. */
+.visit-status-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  background: rgba(52, 199, 123, 0.16);
+  border-radius: var(--wf-radius-sm);
+  padding: 10px 12px;
+}
+
+.visit-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--wf-verified);
+  flex-shrink: 0;
+}
+
+.visit-status-time {
+  font-family: var(--wf-data);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #7BE3AE;
+}
+
+.visit-status-left {
+  margin-left: auto;
+  font-family: var(--wf-data);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.visit-status-left.is-over { color: #FF9C84; }
+
+/* ---- Body ---- */
+.visit-body {
+  flex: 1;
+  background: var(--wf-ash);
+  padding: 16px 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.visit-title-block { margin-bottom: 2px; }
+
+.visit-when {
+  font-family: var(--wf-data);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.visit-place {
+  font-family: var(--wf-display);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  margin: 4px 0 4px;
+}
+
+.visit-address {
+  font-family: var(--wf-data);
+  font-size: 15px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.visit-map {
+  position: relative;
+  height: 132px;
+  border-radius: var(--wf-radius);
+  overflow: hidden;
+}
+
+.visit-map > * { height: 100%; }
+
+.visit-map-chip {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 500;
+  background: var(--wf-white);
+  color: var(--ink);
+  font-family: var(--wf-data);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: var(--wf-radius-sm);
+  text-decoration: none;
+  box-shadow: var(--shadow-sm);
+}
+
+.visit-card {
+  background: var(--wf-white);
+  border-radius: var(--wf-radius);
+  padding: 14px 16px;
+}
+
+/* Rows that draw their own dividers do their own padding too. */
+.visit-card-flush { padding: 0; }
+
+.visit-card-label {
+  font-family: var(--wf-data);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* The one thing that decides whether someone gets through the door. */
+.visit-access { border-left: 3px solid var(--wf-coral); }
+
+.visit-access-body {
+  font-family: var(--wf-display);
+  font-size: 15px;
+  font-weight: 300;
+  line-height: 1.5;
+  margin: 6px 0 0;
+}
+
+.visit-task-preview {
+  font-family: var(--wf-display);
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 1.5;
+  color: var(--muted);
+  margin: 6px 0 0;
+}
+
+.visit-empty {
+  font-family: var(--wf-display);
+  font-size: 14px;
+  color: var(--muted);
+  padding: 16px;
+  margin: 0;
+}
+
+/* ---- Progress ---- */
+.visit-progress-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.visit-progress-count {
+  font-family: var(--wf-display);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.visit-progress-hint {
+  font-family: var(--wf-data);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.visit-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: #D8DCDF;
+  overflow: hidden;
+}
+
+.visit-progress-fill {
+  height: 100%;
+  background: var(--wf-verified);
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+
+/* ---- Task list ---- */
+/* The whole row is the target, not the circle - 24px is not something to
+   aim at outdoors with cold hands. */
+.visit-task {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--hairline);
+  border-radius: 0;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.visit-task:last-child { border-bottom: none; }
+.visit-task:hover { background: var(--wf-ash); }
+.visit-task:active { transform: none; }
+
+.visit-task-check {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--wf-steel);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--wf-white);
+  flex-shrink: 0;
+}
+
+.visit-task.is-done .visit-task-check {
+  background: var(--wf-verified);
+  border-color: var(--wf-verified);
+}
+
+.visit-task-text {
+  font-family: var(--wf-display);
+  font-size: 16px;
+  font-weight: 300;
+  line-height: 1.35;
+}
+
+.visit-task.is-done .visit-task-text {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+/* ---- Photos ---- */
+.visit-photo-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.visit-photo-add {
+  width: 66px;
+  height: 66px;
+  border: 1px dashed var(--wf-steel);
+  border-radius: var(--wf-radius-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.visit-photo-add span {
+  font-family: var(--wf-data);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.visit-photo-add input { display: none; }
+
+.visit-photo-thumb {
+  width: 66px;
+  height: 66px;
+  border-radius: var(--wf-radius-sm);
+  object-fit: cover;
+}
+
+.visit-photo-count {
+  font-family: var(--wf-data);
+  font-size: 13px;
+  color: var(--muted);
+  margin: 10px 0 0;
+}
+
+/* With no photos yet, the count's slot carries the warning instead - it is
+   the last moment anyone can do anything about it. */
+.visit-photo-warning {
+  font-family: var(--wf-data);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--wf-overdue);
+  background: var(--wf-overdue-bg);
+  border-radius: var(--wf-radius-sm);
+  padding: 8px 12px;
+  margin: 10px 0 0;
+}
+
+.visit-photos-label { margin-bottom: 8px; }
+
+.visit-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.visit-photo-grid img {
+  width: 100%;
+  height: 96px;
+  object-fit: cover;
+  border-radius: var(--wf-radius);
+}
+
+/* ---- Extension requests ---- */
+.visit-extension { margin-top: 10px; }
+
+.visit-extension-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.visit-extension-text {
+  font-family: var(--wf-display);
+  font-size: 14px;
+}
+
+.visit-extension-note {
+  font-family: var(--wf-data);
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* ---- Property checklist disclosure ---- */
+.visit-disclosure {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 16px;
+  background: none;
+  border: none;
+  border-radius: 0;
+  color: inherit;
+  font-family: var(--wf-display);
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.visit-disclosure:hover { background: var(--wf-ash); }
+.visit-disclosure svg { transition: transform 0.15s ease; }
+.visit-disclosure.is-open svg { transform: rotate(180deg); }
+
+.visit-checklist { padding: 0 16px 14px; }
+.visit-checklist-room { margin-bottom: 10px; }
+
+.visit-checklist-item {
+  font-family: var(--wf-display);
+  font-size: 14px;
+  font-weight: 300;
+  padding: 3px 0;
+}
+
+/* ---- Checked out ---- */
+.visit-done-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--wf-verified-bg);
+  border-radius: var(--wf-radius);
+  padding: 16px;
+}
+
+.visit-done-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--wf-verified);
+  color: var(--wf-white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.visit-done-title {
+  font-family: var(--wf-display);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--wf-verified-text);
+}
+
+.visit-done-sub {
+  font-family: var(--wf-data);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--wf-verified-text);
+}
+
+.visit-receipt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.visit-receipt:last-child { border-bottom: none; }
+
+.visit-receipt span {
+  font-family: var(--wf-display);
+  font-size: 16px;
+  font-weight: 300;
+}
+
+.visit-receipt strong {
+  font-family: var(--wf-data);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.visit-locked {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--muted);
+}
+
+.visit-locked svg { flex-shrink: 0; margin-top: 1px; }
+
+.visit-locked p {
+  font-family: var(--wf-data);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ---- Action bar ----
+   Sticky rather than fixed, so it sits in the page's own flow and can never
+   end up underneath the nav or the install prompt. */
+.visit-actions {
+  position: sticky;
+  bottom: calc(68px + env(safe-area-inset-bottom) + var(--wf-install-bar-h, 0px));
+  z-index: 30;
+  background: var(--wf-white);
+  border-top: 1px solid var(--hairline);
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.visit-action-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.visit-btn-primary {
+  flex: 1;
+  width: 100%;
+  min-height: 56px;
+  background: var(--wf-coral);
+  color: var(--wf-on-coral);
+  font-family: var(--wf-display);
+  font-size: 18px;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--wf-radius-sm);
+  cursor: pointer;
+  margin: 0;
+}
+
+.visit-btn-primary:hover:not(:disabled) { background: var(--wf-coral-dark); }
+.visit-btn-primary:disabled { background: var(--wf-steel); color: var(--wf-white); opacity: 0.6; }
+
+.visit-btn-secondary {
+  width: 100%;
+  min-height: 48px;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--wf-display);
+  font-size: 15px;
+  font-weight: 500;
+  border: 1px solid var(--hairline);
+  border-radius: var(--wf-radius-sm);
+  cursor: pointer;
+  margin: 0;
+}
+
+.visit-btn-secondary:hover { background: var(--wf-ash); }
+
+.visit-btn-narrow {
+  flex: none;
+  width: 132px;
+}
+
+.visit-action-help {
+  font-family: var(--wf-data);
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+  margin: 0;
+}
+
+.visit-action-error {
+  font-family: var(--wf-data);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--wf-overdue);
+  margin: 0;
+}
+
+/* The panic button floats where the action bar now lives, so on this screen
+   it moves up above it rather than sitting on top of the check-in button. */
+.cleaner-shell:has(.visit-screen) .emergency-fab {
+  bottom: calc(230px + env(safe-area-inset-bottom) + var(--wf-install-bar-h, 0px));
 }
 
 /* ---- Install to home screen (cleaner app) ---- */

@@ -167,6 +167,9 @@ td.num,
 .wf-pill-verified { color: var(--wf-verified); }
 .wf-pill-progress { color: var(--wf-progress); }
 .wf-pill-overdue  { color: var(--wf-overdue); }
+/* On site: happening right now, so it reads darker than the ones merely
+   waiting their turn. */
+.wf-pill-onsite   { color: var(--wf-graphite); }
 
 /* ---------- 5. CARDS AND TABLES ---------- */
 

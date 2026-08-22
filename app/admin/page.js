@@ -36,7 +36,7 @@ function clockOf(value) {
 // The word for a job's state, and the pill colour that goes with it.
 function jobStatusPill(status) {
   if (status === 'completed') return { label: 'Completed', tone: 'verified' };
-  if (status === 'in_progress') return { label: 'On site', tone: 'progress' };
+  if (status === 'in_progress') return { label: 'On site', tone: 'onsite' };
   if (status === 'missed') return { label: 'Missed', tone: 'overdue' };
   return { label: 'Scheduled', tone: 'progress' };
 }

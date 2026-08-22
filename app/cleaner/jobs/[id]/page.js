@@ -415,23 +415,23 @@ export default function JobDetailPage() {
   const remainingMinutes = onSiteMinutes === null ? null : duration + approvedExtra - onSiteMinutes;
 
   return (
-    <div className="job-screen">
-      <div className="job-appbar">
-        <div className="job-appbar-row">
-          <button type="button" className="job-appbar-back" onClick={() => router.back()} aria-label="Back">
+    <div className="visit-screen">
+      <div className="visit-appbar">
+        <div className="visit-appbar-row">
+          <button type="button" className="visit-appbar-back" onClick={() => router.back()} aria-label="Back">
             <ChevronLeft size={24} strokeWidth={2.5} />
           </button>
-          <span className="job-appbar-title">{placeName}</span>
+          <span className="visit-appbar-title">{placeName}</span>
         </div>
 
         {onSite && (
-          <div className="job-status-strip">
-            <span className="job-status-dot" />
-            <span className="job-status-time">
+          <div className="visit-status-strip">
+            <span className="visit-status-dot" />
+            <span className="visit-status-time">
               On site {onSiteMinutes === null ? '—' : formatSpan(onSiteMinutes)}
             </span>
             {remainingMinutes !== null && (
-              <span className={`job-status-left${remainingMinutes < 0 ? ' is-over' : ''}`}>
+              <span className={`visit-status-left${remainingMinutes < 0 ? ' is-over' : ''}`}>
                 {remainingMinutes < 0
                   ? `${formatSpan(-remainingMinutes)} over`
                   : `${formatSpan(remainingMinutes)} left`}
@@ -441,48 +441,53 @@ export default function JobDetailPage() {
         )}
       </div>
 
-      <div className="job-body">
+      <div className="visit-body">
         {/* ---- State 1: not checked in yet ---- */}
         {beforeCheckIn && (
           <>
-            <div className="job-title-block">
-              <div className="job-when">
+            <div className="visit-title-block">
+              <div className="visit-when">
                 {clock(scheduled)} – {clock(new Date(scheduled.getTime() + duration * 60000))} · {formatSpan(duration)}
               </div>
-              <h1 className="job-place">{placeName}</h1>
-              <p className="job-address">{job.properties?.address}</p>
+              <h1 className="visit-place">{placeName}</h1>
+              <p className="visit-address">{job.properties?.address}</p>
             </div>
 
             {job.properties?.lat != null && job.properties?.lng != null && (
-              <div className="job-map">
-                <PropertyMap lat={job.properties.lat} lng={job.properties.lng} address={job.properties.address} />
-                <a className="job-map-chip" href={mapsHref} target="_blank" rel="noreferrer">Directions</a>
+              <div className="visit-map">
+                <PropertyMap
+                  lat={job.properties.lat}
+                  lng={job.properties.lng}
+                  address={job.properties.address}
+                  showDirections={false}
+                />
+                <a className="visit-map-chip" href={mapsHref} target="_blank" rel="noreferrer">Directions</a>
               </div>
             )}
 
             {/* On a doorstep this is the most-needed thing on the screen, so
                 it sits above the task list rather than below the map. */}
             {job.properties?.client_access_notes && (
-              <div className="job-card job-access">
-                <div className="job-card-label">How to get in</div>
-                <p className="job-access-body">{job.properties.client_access_notes}</p>
+              <div className="visit-card visit-access">
+                <div className="visit-card-label">How to get in</div>
+                <p className="visit-access-body">{job.properties.client_access_notes}</p>
               </div>
             )}
 
             {job.properties?.notes && (
-              <div className="job-card">
-                <div className="job-card-label">Notes for this property</div>
-                <p className="job-access-body">{job.properties.notes}</p>
+              <div className="visit-card">
+                <div className="visit-card-label">Notes for this property</div>
+                <p className="visit-access-body">{job.properties.notes}</p>
               </div>
             )}
 
             {/* The full list is deliberately held back until check-in - it's
                 a job to do on site, not a thing to read on the bus. */}
-            <div className="job-card">
-              <div className="job-card-label">
+            <div className="visit-card">
+              <div className="visit-card-label">
                 {tasks.length} task{tasks.length === 1 ? '' : 's'} on this job
               </div>
-              <p className="job-task-preview">
+              <p className="visit-task-preview">
                 {tasks.length === 0
                   ? 'No tasks have been added to this job yet.'
                   : `${tasks.slice(0, 2).map((t) => t.description).join(', ')}${tasks.length > 2 ? ` and ${tasks.length - 2} more` : ''}. The full list opens when you check in.`}
@@ -490,9 +495,9 @@ export default function JobDetailPage() {
             </div>
 
             {coverOffer && (
-              <div className="job-card">
-                <div className="job-card-label">Cover requested</div>
-                <p className="job-task-preview">
+              <div className="visit-card">
+                <div className="visit-card-label">Cover requested</div>
+                <p className="visit-task-preview">
                   This shift has been offered to the rest of the team. It's still yours until
                   someone picks it up - you'll be told as soon as they do.
                 </p>
@@ -500,14 +505,14 @@ export default function JobDetailPage() {
             )}
 
             {showCoverForm && !coverOffer && (
-              <form className="job-card" onSubmit={requestCover}>
-                <div className="job-card-label">Why can't you make it? (optional)</div>
+              <form className="visit-card" onSubmit={requestCover}>
+                <div className="visit-card-label">Why can't you make it? (optional)</div>
                 <input
                   value={coverReason}
                   onChange={(e) => setCoverReason(e.target.value)}
                   placeholder="e.g. Off sick, childcare fell through"
                 />
-                <button type="submit" className="job-btn-secondary" disabled={submittingCover}>
+                <button type="submit" className="visit-btn-secondary" disabled={submittingCover}>
                   {submittingCover ? 'Sending...' : 'Request cover'}
                 </button>
               </form>
@@ -518,43 +523,43 @@ export default function JobDetailPage() {
         {/* ---- State 2: on site ---- */}
         {onSite && (
           <>
-            <div className="job-progress">
-              <div className="job-progress-head">
-                <span className="job-progress-count">{doneTasks} of {tasks.length} done</span>
-                <span className="job-progress-hint">Tap to tick off</span>
+            <div className="visit-progress">
+              <div className="visit-progress-head">
+                <span className="visit-progress-count">{doneTasks} of {tasks.length} done</span>
+                <span className="visit-progress-hint">Tap to tick off</span>
               </div>
-              <div className="job-progress-track">
+              <div className="visit-progress-track">
                 <div
-                  className="job-progress-fill"
+                  className="visit-progress-fill"
                   style={{ width: tasks.length ? `${(doneTasks / tasks.length) * 100}%` : '0%' }}
                 />
               </div>
             </div>
 
-            <div className="job-card job-card-flush">
-              {tasks.length === 0 && <p className="job-empty">No tasks added yet.</p>}
+            <div className="visit-card visit-card-flush">
+              {tasks.length === 0 && <p className="visit-empty">No tasks added yet.</p>}
               {tasks.map((task) => (
                 // The whole row is the hit target, not the circle - a 24px
                 // circle is not something to aim at with cold hands.
                 <button
                   type="button"
                   key={task.id}
-                  className={`job-task${task.completed ? ' is-done' : ''}`}
+                  className={`visit-task${task.completed ? ' is-done' : ''}`}
                   onClick={() => toggleTask(task)}
                 >
-                  <span className="job-task-check">{task.completed && <Check size={14} strokeWidth={3} />}</span>
-                  <span className="job-task-text">{task.description}</span>
+                  <span className="visit-task-check">{task.completed && <Check size={14} strokeWidth={3} />}</span>
+                  <span className="visit-task-text">{task.description}</span>
                 </button>
               ))}
             </div>
 
             {extensionRequests.length > 0 && (
-              <div className="job-card">
-                <div className="job-card-label">Extra time</div>
+              <div className="visit-card">
+                <div className="visit-card-label">Extra time</div>
                 {extensionRequests.map((r) => (
-                  <div key={r.id} className="job-extension">
-                    <div className="job-extension-row">
-                      <span className="job-extension-text">
+                  <div key={r.id} className="visit-extension">
+                    <div className="visit-extension-row">
+                      <span className="visit-extension-text">
                         +{r.requested_minutes} min{r.reason ? ` — ${r.reason}` : ''}
                       </span>
                       <span className={`wf-pill ${EXTENSION_PILL[r.status] || 'wf-pill-progress'}`}>
@@ -562,20 +567,20 @@ export default function JobDetailPage() {
                       </span>
                     </div>
                     {r.status === 'alternative_suggested' && r.suggested_scheduled_at && (
-                      <div className="job-extension-note">
+                      <div className="visit-extension-note">
                         Suggested: {new Date(r.suggested_scheduled_at).toLocaleString()}
                         {r.suggested_duration_minutes ? ` · ${r.suggested_duration_minutes} min` : ''}
                       </div>
                     )}
-                    {r.admin_note && <div className="job-extension-note">&ldquo;{r.admin_note}&rdquo;</div>}
+                    {r.admin_note && <div className="visit-extension-note">&ldquo;{r.admin_note}&rdquo;</div>}
                   </div>
                 ))}
               </div>
             )}
 
             {showExtensionForm && (
-              <form className="job-card" onSubmit={submitExtensionRequest}>
-                <div className="job-card-label">How much longer do you need?</div>
+              <form className="visit-card" onSubmit={submitExtensionRequest}>
+                <div className="visit-card-label">How much longer do you need?</div>
                 <label>Extra minutes</label>
                 <input
                   type="number"
@@ -591,40 +596,40 @@ export default function JobDetailPage() {
                   onChange={(e) => setRequestReason(e.target.value)}
                   placeholder="e.g. Extra mess in the kitchen"
                 />
-                <button type="submit" className="job-btn-secondary" disabled={submittingExtension}>
+                <button type="submit" className="visit-btn-secondary" disabled={submittingExtension}>
                   {submittingExtension ? 'Sending...' : 'Send request'}
                 </button>
               </form>
             )}
 
-            <div className="job-card">
-              <div className="job-card-label">Photos</div>
-              <div className="job-photo-row">
-                <label className="job-photo-add">
+            <div className="visit-card">
+              <div className="visit-card-label">Photos</div>
+              <div className="visit-photo-row">
+                <label className="visit-photo-add">
                   <Camera size={20} />
                   <span>{uploading ? 'Sending' : 'Photo'}</span>
                   <input type="file" accept="image/*" capture="environment" onChange={handlePhotoUpload} disabled={uploading} />
                 </label>
                 {photos.map((p) => (
-                  <img key={p.id} className="job-photo-thumb" src={p.signedUrl} alt="job" />
+                  <img key={p.id} className="visit-photo-thumb" src={p.signedUrl} alt="job" />
                 ))}
               </div>
               {photos.length === 0 ? (
-                <p className="job-photo-warning">
+                <p className="visit-photo-warning">
                   Take photos before you check out — you won't be able to add them afterwards.
                 </p>
               ) : (
-                <p className="job-photo-count">{photos.length} photo{photos.length === 1 ? '' : 's'} added</p>
+                <p className="visit-photo-count">{photos.length} photo{photos.length === 1 ? '' : 's'} added</p>
               )}
             </div>
 
             {/* Collapsed, so a long room-by-room reference can't push the
                 actual task list off the screen. */}
             {checklistItems.length > 0 && (
-              <div className="job-card job-card-flush">
+              <div className="visit-card visit-card-flush">
                 <button
                   type="button"
-                  className={`job-disclosure${showChecklist ? ' is-open' : ''}`}
+                  className={`visit-disclosure${showChecklist ? ' is-open' : ''}`}
                   onClick={() => setShowChecklist((v) => !v)}
                   aria-expanded={showChecklist}
                 >
@@ -632,17 +637,17 @@ export default function JobDetailPage() {
                   <ChevronDown size={18} />
                 </button>
                 {showChecklist && (
-                  <div className="job-checklist">
+                  <div className="visit-checklist">
                     {Object.entries(
                       checklistItems.reduce((acc, item) => {
                         (acc[item.room] = acc[item.room] || []).push(item);
                         return acc;
                       }, {})
                     ).map(([room, items]) => (
-                      <div key={room} className="job-checklist-room">
-                        <div className="job-card-label">{room}</div>
+                      <div key={room} className="visit-checklist-room">
+                        <div className="visit-card-label">{room}</div>
                         {items.map((item) => (
-                          <div key={item.id} className="job-checklist-item">{item.task}</div>
+                          <div key={item.id} className="visit-checklist-item">{item.task}</div>
                         ))}
                       </div>
                     ))}
@@ -656,11 +661,11 @@ export default function JobDetailPage() {
         {/* ---- State 3: checked out ---- */}
         {isHistory && (
           <>
-            <div className="job-done-banner">
-              <span className="job-done-mark"><Check size={22} strokeWidth={3} /></span>
+            <div className="visit-done-banner">
+              <span className="visit-done-mark"><Check size={22} strokeWidth={3} /></span>
               <div>
-                <div className="job-done-title">Job done</div>
-                <div className="job-done-sub">
+                <div className="visit-done-title">Job done</div>
+                <div className="visit-done-sub">
                   {checkin?.checked_in_at ? (
                     <>
                       {clock(checkin.checked_in_at)} – {clock(checkin.checked_out_at)}
@@ -671,17 +676,17 @@ export default function JobDetailPage() {
               </div>
             </div>
 
-            <div className="job-card job-card-flush">
-              <div className="job-receipt">
+            <div className="visit-card visit-card-flush">
+              <div className="visit-receipt">
                 <span>Tasks completed</span>
                 <strong>{doneTasks} of {tasks.length}</strong>
               </div>
-              <div className="job-receipt">
+              <div className="visit-receipt">
                 <span>Photos sent to client</span>
                 <strong>{photos.length}</strong>
               </div>
               {approvedExtra > 0 && (
-                <div className="job-receipt">
+                <div className="visit-receipt">
                   <span>Extra time approved</span>
                   <strong>+{approvedExtra} min</strong>
                 </div>
@@ -690,8 +695,8 @@ export default function JobDetailPage() {
 
             {photos.length > 0 && (
               <div>
-                <div className="job-card-label job-photos-label">Your photos</div>
-                <div className="job-photo-grid">
+                <div className="visit-card-label visit-photos-label">Your photos</div>
+                <div className="visit-photo-grid">
                   {photos.map((p) => (
                     <img key={p.id} src={p.signedUrl} alt="job" />
                   ))}
@@ -702,7 +707,7 @@ export default function JobDetailPage() {
             {/* Says out loud the read-only rule the code already enforces -
                 it used to be a bare "completed" badge and a list that
                 silently stopped responding. */}
-            <div className="job-card job-locked">
+            <div className="visit-card visit-locked">
               <Lock size={18} />
               <p>
                 This job is locked now — tasks and photos can't be changed.
@@ -715,16 +720,16 @@ export default function JobDetailPage() {
 
       {/* One primary action, always in the same place, always reachable
           without scrolling to the end of the page. */}
-      <div className="job-actions">
+      <div className="visit-actions">
         {beforeCheckIn && (
           <>
-            {checkInError && <p className="job-action-error">{checkInError}</p>}
-            <button type="button" className="job-btn-primary" onClick={handleCheckIn} disabled={checkingIn}>
+            {checkInError && <p className="visit-action-error">{checkInError}</p>}
+            <button type="button" className="visit-btn-primary" onClick={handleCheckIn} disabled={checkingIn}>
               {checkingIn ? 'Checking location...' : 'Check in'}
             </button>
-            <p className="job-action-help">Your location is checked — you need to be at the property.</p>
+            <p className="visit-action-help">Your location is checked — you need to be at the property.</p>
             {!coverOffer && (
-              <button type="button" className="job-btn-secondary" onClick={() => setShowCoverForm((v) => !v)}>
+              <button type="button" className="visit-btn-secondary" onClick={() => setShowCoverForm((v) => !v)}>
                 {showCoverForm ? 'Cancel' : "Can't make this shift"}
               </button>
             )}
@@ -732,15 +737,15 @@ export default function JobDetailPage() {
         )}
 
         {onSite && (
-          <div className="job-action-row">
+          <div className="visit-action-row">
             <button
               type="button"
-              className="job-btn-secondary job-btn-narrow"
+              className="visit-btn-secondary visit-btn-narrow"
               onClick={() => setShowExtensionForm((v) => !v)}
             >
               {showExtensionForm ? 'Cancel' : 'More time'}
             </button>
-            <button type="button" className="job-btn-primary" onClick={handleCheckOut} disabled={checkingOut}>
+            <button type="button" className="visit-btn-primary" onClick={handleCheckOut} disabled={checkingOut}>
               {checkingOut ? 'Checking out...' : 'Check out'}
             </button>
           </div>
@@ -751,17 +756,17 @@ export default function JobDetailPage() {
             {nextJob ? (
               <button
                 type="button"
-                className="job-btn-primary"
+                className="visit-btn-primary"
                 onClick={() => router.push(`/cleaner/jobs/${nextJob.id}`)}
               >
                 Next job · {clock(nextJob.scheduled_at)} {nextJob.properties?.clients?.name || nextJob.properties?.address}
               </button>
             ) : (
-              <button type="button" className="job-btn-primary" onClick={() => router.push('/cleaner')}>
+              <button type="button" className="visit-btn-primary" onClick={() => router.push('/cleaner')}>
                 Back to today's jobs
               </button>
             )}
-            <button type="button" className="job-btn-secondary" onClick={() => router.push('/cleaner/messages')}>
+            <button type="button" className="visit-btn-secondary" onClick={() => router.push('/cleaner/messages')}>
               Message the office
             </button>
           </>
