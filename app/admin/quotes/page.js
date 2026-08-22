@@ -12,7 +12,8 @@ import {
   ROOM_TYPES, CONDITION_OPTIONS, CLEAN_TYPE_OPTIONS, FURNISHED_OPTIONS,
   PROPERTY_TYPES, PROPERTY_TYPE_DEFAULTS, ADDON_TYPES, OVEN_OPTIONS,
   SERVICE_TYPES, GARDEN_SIZE_OPTIONS, GARDEN_ADDON_TYPES, COMMERCIAL_FREQUENCY_OPTIONS,
-  calculateQuote, defaultQuoteDescription,
+  calculateQuote, defaultQuoteDescription, rebaseBreakdownToPrice,
+  DEFAULT_COMMERCIAL_RECURRING_MIN_HOURS,
 } from '../../../lib/quoteCalculator';
 import {
   WEEKDAYS, RECURRENCE_OPTIONS, EMPTY_SHIFT_PATTERN, EMPTY_SHIFT_SCHEDULE,
@@ -71,8 +72,9 @@ const PRICING_FIELDS = [
   { key: 'admin_pct', label: 'Admin allowance (%, e.g. 0.05)', step: '0.0001' },
   { key: 'travel_cost_per_mile', label: 'Travel cost per mile (£)', step: '0.01' },
   { key: 'target_margin_pct', label: 'Target profit margin (%, e.g. 0.275)', step: '0.0001' },
-  { key: 'minimum_job_price', label: 'Minimum job price (£)', step: '0.01' },
-  { key: 'minimum_callout_hours', label: 'Minimum call-out hours', step: '0.5' },
+  { key: 'minimum_job_price', label: 'Minimum job price (£, one-off jobs)', step: '0.01' },
+  { key: 'minimum_callout_hours', label: 'Minimum call-out hours (one-off jobs)', step: '0.5' },
+  { key: 'commercial_recurring_min_hours', label: 'Minimum visit hours (recurring commercial)', step: '0.5' },
 ];
 
 // One row of the shift-pattern editor. Every figure it shows is derived
@@ -271,7 +273,12 @@ export default function AdminQuotes() {
   };
 
   const startEditPricing = () => {
-    setPricingForm({ ...pricingSettings });
+    // Seeded before the saved row so a setting whose migration hasn't run
+    // yet opens on its default rather than as a blank required field.
+    setPricingForm({
+      commercial_recurring_min_hours: DEFAULT_COMMERCIAL_RECURRING_MIN_HOURS,
+      ...pricingSettings,
+    });
     setShowPricingSettings(true);
   };
 
@@ -281,12 +288,15 @@ export default function AdminQuotes() {
 
     const payload = Object.fromEntries(PRICING_FIELDS.map((f) => [f.key, parseFloat(pricingForm[f.key])]));
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('pricing_settings').update(payload).eq('id', pricingSettings.id)
       .select('*').single();
 
     setSavingPricing(false);
-    if (data) setPricingSettings(data);
+    // Silence here used to look like success while nothing had been
+    // written - most likely a column the migrations haven't added yet.
+    if (error || !data) { toast.error('Could not save the pricing settings.'); return; }
+    setPricingSettings(data);
     setShowPricingSettings(false);
   };
 
@@ -336,6 +346,16 @@ export default function AdminQuotes() {
     if (!useCalculator || !pricingSettings) return null;
     return calculateQuote(calcInput, pricingSettings);
   }, [useCalculator, calcInput, pricingSettings]);
+
+  // What the quote is worth at the price actually typed in, which is
+  // only the calculator's answer until someone edits it. Null while the
+  // two agree, so the form can stay quiet in the ordinary case and speak
+  // up when a discount has quietly eaten the margin.
+  const quotedBreakdown = useMemo(() => {
+    if (!breakdown || price === '') return null;
+    const rebased = rebaseBreakdownToPrice(breakdown, parseFloat(price));
+    return rebased === breakdown ? null : rebased;
+  }, [breakdown, price]);
 
   // Puts a saved quote back into the form it was written in. The
   // pricing mode is inferred from what was stored rather than kept as a
@@ -464,7 +484,11 @@ export default function AdminQuotes() {
       // Set on creation only - editing a quote doesn't make you its author.
       ...(editingQuoteId ? {} : { created_by: session.user.id }),
       calculator_input: useCalculator ? { ...calcInput, propertyAddress: siteAddress } : null,
-      calculator_breakdown: useCalculator ? breakdown : null,
+      // Stored against the price actually being quoted, not the one the
+      // calculator arrived at - the two differ whenever the price was
+      // discounted or rounded by hand, and a stored margin that ignores
+      // that is worse than no margin at all.
+      calculator_breakdown: useCalculator ? rebaseBreakdownToPrice(breakdown, parseFloat(price)) : null,
       // Only stored once it prices something - a half-filled pattern
       // would put an empty schedule section into the quote document.
       shift_schedule: scheduleSummary ? { ...shiftSchedule, siteAddress } : null,
@@ -874,6 +898,13 @@ export default function AdminQuotes() {
                       <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>
                         Profit {formatPrice(breakdown.profit)} ({(breakdown.marginPct * 100).toFixed(1)}%) — {breakdown.marginWarning}
                       </p>
+                      {quotedBreakdown && (
+                        <p style={{ fontSize: 13, margin: '6px 0 0', fontWeight: 600 }}>
+                          Quoting {formatPrice(quotedBreakdown.finalPrice)} instead — profit{' '}
+                          {formatPrice(quotedBreakdown.profit)} ({(quotedBreakdown.marginPct * 100).toFixed(1)}%),{' '}
+                          {formatPrice(quotedBreakdown.hourlyEquivalent)}/hr — {quotedBreakdown.marginWarning}
+                        </p>
+                      )}
                       {breakdown.monthlyContractValue > 0 && (
                         <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>
                           {breakdown.visitsPerWeek}x/week — {formatPrice(breakdown.weeklyContractValue)}/week, approx. {formatPrice(breakdown.monthlyContractValue)}/month
@@ -1059,6 +1090,9 @@ export default function AdminQuotes() {
                 <div style={{ background: 'var(--wf-ash)', borderRadius: 10, padding: 12, marginTop: 10, fontSize: 13, color: 'var(--muted)', lineHeight: 1.8 }}>
                   <div>{b.totalHours}h estimated · {b.chargeableHours}h chargeable · {formatPrice(b.hourlyEquivalent)}/hr equivalent · {b.pricePosition}</div>
                   <div>Profit {formatPrice(b.profit)} ({(b.marginPct * 100).toFixed(1)}%) — {b.marginWarning}</div>
+                  {b.calculatedPrice != null && (
+                    <div>Calculator said {formatPrice(b.calculatedPrice)} — quoted at {formatPrice(quote.price)}</div>
+                  )}
                   <div>Labour {formatPrice(b.cleanerWageCost)} · Holiday {formatPrice(b.holidayCost)} · NI {formatPrice(b.niCost)} · Pension {formatPrice(b.pensionCost)}</div>
                   <div>Materials {formatPrice(b.materialsCost)} · Admin {formatPrice(b.adminCost)} · Travel {formatPrice(b.travelCost)}</div>
                   {b.ovenCharge > 0 && <div>Oven charge {formatPrice(b.ovenCharge)} (cleaner pay {formatPrice(b.ovenCleanerPay)})</div>}
