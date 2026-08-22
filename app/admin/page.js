@@ -246,8 +246,14 @@ export default function AdminDashboard() {
 
     // Total length of the day's work, not staff-hours - a job with two cleaners
     // on it is still one slot in the day. Staff Hours below does the splitting.
+    //
+    // Missed jobs are left out: counting them reports hours of work on a day
+    // that work didn't happen. The 120 default matches formatTimeRange above,
+    // so a job with no duration set reads as the same two hours here as it
+    // does in the Today's Jobs list rather than silently contributing nothing.
     const jobHours = (todaysJobsData || [])
-      .reduce((mins, j) => mins + (j.duration_minutes || 0), 0) / 60;
+      .filter((j) => j.status !== 'missed')
+      .reduce((mins, j) => mins + (j.duration_minutes || 120), 0) / 60;
 
     setStats({
       todaysJobs: (todaysJobsData || []).length,
