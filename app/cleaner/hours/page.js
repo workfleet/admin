@@ -111,13 +111,13 @@ export default function CleanerHours() {
       <h1>My Hours</h1>
 
       <div className="card" style={{ textAlign: 'center' }}>
-        <div
-          className="stat-card-icon"
-          style={{ margin: '0 auto 10px', '--stat-tint': 'var(--wf-teal-tint)', '--stat-ink': 'var(--wf-teal-ink)' }}
-        >
+        {/* stat-hours carries the hue, the same as an hours tile on the admin
+            dashboard - the figure itself stays neutral ink like every other
+            figure in the app, so the colour lives in one place only. */}
+        <div className="stat-card-icon stat-hours" style={{ margin: '0 auto 10px' }}>
           <Clock size={18} />
         </div>
-        <div className="stat-number" style={{ fontSize: 40, color: 'var(--wf-teal-ink)' }}>
+        <div className="stat-number" style={{ fontSize: 40 }}>
           {formatHours(totals.hours)}
         </div>
         <div className="stat-label" style={{ marginTop: 8 }}>Total hours worked</div>
@@ -188,7 +188,7 @@ export default function CleanerHours() {
                   {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                   {month.label}
                 </span>
-                <span style={{ fontFamily: 'var(--wf-data)', fontSize: 15, fontWeight: 600, color: 'var(--wf-teal-ink)' }}>
+                <span style={{ fontFamily: 'var(--wf-data)', fontSize: 15, fontWeight: 600 }}>
                   {formatHours(month.hours)}
                 </span>
               </span>
@@ -200,7 +200,7 @@ export default function CleanerHours() {
               >
                 <span
                   style={{
-                    display: 'block', height: '100%', borderRadius: 2, background: 'var(--wf-teal-ink)',
+                    display: 'block', height: '100%', borderRadius: 2, background: 'var(--wf-azure)',
                     width: `${busiestMonthHours > 0 ? (month.hours / busiestMonthHours) * 100 : 0}%`,
                   }}
                 />
