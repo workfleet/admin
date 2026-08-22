@@ -263,6 +263,7 @@ export default function AdminRota() {
     setJobSaveError('');
 
     const scheduledAtDate = new Date(`${editDate}T${editHour}:${editMinute}`);
+    const previousAt = selectedJob.scheduled_at;
 
     for (const a of selectedJob.job_assignments || []) {
       const conflict = await findConflict(a.cleaner_id, scheduledAtDate, editDuration, selectedJob.id);
@@ -292,6 +293,12 @@ export default function AdminRota() {
 
     setJobs((prev) => prev.map((j) => (j.id === data.id ? { ...j, ...data } : j)));
     setSelectedJob(data);
+
+    // Only when the time actually moved - editing just the notes or the
+    // length shouldn't tell anyone their shift has been rescheduled.
+    if (new Date(previousAt).getTime() !== scheduledAtDate.getTime()) {
+      notifyShiftMoved(data, previousAt, scheduledAtDate.toISOString());
+    }
   };
 
   const loadTasks = async (jobId) => {
@@ -919,6 +926,24 @@ export default function AdminRota() {
   // a double-booking or land someone in the middle of their holiday. The
   // job row is what every cleaner's own rota reads from, so saving here is
   // what moves the shift on their side too.
+  // Tells everyone on the job that its time changed. Fire-and-forget, like
+  // the new-shift alert - a failed email must never undo a saved move.
+  // Returns how many people were told, so the confirmation can say so.
+  const notifyShiftMoved = (job, previousAt, newAt) => {
+    const assignments = job.job_assignments || [];
+    assignments.forEach((a) => {
+      notify({
+        type: 'shift_rescheduled',
+        cleanerId: a.cleaner_id,
+        jobId: job.id,
+        address: job.properties?.address,
+        previousAt,
+        scheduledAt: newAt,
+      });
+    });
+    return assignments.length;
+  };
+
   const moveJobTo = async (jobId, dayIndex, minutes) => {
     const job = jobs.find((j) => j.id === jobId);
     if (!job) return;
@@ -960,8 +985,11 @@ export default function AdminRota() {
 
     setJobs((prev) => prev.map((j) => (j.id === data.id ? { ...j, ...data } : j)));
     setSelectedJob((sj) => (sj && sj.id === data.id ? { ...sj, ...data } : sj));
+
+    const told = notifyShiftMoved(data, previousAt, newDate.toISOString());
     toast.success(
       `Moved to ${newDate.toLocaleDateString(undefined, { weekday: 'short' })} ${formatMinutesOfDay(minutes)}.`
+      + (told > 0 ? ` ${told} cleaner${told === 1 ? '' : 's'} notified.` : '')
     );
   };
 
@@ -1023,7 +1051,7 @@ export default function AdminRota() {
       </div>
 
       <div className="stat-row stat-row-compact">
-        <div className="stat-card">
+        <div className="stat-card stat-jobs">
           <div className="stat-card-top"><div className="stat-card-icon"><ClipboardList size={16} /></div></div>
           <div className="stat-number">{weekStats.total}</div>
           <div className="stat-label">Jobs</div>

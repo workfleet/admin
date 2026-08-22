@@ -81,6 +81,21 @@ async function pushAdminsAndSupervisors(cleanerName) {
   });
 }
 
+// Every shift time in this file goes through here. The server runs in UTC,
+// so a time formatted without an explicit zone came out an hour early all
+// summer - telling a cleaner their 9am shift was at 08:00. A notification
+// naming the wrong hour is worse than not sending one at all.
+function formatShiftTime(value) {
+  return new Date(value).toLocaleString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Europe/London',
+  });
+}
+
 export async function POST(request) {
   const user = await requireUser(request);
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
@@ -90,7 +105,7 @@ export async function POST(request) {
   if (payload.type === 'shift_cover_needed') {
     await pushActiveCleaners(payload.releasedByCleanerId, {
       title: 'Shift needs cover',
-      body: `${payload.address || 'A shift'} on ${new Date(payload.scheduledAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} - first to accept takes it.`,
+      body: `${payload.address || 'A shift'} on ${formatShiftTime(payload.scheduledAt)} - first to accept takes it.`,
       tag: 'shift-cover',
       url: '/cleaner',
     });
@@ -103,6 +118,16 @@ export async function POST(request) {
         url: '/cleaner',
       });
     }
+  } else if (payload.type === 'shift_rescheduled') {
+    await pushToUserIds([payload.cleanerId], {
+      title: 'Your shift has moved',
+      body: `${payload.address || 'Your shift'} is now ${formatShiftTime(payload.scheduledAt)}`
+        + (payload.previousAt ? ` (was ${formatShiftTime(payload.previousAt)}).` : '.'),
+      // Tagged per job, so moving two different shifts shows two alerts but
+      // moving the same one twice replaces its own rather than stacking.
+      tag: `shift-moved-${payload.jobId || 'unknown'}`,
+      url: '/cleaner/rota',
+    });
   } else if (payload.type === 'emergency_alert') {
     await pushAdminsAndSupervisors(payload.cleanerName);
   } else if (payload.type === 'emergency_alert_acknowledged') {
@@ -127,7 +152,15 @@ export async function POST(request) {
       if (!email) return NextResponse.json({ skipped: 'no_email' });
       to = [email];
       subject = 'New shift assigned';
-      text = `You've been assigned a new shift at ${payload.address} on ${new Date(payload.scheduledAt).toLocaleString()}.`;
+      text = `You've been assigned a new shift at ${payload.address} on ${formatShiftTime(payload.scheduledAt)}.`;
+    } else if (payload.type === 'shift_rescheduled') {
+      const email = await emailForUserId(payload.cleanerId);
+      if (!email) return NextResponse.json({ skipped: 'no_email' });
+      to = [email];
+      subject = 'Your shift has moved';
+      text = `Your shift at ${payload.address || 'the site'} has been moved`
+        + (payload.previousAt ? ` from ${formatShiftTime(payload.previousAt)}` : '')
+        + ` to ${formatShiftTime(payload.scheduledAt)}.`;
     } else if (payload.type === 'request_resolved') {
       const email = await emailForUserId(payload.cleanerId);
       if (!email) return NextResponse.json({ skipped: 'no_email' });
@@ -186,7 +219,7 @@ export async function POST(request) {
         ? `${payload.cleanerName} needs cover for a shift`
         : 'Cover needed for a shift';
       text = `${payload.cleanerName || 'Admin'} has opened a cover request for `
-        + `${payload.address || 'a shift'} on ${new Date(payload.scheduledAt).toLocaleString()}.`
+        + `${payload.address || 'a shift'} on ${formatShiftTime(payload.scheduledAt)}.`
         + (payload.reason ? `\n\nReason: ${payload.reason}` : '')
         + `\n\nThe shift is still assigned to them until someone else picks it up.`;
     } else if (payload.type === 'shift_cover_filled') {
@@ -196,7 +229,7 @@ export async function POST(request) {
       to = [email];
       subject = 'Your shift has been covered';
       text = `Your shift at ${payload.address || 'the site'} on `
-        + `${new Date(payload.scheduledAt).toLocaleString()} has been picked up by another cleaner. `
+        + `${formatShiftTime(payload.scheduledAt)} has been picked up by another cleaner. `
         + `You're no longer assigned to it.`;
     } else if (payload.type === 'time_extension_requested') {
       to = await adminEmails();
@@ -216,7 +249,7 @@ export async function POST(request) {
       if (payload.status === 'alternative_suggested') {
         subject = 'Admin suggested a different time for your job';
         text = `Instead of the extra time you requested at ${payload.address}, admin suggested: `
-          + `${new Date(payload.suggestedScheduledAt).toLocaleString()} (${payload.suggestedDuration} minutes).`
+          + `${formatShiftTime(payload.suggestedScheduledAt)} (${payload.suggestedDuration} minutes).`
           + (payload.note ? `\n\nNote from admin: ${payload.note}` : '');
       } else {
         subject = `Your request for more time was ${payload.status}`;
