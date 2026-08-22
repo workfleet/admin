@@ -3,19 +3,42 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ClipboardList, Users, Inbox, Clock, UserX } from 'lucide-react';
+import { ClipboardList, Users, Inbox, Clock, UserX, ChevronDown } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../lib/authGate';
 import { getWorkAnniversaryYears } from '../../lib/workAnniversary';
 import { needsReorder } from '../../lib/inventory';
 import { localDateString } from '../../lib/localDate';
 import WorkAnniversaryPopup from '../components/WorkAnniversaryPopup';
+import { abbreviateName } from '../../lib/jobOverlap';
 
 function formatTimeRange(scheduledAt, durationMinutes) {
   const start = new Date(scheduledAt);
   const end = new Date(start.getTime() + (durationMinutes || 120) * 60000);
   const fmt = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
   return `${fmt(start)} – ${fmt(end)}`;
+}
+
+function initialsOf(fullName) {
+  return String(fullName || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0].toUpperCase())
+    .join('');
+}
+
+function clockOf(value) {
+  return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+// The word for a job's state, and the pill colour that goes with it.
+function jobStatusPill(status) {
+  if (status === 'completed') return { label: 'Completed', tone: 'verified' };
+  if (status === 'in_progress') return { label: 'On site', tone: 'progress' };
+  if (status === 'missed') return { label: 'Missed', tone: 'overdue' };
+  return { label: 'Scheduled', tone: 'progress' };
 }
 
 // Sorted by urgency then date, a category with a lot of rows in it - a dozen
@@ -73,22 +96,29 @@ const PAYROLL_PERIODS = {
 
 function HoursRing({ completedHours, totalHours }) {
   const pct = totalHours > 0 ? Math.min(completedHours / totalHours, 1) : 0;
-  const radius = 46;
+  const radius = 52;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference * (1 - pct);
 
   return (
-    <svg width={116} height={116} viewBox="0 0 116 116">
-      <circle cx={58} cy={58} r={radius} fill="none" stroke="var(--hairline)" strokeWidth={10} />
+    <svg width={132} height={132} viewBox="0 0 132 132">
+      <circle cx={66} cy={66} r={radius} fill="none" stroke="var(--wf-ash)" strokeWidth={12} />
       <circle
-        cx={58} cy={58} r={radius} fill="none" stroke="var(--brand-primary)" strokeWidth={10}
+        cx={66} cy={66} r={radius} fill="none" stroke="var(--wf-coral)" strokeWidth={12}
         strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
-        transform="rotate(-90 58 58)" style={{ transition: 'stroke-dashoffset 0.4s ease' }}
+        transform="rotate(-90 66 66)" style={{ transition: 'stroke-dashoffset 0.4s ease' }}
       />
-      <text x={58} y={54} textAnchor="middle" fontSize={20} fontWeight={800} fill="var(--ink)">
+      <text
+        x={66} y={64} textAnchor="middle" fill="var(--ink)"
+        fontFamily="var(--wf-data)" fontSize={26} fontWeight={600}
+        style={{ fontVariantNumeric: 'tabular-nums' }}
+      >
         {completedHours.toFixed(1)}
       </text>
-      <text x={58} y={71} textAnchor="middle" fontSize={11} fill="var(--muted)">
+      <text
+        x={66} y={82} textAnchor="middle" fill="var(--muted)"
+        fontFamily="var(--wf-data)" fontSize={12}
+      >
         of {totalHours.toFixed(1)}h
       </text>
     </svg>
@@ -108,6 +138,7 @@ export default function AdminDashboard() {
   const [attention, setAttention] = useState([]);
   const [detailItem, setDetailItem] = useState(null);
   const [staffGlance, setStaffGlance] = useState({ working: [], holiday: [], off: [], total: 0 });
+  const [onSiteNow, setOnSiteNow] = useState([]);
   const [glanceDetail, setGlanceDetail] = useState(null);
 
   const [payrollPeriod, setPayrollPeriod] = useState('this_week');
@@ -223,8 +254,10 @@ export default function AdminDashboard() {
         .select('id, client_id, staff_id, due_date, recurs_yearly, notes, clients(name), staff:profiles!reminders_staff_id_fkey(full_name)')
         .lte('due_date', localDateString(new Date()))
         .order('due_date', { ascending: true }),
+      // Not just how many are on site but who and where - the same row
+      // answers the "Working now" figure and the list underneath it.
       supabase.from('checkins')
-        .select('cleaner_id')
+        .select('cleaner_id, checked_in_at, profiles(full_name), jobs(properties(address, clients(name)))')
         .gte('checked_in_at', startOfDay.toISOString())
         .is('checked_out_at', null),
       supabase.from('time_off_requests')
@@ -277,6 +310,13 @@ export default function AdminDashboard() {
       else off.push(name);
     });
     setStaffGlance({ working, holiday, off, total: (activeCleaners || []).length });
+
+    setOnSiteNow((openCheckins || []).map((c) => ({
+      id: c.cleaner_id,
+      name: c.profiles?.full_name || 'Unknown',
+      place: c.jobs?.properties?.clients?.name || c.jobs?.properties?.address || 'a job',
+      since: c.checked_in_at,
+    })));
 
     const unassignedNearTerm = (nearTermJobs || []).filter((j) => (j.job_assignments || []).length === 0);
     const lowStock = (allProducts || []).filter(needsReorder);
@@ -372,7 +412,13 @@ export default function AdminDashboard() {
         at: new Date().toISOString(),
       }] : []),
     ];
-    setAttention(interleaveByKind(attentionItems));
+    // Urgent first, then the round-robin. Interleaving alone can bury a
+    // job with nobody on it under a list of certificates that expire next
+    // month, purely because certificates are their own kind.
+    // Array#sort is stable, so each half keeps its interleaved order.
+    setAttention(
+      interleaveByKind(attentionItems).sort((a, b) => (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0))
+    );
 
     setLoading(false);
   };
@@ -411,59 +457,57 @@ export default function AdminDashboard() {
           <h1>{timeGreeting}, {greetingName}</h1>
           <p className="page-subtitle">
             {new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+            {' · '}{clockOf(new Date())}
           </p>
         </div>
-        <Link
-          href="/admin/rota?new=1"
-          className="btn-primary"
-          style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap' }}
-          title="Schedule a new job and assign staff to it"
-        >
-          + New Job
-        </Link>
+        <div className="dash-header-actions">
+          <Link href="/admin/reports" className="btn-secondary" title="Today's numbers in full">
+            Today's report
+          </Link>
+          <Link
+            href="/admin/rota?new=1"
+            className="btn-primary"
+            style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap' }}
+            title="Schedule a new job and assign staff to it"
+          >
+            + New job
+          </Link>
+        </div>
       </div>
 
       <div className="stat-row">
-        <Link href="/admin/rota" className="stat-card stat-jobs" title="Today's jobs and how many are done">
-          <div className="stat-card-top">
-            <div className="stat-card-icon"><ClipboardList size={18} /></div>
-          </div>
+        <Link href="/admin/rota" className="stat-card" title="Today's jobs and how many are done">
+          <div className="stat-icon"><ClipboardList size={18} /></div>
           <div className="stat-number">{stats.todaysJobs}</div>
           <div className="stat-label">Today's jobs</div>
           <div className="stat-sublabel">{stats.todaysCompleted} completed</div>
         </Link>
-        <Link href="/admin/cleaners" className="stat-card stat-working" title="Staff clocked in right now">
-          <div className="stat-card-top">
-            <div className="stat-card-icon"><Users size={18} /></div>
-          </div>
+        <Link href="/admin/cleaners" className="stat-card" title="Staff clocked in right now">
+          <div className="stat-icon"><Users size={18} /></div>
           <div className="stat-number">{stats.staffWorking}</div>
           <div className="stat-label">Working now</div>
-          <div className="stat-sublabel" />
+          {/* A figure with no denominator says nothing: one of two is a
+              problem, one of twelve is a Tuesday. */}
+          <div className="stat-sublabel">of {staffGlance.total} active</div>
         </Link>
-        <Link href="/admin/requests" className="stat-card stat-requests" title="Open kit top-ups, issues and time off">
-          <div className="stat-card-top">
-            <div className="stat-card-icon"><Inbox size={18} /></div>
-          </div>
+        <Link href="/admin/requests" className="stat-card" title="Open kit top-ups, issues and time off">
+          <div className="stat-icon"><Inbox size={18} /></div>
           <div className="stat-number">{stats.openRequests}</div>
           <div className="stat-label">Requests</div>
           <div className="stat-sublabel">open</div>
         </Link>
-        <Link href="/admin/rota" className="stat-card stat-hours" title="Total length of today's scheduled work">
-          <div className="stat-card-top">
-            <div className="stat-card-icon"><Clock size={18} /></div>
-          </div>
+        <Link href="/admin/rota" className="stat-card" title="Total length of today's scheduled work">
+          <div className="stat-icon"><Clock size={18} /></div>
           <div className="stat-number">{stats.jobHours.toFixed(1)}</div>
           <div className="stat-label">Job hours</div>
           <div className="stat-sublabel">scheduled today</div>
         </Link>
         <Link
           href="/admin/rota"
-          className={`stat-card stat-unassigned${stats.unassigned > 0 ? ' is-alert' : ''}`}
+          className={`stat-card${stats.unassigned > 0 ? ' is-alert' : ''}`}
           title="Today's jobs with nobody assigned"
         >
-          <div className="stat-card-top">
-            <div className="stat-card-icon"><UserX size={18} /></div>
-          </div>
+          <div className="stat-icon"><UserX size={18} /></div>
           <div className="stat-number">{stats.unassigned}</div>
           <div className="stat-label">Unassigned</div>
           <div className="stat-sublabel">today</div>
@@ -472,8 +516,8 @@ export default function AdminDashboard() {
 
       <div className="dash-grid-2">
         <div className="card">
-          <div className="dash-panel-header panel-today">
-            <h2>Today's Jobs</h2>
+          <div className="dash-panel-header">
+            <h2>Today's jobs</h2>
             <Link href="/admin/rota" className="dash-panel-link">View full schedule &rarr;</Link>
           </div>
           <div className="dash-panel-list">
@@ -481,17 +525,31 @@ export default function AdminDashboard() {
             {todaysJobs.map((job) => {
               const names = (job.job_assignments || []).map((a) => a.profiles?.full_name).filter(Boolean);
               const unassigned = names.length === 0;
+              const pill = jobStatusPill(job.status);
               return (
-                <div key={job.id} className="dash-row" onClick={() => router.push('/admin/rota')}>
-                  <div>
+                <div key={job.id} className="dash-row" onClick={() => router.push(`/admin/rota?job=${job.id}`)}>
+                  <div className="dash-row-main">
                     <div className="dash-row-title">{job.properties?.clients?.name || job.properties?.address}</div>
-                    <div className="dash-row-subtitle">
-                      {formatTimeRange(job.scheduled_at, job.duration_minutes)} · {unassigned ? 'Unassigned' : names.join(', ')}
+                    <div className={`dash-row-subtitle${unassigned ? ' is-urgent' : ''}`}>
+                      {formatTimeRange(job.scheduled_at, job.duration_minutes)}
+                      {' · '}{unassigned ? 'nobody assigned' : names.join(', ')}
                     </div>
                   </div>
-                  <span className={`badge ${unassigned ? 'missed' : job.status}`}>
-                    {unassigned ? 'Assign Cleaner' : job.status.replace('_', ' ')}
-                  </span>
+                  {/* A job with nobody on it needs doing something about, so
+                      it gets a real button. The badge that used to sit here
+                      read as pressable and wasn't. */}
+                  {unassigned ? (
+                    <Link
+                      href={`/admin/rota?job=${job.id}`}
+                      className="btn-primary dash-row-action"
+                      onClick={(e) => e.stopPropagation()}
+                      title="Open this job and put someone on it"
+                    >
+                      Assign cleaner
+                    </Link>
+                  ) : (
+                    <span className={`wf-pill wf-pill-${pill.tone}`}>{pill.label}</span>
+                  )}
                 </div>
               );
             })}
@@ -499,8 +557,13 @@ export default function AdminDashboard() {
         </div>
 
         <div className="card">
-          <div className="dash-panel-header panel-attention">
-            <h2>Needs Attention</h2>
+          <div className="dash-panel-header">
+            <h2>Needs attention</h2>
+            {attention.some((a) => a.urgent) && (
+              <span className="wf-pill wf-pill-overdue">
+                {attention.filter((a) => a.urgent).length} urgent
+              </span>
+            )}
           </div>
           <div className="dash-panel-list">
             {attention.length === 0 && <p className="empty-state">Nothing needs attention right now.</p>}
@@ -510,11 +573,11 @@ export default function AdminDashboard() {
                   <div key={item.id} className="dash-row" onClick={() => setDetailItem(item)}>
                     <input
                       type="checkbox"
+                      className="dash-row-check"
                       onClick={(e) => e.stopPropagation()}
                       onChange={() => completeTodo(item.rawId)}
-                      style={{ width: 18, height: 18, marginRight: 10, flexShrink: 0 }}
                     />
-                    <div style={{ flex: 1 }}>
+                    <div className="dash-row-main">
                       <div className="dash-row-title">{item.title}</div>
                       <div className="dash-row-subtitle">{item.subtitle}</div>
                     </div>
@@ -524,20 +587,22 @@ export default function AdminDashboard() {
               if (item.kind === 'reminder') {
                 return (
                   <div key={item.id} className="dash-row" style={{ cursor: 'default' }}>
-                    <div>
-                      <div className="dash-row-title" style={item.urgent ? { color: 'var(--wf-overdue)' } : undefined}>
-                        {item.title} — <Link href={item.href} style={{ color: 'var(--brand-link)', textDecoration: 'none' }}>{item.name}</Link>
+                    <span className={`dash-row-dot${item.urgent ? ' is-urgent' : ''}`} />
+                    <div className="dash-row-main">
+                      <div className={`dash-row-title${item.urgent ? ' is-urgent' : ''}`}>
+                        {item.title} — <Link href={item.href} className="dash-row-name">{item.name}</Link>
                       </div>
                       <div className="dash-row-subtitle">{item.subtitle}</div>
                     </div>
-                    <button className="btn-secondary" onClick={() => completeReminder(item)} title="Mark this reminder done and clear it off your dashboard">Done</button>
+                    <button className="btn-secondary btn-compact" onClick={() => completeReminder(item)} title="Mark this reminder done and clear it off your dashboard">Done</button>
                   </div>
                 );
               }
               return (
                 <Link key={item.id} href={item.href} className="dash-row">
-                  <div>
-                    <div className="dash-row-title" style={item.urgent ? { color: 'var(--wf-overdue)' } : undefined}>{item.title}</div>
+                  <span className={`dash-row-dot${item.urgent ? ' is-urgent' : ''}`} />
+                  <div className="dash-row-main">
+                    <div className={`dash-row-title${item.urgent ? ' is-urgent' : ''}`}>{item.title}</div>
                     <div className="dash-row-subtitle">{item.subtitle}</div>
                   </div>
                 </Link>
@@ -545,7 +610,7 @@ export default function AdminDashboard() {
             })}
           </div>
           {attention.length > 6 && (
-            <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '8px 0 0' }}>+{attention.length - 6} more</p>
+            <Link href="/admin/requests" className="dash-panel-more">+{attention.length - 6} more &rarr;</Link>
           )}
         </div>
       </div>
@@ -553,38 +618,48 @@ export default function AdminDashboard() {
       <div className="dash-grid-3" style={role === 'admin' ? undefined : { gridTemplateColumns: 'repeat(2, 1fr)' }}>
         {role === 'admin' && (
           <div className="card">
-            <div className="dash-panel-header panel-hours">
-              <h2>Staff Hours</h2>
-              <select
-                value={payrollPeriod}
-                onChange={(e) => setPayrollPeriod(e.target.value)}
-                style={{ width: 'auto', margin: 0, padding: '6px 10px', fontSize: 13 }}
-              >
-                {Object.entries(PAYROLL_PERIODS).map(([key, p]) => (
-                  <option key={key} value={key}>{p.label}</option>
-                ))}
-              </select>
+            <div className="dash-panel-header">
+              <h2>Staff hours</h2>
+              {/* Still a real <select> - it keeps the keyboard and the
+                  platform's own picker on a phone. Only the chrome changes. */}
+              <div className="dash-period">
+                <select value={payrollPeriod} onChange={(e) => setPayrollPeriod(e.target.value)}>
+                  {Object.entries(PAYROLL_PERIODS).map(([key, p]) => (
+                    <option key={key} value={key}>{p.label}</option>
+                  ))}
+                </select>
+                <ChevronDown size={14} aria-hidden />
+              </div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'center', margin: '4px 0 12px' }}>
+            <div className="dash-ring">
               <HoursRing completedHours={payrollTotals.completedHours} totalHours={payrollTotals.totalHours} />
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-around', fontSize: 12.5, color: 'var(--muted)', textAlign: 'center', marginBottom: payrollRows.length > 0 ? 12 : 0 }}>
-              <div><strong style={{ display: 'block', color: 'var(--ink)', fontSize: 14 }}>{payrollTotals.completedHours.toFixed(1)}h</strong>Completed</div>
-              <div><strong style={{ display: 'block', color: 'var(--ink)', fontSize: 14 }}>{payrollTotals.totalHours.toFixed(1)}h</strong>Scheduled</div>
-              <div><strong style={{ display: 'block', color: 'var(--ink)', fontSize: 14 }}>{Math.max(payrollTotals.totalHours - payrollTotals.completedHours, 0).toFixed(1)}h</strong>Remaining</div>
+            <div className="dash-splits">
+              <div>
+                <strong>{payrollTotals.completedHours.toFixed(1)}h</strong>
+                <span>Completed</span>
+              </div>
+              <div>
+                <strong>{payrollTotals.totalHours.toFixed(1)}h</strong>
+                <span>Scheduled</span>
+              </div>
+              <div>
+                <strong>{Math.max(payrollTotals.totalHours - payrollTotals.completedHours, 0).toFixed(1)}h</strong>
+                <span>Remaining</span>
+              </div>
             </div>
             {!payrollLoading && payrollRows.slice(0, 4).map((r) => (
-              <div key={r.name} className="dash-row" style={{ cursor: 'default', padding: '6px 0' }}>
-                <span style={{ fontSize: 13 }}>{r.name}</span>
-                <strong style={{ fontSize: 13 }}>{(r.minutes / 60).toFixed(1)}h</strong>
+              <div key={r.name} className="dash-row dash-row-quiet">
+                <span className="dash-person">{r.name}</span>
+                <strong className="dash-person-hours">{(r.minutes / 60).toFixed(1)}h</strong>
               </div>
             ))}
           </div>
         )}
 
         <div className="card">
-          <div className="dash-panel-header panel-glance">
-            <h2>Staff at a Glance</h2>
+          <div className="dash-panel-header">
+            <h2>Staff at a glance</h2>
           </div>
           <div
             className="dash-glance-row"
@@ -610,15 +685,33 @@ export default function AdminDashboard() {
             <span className="dash-glance-dot" style={{ background: 'var(--wf-steel)' }} />
             <strong>{staffGlance.off.length}</strong> Not working today
           </div>
-          <Link href="/admin/cleaners" className="dash-panel-link" style={{ display: 'inline-block', alignSelf: 'flex-start', marginTop: 8 }}>
+
+          {/* A count says how many are out; this says who, and where, which
+              is the question that follows it every time. */}
+          {onSiteNow.length > 0 && (
+            <div className="dash-onsite">
+              <div className="dash-onsite-label">On site right now</div>
+              {onSiteNow.map((person) => (
+                <div key={person.id} className="dash-onsite-row">
+                  <span className="dash-avatar">{initialsOf(person.name)}</span>
+                  <div className="dash-onsite-main">
+                    <div className="dash-onsite-name">{person.name}</div>
+                    <div className="dash-onsite-where">{person.place} · on site since {clockOf(person.since)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <Link href="/admin/cleaners" className="dash-panel-link dash-panel-foot">
             View staff &rarr;
           </Link>
         </div>
 
         <div className="card">
-          <div className="dash-panel-header panel-upcoming">
-            <h2>Upcoming Jobs</h2>
-            <Link href="/admin/rota" className="dash-panel-link">View calendar &rarr;</Link>
+          <div className="dash-panel-header">
+            <h2>Upcoming jobs</h2>
+            <Link href="/admin/rota" className="dash-panel-link">Calendar &rarr;</Link>
           </div>
           <div className="dash-panel-list">
             {upcomingJobs.length === 0 && <p className="empty-state">Nothing scheduled in the next week.</p>}
@@ -626,17 +719,17 @@ export default function AdminDashboard() {
               const names = (job.job_assignments || []).map((a) => a.profiles?.full_name).filter(Boolean);
               const unassigned = names.length === 0;
               return (
-                <div key={job.id} className="dash-row" onClick={() => router.push('/admin/rota')}>
-                  <div>
+                <div key={job.id} className="dash-row dash-row-tight" onClick={() => router.push(`/admin/rota?job=${job.id}`)}>
+                  <div className="dash-row-main">
                     <div className="dash-row-title">{job.properties?.clients?.name || job.properties?.address}</div>
-                    <div className="dash-row-subtitle">
+                    {/* No badge. Across six rows a column of them is noise;
+                        the one row that matters says so in the line itself. */}
+                    <div className={`dash-row-subtitle${unassigned ? ' is-urgent' : ''}`}>
                       {new Date(job.scheduled_at).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
-                      {' · '}{new Date(job.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                      {' · '}{clockOf(job.scheduled_at)}
+                      {' · '}{unassigned ? 'needs a cleaner' : abbreviateName(names[0])}
                     </div>
                   </div>
-                  <span className={`badge ${unassigned ? 'missed' : 'scheduled'}`}>
-                    {unassigned ? 'Needs Cleaner' : 'Scheduled'}
-                  </span>
                 </div>
               );
             })}

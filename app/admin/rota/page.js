@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ClipboardList, Clock, UserX, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
@@ -12,16 +11,23 @@ import AddressAutocomplete from '../../components/AddressAutocomplete';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
 import BackButton from '../../components/BackButton';
+import { groupOverlappingJobs, abbreviateName } from '../../../lib/jobOverlap';
 
 // Full 24hr range with scroll (CrewConnect crews run early mornings through
 // overnight), defaulting the scroll position to business hours on load.
 const START_HOUR = 0;
 const END_HOUR = 24;
 const DEFAULT_SCROLL_HOUR = 7;
-const HOUR_HEIGHT = 48;
+// 56px an hour is the sheet's grid: a one-hour job is a block you can read
+// two lines in, and the half-hour rule lands on a whole pixel.
+const HOUR_HEIGHT = 56;
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const QUICK_DURATIONS = [30, 60, 90, 120, 180, 240];
+
+// Past three, a grouped clash block would grow taller than the run it
+// covers and start overlapping the jobs after it. The rest are counted.
+const MAX_CLASH_ENTRIES = 3;
 
 // Dragging a job snaps to the same 15 minutes the manual time picker
 // offers. On a touchscreen a drag has to be a deliberate press-and-hold,
@@ -100,14 +106,34 @@ function formatDuration(mins) {
   return label.trim();
 }
 
-// A block only has so much room: 11px text on a 1.35 line-height needs about
-// 15px a line, and a one-hour job is 48px tall. Rather than let the address
-// spill out of sight, drop lines as the block gets shorter.
+// A block only has so much room, and a one-hour job is 56px tall. Rather
+// than let the address spill out of sight, drop lines as the block gets
+// shorter: an hour holds the time and the address, and the staff line only
+// appears once there's a real third line to put it on.
 function linesForHeight(height) {
-  if (height >= 66) return 4;
-  if (height >= 52) return 3;
-  if (height >= 37) return 2;
+  if (height >= 84) return 3;
+  if (height >= 46) return 2;
   return 1;
+}
+
+// Under about an hour and a half the block tightens up - less padding, a
+// smaller staff line - so the two lines it does carry still fit.
+function isCompactHeight(height) {
+  return height < 90;
+}
+
+// 24-hour, zero-padded, so times line up in a column and read the same way
+// they do on the dashboard. The grid is the one place a wobbling figure is
+// most obvious.
+function formatClock(minutesOfDay) {
+  const total = ((minutesOfDay % 1440) + 1440) % 1440;
+  const h = Math.floor(total / 60);
+  return `${String(h).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+function minutesOfDayFor(job) {
+  const d = new Date(job.scheduled_at);
+  return d.getHours() * 60 + d.getMinutes();
 }
 
 function assignedNames(job) {
@@ -130,6 +156,9 @@ export default function AdminRota() {
   // in refs so a re-render can't hand them a stale gesture.
   const [drag, setDrag] = useState(null);
   const [pendingJobId, setPendingJobId] = useState(null);
+  // A job id arrived in the URL and its modal hasn't been opened yet - the
+  // week it belongs to has to load first.
+  const [openJobId, setOpenJobId] = useState(null);
   // Starts null rather than `new Date()` so the server and the first client
   // render agree - the now-line only appears once we're on the client.
   const [now, setNow] = useState(null);
@@ -216,15 +245,45 @@ export default function AdminRota() {
     loadLookups();
   }, []);
 
-  // The dashboard's "+ New Job" links here with the form already open. Read on
-  // mount rather than via useSearchParams, which would need the page wrapped in
-  // a Suspense boundary to keep prerendering.
+  // The dashboard's "+ New job" links here with the form already open, and
+  // its "Assign cleaner" button links to a single job's modal. Read on mount
+  // rather than via useSearchParams, which would need the page wrapped in a
+  // Suspense boundary to keep prerendering.
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('new') === '1') {
-      setShowForm(true);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('new') === '1') setShowForm(true);
+
+    const jobId = params.get('job');
+    if (jobId) {
+      setOpenJobId(jobId);
+      // The job may well be in a different week from the one the rota opens
+      // on - an upcoming job is usually next week - so move the calendar to
+      // it rather than opening a modal over the wrong seven days.
+      supabase
+        .from('jobs')
+        .select('scheduled_at')
+        .eq('id', jobId)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data) setWeekStart(getMonday(new Date(data.scheduled_at)));
+        });
+    }
+
+    if (params.get('new') === '1' || jobId) {
       window.history.replaceState(null, '', '/admin/rota');
     }
   }, []);
+
+  // Wait for the week to load before opening the modal - the row it needs
+  // comes from `jobs`, so a deep link can't open anything until it's there.
+  useEffect(() => {
+    if (!openJobId) return;
+    const job = jobs.find((j) => j.id === openJobId);
+    if (job) {
+      setSelectedJob(job);
+      setOpenJobId(null);
+    }
+  }, [openJobId, jobs]);
 
   useEffect(() => {
     loadJobs();
@@ -796,10 +855,16 @@ export default function AdminRota() {
     windowListenersRef.current = { move, up };
   };
 
-  const handleJobPointerDown = (e, job) => {
+  // `anchorTop` is where the job's own slot actually starts on screen. For a
+  // normal card that's the element under the pointer, but inside a grouped
+  // clash block the row you grabbed sits wherever the list put it, not on
+  // the job's start time - so the block passes the real edge in and the drop
+  // lands where the clock says rather than where the text happens to be.
+  const handleJobPointerDown = (e, job, anchorTop) => {
     if (e.button !== undefined && e.button > 0) return;
 
     const rect = e.currentTarget.getBoundingClientRect();
+    const top = anchorTop === undefined ? rect.top : anchorTop;
     const draggable = job.status === 'scheduled';
     const session = {
       jobId: job.id,
@@ -810,7 +875,7 @@ export default function AdminRota() {
       startY: e.clientY,
       lastX: e.clientX,
       lastY: e.clientY,
-      grabOffsetY: e.clientY - rect.top,
+      grabOffsetY: e.clientY - top,
       duration: job.duration_minutes || 120,
       active: false,
       panning: false,
@@ -1027,12 +1092,140 @@ export default function AdminRota() {
     ? cleaners.filter((c) => !(selectedJob.job_assignments || []).some((a) => a.cleaner_id === c.id))
     : [];
 
+  // One job, drawn on the clock. `dragging` swaps the job's own start time
+  // for the one under the pointer, so the block follows the drag.
+  const renderJobCard = (job, dragging) => {
+    const { top, height } = jobPosition(job);
+    const duration = job.duration_minutes || 120;
+    const startMinutes = dragging ? drag.minutes : minutesOfDayFor(job);
+    const names = assignedNames(job);
+    const unassigned = names.length === 0;
+    const blockHeight = Math.max(height, 34);
+    const lines = linesForHeight(blockHeight);
+    const isDraggable = job.status === 'scheduled';
+    const clientName = job.properties?.clients?.name || job.properties?.address || 'Unknown client';
+    const timeLabel = `${formatClock(startMinutes)} – ${formatClock(startMinutes + duration)}`;
+
+    // The two states an admin is scanning for get a word as well as a
+    // colour; the rest are read off the fill.
+    const pill = job.status === 'completed' ? 'Completed' : unassigned ? 'Unassigned' : null;
+    const staffLabel = unassigned
+      ? 'Needs a cleaner'
+      : job.status === 'in_progress'
+        ? `${names.join(', ')} · on site`
+        : names.join(', ');
+
+    return (
+      <div
+        key={job.id}
+        className={[
+          'calendar-job',
+          job.status,
+          selectedJob?.id === job.id ? 'selected' : '',
+          isDraggable ? 'draggable' : '',
+          dragging ? 'dragging' : '',
+          pendingJobId === job.id ? 'drag-pending' : '',
+          unassigned ? 'unassigned' : '',
+          isCompactHeight(blockHeight) ? 'compact' : '',
+        ].filter(Boolean).join(' ')}
+        style={{ top: dragging ? minutesToTop(drag.minutes) : top, height: blockHeight }}
+        onPointerDown={(e) => handleJobPointerDown(e, job)}
+        title={isDraggable ? 'Drag to a new day or time - press and hold first on a touchscreen' : undefined}
+      >
+        {lines === 1 ? (
+          <div className="calendar-job-time calendar-job-oneline">
+            {formatClock(startMinutes)} · {clientName}
+          </div>
+        ) : (
+          <>
+            <div className="calendar-job-time">
+              {timeLabel}{job.status === 'missed' ? ' · missed' : ''}
+            </div>
+            <div className="calendar-job-client">{clientName}</div>
+            {lines >= 3 && (
+              <div className={`calendar-job-staff${unassigned ? ' is-unassigned' : ''}`}>
+                {staffLabel}
+              </div>
+            )}
+            {pill && blockHeight >= 104 && (
+              <span className="wf-pill calendar-job-pill">{pill}</span>
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
+
+  // Jobs that share a slice of clock are drawn as one block listing each
+  // start time, rather than as bars stacked on top of each other where the
+  // one underneath can't be read or clicked at all. The same cleaner twice
+  // over isn't a drawing problem but a mistake, so that block turns red and
+  // names whose diary is clashing.
+  const renderClashBlock = (group) => {
+    const startMinutes = group.start.getHours() * 60 + group.start.getMinutes();
+    const top = Math.max(0, (startMinutes / 60 - START_HOUR) * HOUR_HEIGHT);
+    const span = ((group.end - group.start) / 3600000) * HOUR_HEIGHT;
+    const shown = group.jobs.slice(0, MAX_CLASH_ENTRIES);
+    // The clock alone can make the block shorter than the list inside it -
+    // three half-hour jobs on top of each other span 30 minutes.
+    const height = Math.max(span, shown.length >= 3 ? 140 : 112);
+
+    return (
+      <div
+        key={group.id}
+        className={`calendar-clash${group.doubleBooked ? ' is-double-booked' : ''}`}
+        style={{ top, height }}
+      >
+        <div className="calendar-clash-head">
+          {group.doubleBooked
+            ? `${abbreviateName(group.doubleBookedName)} · double-booked`
+            : `${group.jobs.length} jobs overlap`}
+        </div>
+        {shown.map((job) => {
+          const names = assignedNames(job);
+          const isDraggable = job.status === 'scheduled';
+          return (
+            <div
+              key={job.id}
+              className={[
+                'calendar-clash-job',
+                selectedJob?.id === job.id ? 'selected' : '',
+                isDraggable ? 'draggable' : '',
+                pendingJobId === job.id ? 'drag-pending' : '',
+              ].filter(Boolean).join(' ')}
+              onPointerDown={(e) => {
+                const block = e.currentTarget.closest('.calendar-clash');
+                const offsetInBlock = ((new Date(job.scheduled_at) - group.start) / 3600000) * HOUR_HEIGHT;
+                handleJobPointerDown(
+                  e,
+                  job,
+                  block ? block.getBoundingClientRect().top + offsetInBlock : undefined
+                );
+              }}
+              title={isDraggable ? 'Drag to a new day or time - press and hold first on a touchscreen' : undefined}
+            >
+              <span className="calendar-clash-time">
+                {formatClock(minutesOfDayFor(job))} · {names.length === 0 ? 'no one' : abbreviateName(names[0])}
+              </span>
+              <span className="calendar-clash-client">
+                {job.properties?.clients?.name || job.properties?.address || 'Unknown client'}
+              </span>
+            </div>
+          );
+        })}
+        {group.jobs.length > shown.length && (
+          <div className="calendar-clash-more">+{group.jobs.length - shown.length} more</div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="page-inner">
       <BackButton />
       <div className="rota-header">
         <div>
-          <p className="rota-eyebrow">Rota</p>
+          <p className="rota-eyebrow">Rota · week view</p>
           <h1 className="rota-week">{weekLabel}</h1>
         </div>
         <div className="rota-actions">
@@ -1044,7 +1237,6 @@ export default function AdminRota() {
             <button className="segmented-btn" onClick={() => setWeekStart(getMonday(new Date()))} title="Jump back to this week" disabled={isCurrentWeek}>Today</button>
             <button className="segmented-btn" onClick={() => setWeekStart(addDays(weekStart, 7))} title="Go forward a week" aria-label="Next week">›</button>
           </div>
-          <Link href="/admin/rota/history" className="btn-secondary btn-compact">History</Link>
           <button className="btn-primary btn-compact" onClick={() => setShowForm(true)} title="Schedule a new job and assign staff to it">
             + New Job
           </button>
@@ -1053,25 +1245,21 @@ export default function AdminRota() {
 
       <div className="stat-row stat-row-compact">
         <div className="stat-card stat-jobs">
-          <div className="stat-card-top"><div className="stat-card-icon"><ClipboardList size={16} /></div></div>
           <div className="stat-number">{weekStats.total}</div>
           <div className="stat-label">Jobs</div>
           <div className="stat-sublabel">{weekStats.completed} completed</div>
         </div>
         <div className="stat-card stat-hours">
-          <div className="stat-card-top"><div className="stat-card-icon"><Clock size={16} /></div></div>
           <div className="stat-number">{weekStats.hours.toFixed(1)}</div>
           <div className="stat-label">Hours</div>
           <div className="stat-sublabel">scheduled</div>
         </div>
         <div className={`stat-card stat-unassigned${weekStats.unassigned > 0 ? ' is-alert' : ''}`}>
-          <div className="stat-card-top"><div className="stat-card-icon"><UserX size={16} /></div></div>
           <div className="stat-number">{weekStats.unassigned}</div>
           <div className="stat-label">Unassigned</div>
           <div className="stat-sublabel">no one on the job</div>
         </div>
         <div className={`stat-card stat-missed${weekStats.missed > 0 ? ' is-alert' : ''}`}>
-          <div className="stat-card-top"><div className="stat-card-icon"><AlertTriangle size={16} /></div></div>
           <div className="stat-number">{weekStats.missed}</div>
           <div className="stat-label">Missed</div>
           <div className="stat-sublabel">this week</div>
@@ -1086,19 +1274,29 @@ export default function AdminRota() {
         <div className="calendar-scroll" ref={calendarScrollRef}>
           <div className="calendar-header">
             <div className="calendar-hour-col" />
-            {weekDays.map((day, i) => (
-              <div key={i} className={`calendar-day-head${day.toDateString() === todayKey ? ' today' : ''}`}>
-                <div className="calendar-day-name">{DAY_NAMES[i]}</div>
-                <div className="calendar-day-date">{day.getDate()}</div>
-              </div>
-            ))}
+            {weekDays.map((day, i) => {
+              const isToday = day.toDateString() === todayKey;
+              return (
+                <div
+                  key={i}
+                  className={[
+                    'calendar-day-head',
+                    isToday ? 'today' : '',
+                    i > 4 ? 'weekend' : '',
+                  ].filter(Boolean).join(' ')}
+                >
+                  <div className="calendar-day-name">{DAY_NAMES[i]}{isToday ? ' · today' : ''}</div>
+                  <div className="calendar-day-date">{day.getDate()}</div>
+                </div>
+              );
+            })}
           </div>
 
           <div className="calendar-body" style={{ height: (END_HOUR - START_HOUR) * HOUR_HEIGHT }}>
             <div className="calendar-hour-col">
               {hourSlots.map((h) => (
                 <div key={h} className="calendar-hour-label" style={{ height: HOUR_HEIGHT }}>
-                  <span>{h % 12 === 0 ? 12 : h % 12}{h < 12 ? 'am' : 'pm'}</span>
+                  <span>{formatClock(h * 60)}</span>
                 </div>
               ))}
             </div>
@@ -1106,10 +1304,12 @@ export default function AdminRota() {
             {weekDays.map((day, i) => {
               // A job being dragged is drawn in the column it's currently
               // over, not the one it started in, so it follows the pointer
-              // across days instead of leaving a copy behind.
+              // across days instead of leaving a copy behind. It's drawn
+              // outside the grouping too - mid-drag it no longer belongs to
+              // whatever it used to clash with.
               const draggedJob = drag ? jobs.find((j) => j.id === drag.jobId) : null;
               const dayJobs = jobsForDay(day).filter((j) => !drag || j.id !== drag.jobId);
-              if (draggedJob && drag.dayIndex === i) dayJobs.push(draggedJob);
+              const groups = groupOverlappingJobs(dayJobs);
 
               const isToday = day.toDateString() === todayKey;
 
@@ -1132,57 +1332,11 @@ export default function AdminRota() {
                   <div className="calendar-now" style={{ top: nowOffset }} />
                 )}
 
-                {dayJobs.map((job) => {
-                  const { top, height } = jobPosition(job);
-                  const isDragging = drag?.jobId === job.id;
-                  const isSelected = selectedJob?.id === job.id;
-                  const isDraggable = job.status === 'scheduled';
-                  const names = assignedNames(job);
-                  const unassigned = names.length === 0;
-                  const blockHeight = Math.max(height, 30);
-                  const lines = linesForHeight(blockHeight);
-                  const clientName = job.properties?.clients?.name || 'Unknown client';
-                  const timeLabel = isDragging
-                    ? formatMinutesOfDay(drag.minutes)
-                    : new Date(job.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-                  return (
-                    <div
-                      key={job.id}
-                      className={[
-                        'calendar-job',
-                        job.status,
-                        isSelected ? 'selected' : '',
-                        isDraggable ? 'draggable' : '',
-                        isDragging ? 'dragging' : '',
-                        pendingJobId === job.id ? 'drag-pending' : '',
-                        unassigned ? 'unassigned' : '',
-                      ].filter(Boolean).join(' ')}
-                      style={{
-                        top: isDragging ? minutesToTop(drag.minutes) : top,
-                        height: blockHeight,
-                      }}
-                      onPointerDown={(e) => handleJobPointerDown(e, job)}
-                      title={isDraggable ? 'Drag to a new day or time - press and hold first on a touchscreen' : undefined}
-                    >
-                      {lines === 1 ? (
-                        <div className="calendar-job-time calendar-job-oneline">{timeLabel} · {clientName}</div>
-                      ) : (
-                        <>
-                          <div className="calendar-job-time">
-                            {timeLabel}{' · '}{formatDuration(job.duration_minutes || 120)}
-                          </div>
-                          <div className="calendar-job-client">{clientName}</div>
-                          {lines >= 3 && (
-                            <div className={`calendar-job-staff${unassigned ? ' is-unassigned' : ''}`}>
-                              {unassigned ? 'Unassigned' : names.join(', ')}
-                            </div>
-                          )}
-                          {lines >= 4 && <div className="calendar-job-address">{job.properties?.address}</div>}
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
+                {groups.map((group) => (
+                  group.jobs.length === 1 ? renderJobCard(group.jobs[0]) : renderClashBlock(group)
+                ))}
+
+                {draggedJob && drag.dayIndex === i && renderJobCard(draggedJob, true)}
               </div>
               );
             })}
@@ -1192,19 +1346,26 @@ export default function AdminRota() {
 
       <div className="calendar-legend">
         {[
-          ['scheduled', 'Coming up'],
-          ['in_progress', 'In progress'],
           ['completed', 'Completed'],
-          ['missed', 'Missed'],
-        ].map(([status, label]) => (
-          <span key={status} className="calendar-legend-item">
-            <span className={`calendar-legend-swatch ${status}`} />
+          ['in_progress', 'On site'],
+          ['scheduled', 'Scheduled'],
+          ['unassigned', 'Needs a cleaner'],
+          ['clash', 'Double-booked or missed'],
+        ].map(([key, label]) => (
+          <span key={key} className="calendar-legend-item">
+            <span className={`calendar-legend-swatch ${key}`} />
             {label}
           </span>
         ))}
-        <span className="calendar-legend-hint">
+      </div>
+
+      <div className="calendar-foot">
+        <span className="calendar-foot-hint">
           Drag a job to a new day or time. On a touchscreen, press and hold it first.
+          Jobs that clash are grouped into one block with each start time listed - and
+          turn red when it's the same cleaner twice over.
         </span>
+        <Link href="/admin/rota/history" className="calendar-foot-link">Job history &rarr;</Link>
       </div>
 
       {selectedJob && (
