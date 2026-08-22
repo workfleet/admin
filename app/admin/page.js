@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../lib/authGate';
 import { getWorkAnniversaryYears } from '../../lib/workAnniversary';
 import { needsReorder } from '../../lib/inventory';
+import { localDateString } from '../../lib/localDate';
 import WorkAnniversaryPopup from '../components/WorkAnniversaryPopup';
 
 function formatTimeRange(scheduledAt, durationMinutes) {
@@ -15,21 +16,6 @@ function formatTimeRange(scheduledAt, durationMinutes) {
   const end = new Date(start.getTime() + (durationMinutes || 120) * 60000);
   const fmt = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
   return `${fmt(start)} – ${fmt(end)}`;
-}
-
-// due_date, start_date, end_date and expiry_date are date-only columns holding
-// plain calendar dates, so they have to be compared against the user's calendar
-// day. toISOString() is UTC, and through BST local midnight is 23:00 the day
-// before - so round-tripping a local date through it names YESTERDAY for the
-// whole of British Summer Time, not just around midnight. Build the string from
-// local parts instead.
-//
-// Note this is only right for a Date that means a local wall-clock moment. A
-// date-only string parsed with new Date() is already UTC midnight, and putting
-// it through here would shift it backwards in any zone behind UTC.
-function localDateString(d) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 // Sorted by urgency then date, a category with a lot of rows in it - a dozen
