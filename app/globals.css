@@ -832,6 +832,48 @@ a.stat-card:focus-visible {
   --stat-ink: var(--wf-overdue);
 }
 
+/* Same rule as unassigned: grey at zero, red only when there's something to
+   answer for - so a clean week doesn't read as an alarming one. */
+.stat-missed {
+  --stat-tint: var(--wf-neutral-tint);
+  --stat-ink: var(--wf-steel);
+}
+
+.stat-missed.is-alert {
+  --stat-tint: var(--wf-overdue-tint);
+  --stat-ink: var(--wf-overdue);
+}
+
+/* The rota leads with its grid, not its figures, so the same cards run at a
+   tighter size there. Same hues, same hierarchy, less height. */
+.stat-row-compact {
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.stat-row-compact .stat-card {
+  padding: 14px 16px;
+  min-width: 132px;
+  border-radius: var(--radius-md);
+}
+
+.stat-row-compact .stat-card-top {
+  margin-bottom: 6px;
+}
+
+.stat-row-compact .stat-card-icon {
+  width: 30px;
+  height: 30px;
+}
+
+.stat-row-compact .stat-number {
+  font-size: 23px;
+}
+
+.stat-row-compact .stat-sublabel {
+  min-height: 0;
+}
+
 .stat-card-icon {
   background: var(--stat-tint);
   color: var(--stat-ink);
@@ -1252,6 +1294,26 @@ a.stat-card:focus-visible {
   border-top: 1px solid var(--hairline);
 }
 
+/* The form is a panel now, not a card wedged above the calendar - opening it
+   no longer pushes the week off screen. It deliberately does NOT scroll
+   internally: the address field's suggestion list is absolutely positioned,
+   and an overflow context here would clip it. The overlay scrolls instead. */
+.job-form-modal {
+  width: 100%;
+  max-width: 620px;
+  margin: 0;
+}
+
+/* Sticky against the overlay's scroll, so Add Job stays reachable however
+   far down the recurrence options the form has been opened out. */
+.job-form-modal .job-form-actions {
+  position: sticky;
+  bottom: -20px;
+  margin-top: 18px;
+  padding-bottom: 20px;
+  background: var(--surface);
+}
+
 /* ---- Responsive: stack sidebar on narrow screens ---- */
 @media (max-width: 720px) {
   .admin-shell {
@@ -1350,62 +1412,104 @@ a.stat-card:focus-visible {
 
 .calendar {
   background: var(--surface);
-  border: none;
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
   box-shadow: var(--shadow-sm);
 }
 
-.calendar-header {
+.calendar-scroll {
+  max-height: 620px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+/* Header and body are two grids in one scroller, so they share a width and
+   stay in line however the scroller is scrolled. */
+.calendar-header,
+.calendar-body {
   display: grid;
-  grid-template-columns: 56px repeat(7, 1fr);
+  grid-template-columns: 60px repeat(7, minmax(0, 1fr));
+  min-width: 640px;
+}
+
+.calendar-header {
+  position: sticky;
+  top: 0;
+  z-index: 4;
   border-bottom: 1px solid var(--hairline);
-  background: #fafbfc;
+  background: var(--surface);
 }
 
 .calendar-day-head {
   text-align: center;
-  padding: 10px 4px;
+  padding: 9px 4px 10px;
   border-left: 1px solid var(--hairline);
 }
 
 .calendar-day-name {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--muted);
   text-transform: uppercase;
   font-weight: 700;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.06em;
 }
 
 .calendar-day-date {
   font-size: 16px;
   font-weight: 700;
   color: var(--ink);
+  line-height: 1.5;
 }
 
-.calendar-scroll {
-  max-height: 560px;
-  overflow-y: auto;
+/* Today's date gets a filled pill, the way a calendar app marks it. */
+.calendar-day-head.today .calendar-day-name {
+  color: var(--wf-coral-ink);
+}
+
+.calendar-day-head.today .calendar-day-date {
+  display: inline-block;
+  min-width: 24px;
+  border-radius: 999px;
+  background: var(--wf-coral);
+  color: var(--wf-on-coral);
+  padding: 0 6px;
 }
 
 .calendar-body {
-  display: grid;
-  grid-template-columns: 56px repeat(7, 1fr);
   position: relative;
 }
 
 .calendar-hour-col {
   border-right: 1px solid var(--hairline);
+  background: var(--surface);
+  position: sticky;
+  left: 0;
+  z-index: 2;
 }
 
+/* The label is nudged up so it reads as sitting on its hour line rather
+   than floating in the middle of the slot below it. */
 .calendar-hour-label {
-  font-size: 11px;
-  color: #9ca3af;
-  text-align: right;
-  padding-right: 6px;
+  position: relative;
   box-sizing: border-box;
   border-top: 1px solid var(--hairline);
+}
+
+.calendar-hour-label span {
+  position: absolute;
+  top: -7px;
+  right: 7px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--surface);
+  padding: 0 2px;
+}
+
+.calendar-hour-label:first-child span {
+  top: 1px;
 }
 
 .calendar-day-col {
@@ -1413,41 +1517,89 @@ a.stat-card:focus-visible {
   border-left: 1px solid var(--hairline);
 }
 
-.calendar-day-col:nth-child(odd) {
-  background: rgba(47, 165, 169, 0.02);
+.calendar-day-col.weekend {
+  background: rgba(32, 35, 39, 0.022);
 }
 
+.calendar-day-col.today {
+  background: rgba(255, 107, 91, 0.055);
+}
+
+/* A solid line on the hour, a faint one on the half hour - enough to read a
+   block's start time off the grid without counting. */
 .calendar-hour-line {
-  border-top: 1px solid var(--hairline);
+  position: relative;
   box-sizing: border-box;
+  border-top: 1px solid var(--hairline);
+}
+
+.calendar-hour-line::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px solid rgba(32, 35, 39, 0.05);
+}
+
+.calendar-day-col.drag-over {
+  background: var(--wf-teal-tint);
+  box-shadow: inset 0 0 0 1px var(--wf-teal-ink);
+}
+
+.calendar-now {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 2px solid var(--wf-overdue);
+  z-index: 3;
+  pointer-events: none;
+}
+
+.calendar-now::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: -5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--wf-overdue);
 }
 
 .calendar-job {
   position: absolute;
   left: 3px;
   right: 3px;
-  min-height: 44px;
+  /* Small enough that a half-hour job keeps its true length, big enough to
+     still be a target you can get hold of. */
+  min-height: 30px;
   /* Default = "scheduled" (coming up) - blue. */
   background: #dbeafe;
-  color: #1e40af;
+  color: #1e3a8a;
   border-radius: var(--radius-sm);
-  padding: 4px 6px;
+  padding: 4px 7px;
   font-size: 11px;
+  line-height: 1.35;
   cursor: pointer;
   overflow: hidden;
   box-shadow: none;
   border-left: 3px solid #1e40af;
+  user-select: none;
+  -webkit-user-select: none;
   transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 .calendar-job:hover {
   box-shadow: var(--shadow-sm);
   transform: translateY(-1px);
+  z-index: 2;
 }
 
 .calendar-job.in_progress {
   background: #ffedd5;
-  color: #9a3412;
+  color: #7c2d12;
   border-left-color: #c2410c;
 }
 
@@ -1455,7 +1607,7 @@ a.stat-card:focus-visible {
   background: #d1fae5;
   color: #065f46;
   border-left-color: #065f46;
-  opacity: 0.75;
+  opacity: 0.8;
 }
 
 .calendar-job.missed {
@@ -1466,22 +1618,58 @@ a.stat-card:focus-visible {
 
 .calendar-job.selected {
   outline: 2px solid var(--wf-graphite);
+  outline-offset: -1px;
+  z-index: 2;
 }
 
-.calendar-job[draggable="true"] {
+/* Draggable blocks opt out of the browser's own touch scrolling - they have
+   to, to be draggable at all - so the page pans the calendar by hand when a
+   swipe starts on one. */
+.calendar-job.draggable {
   cursor: grab;
+  touch-action: none;
+}
+
+.calendar-job.drag-pending {
+  transform: scale(1.035);
+  box-shadow: var(--shadow-md);
+  z-index: 5;
 }
 
 .calendar-job.dragging {
-  opacity: 0.4;
-}
-
-.calendar-day-col.drag-over {
-  background: rgba(47, 165, 169, 0.1);
+  cursor: grabbing;
+  z-index: 6;
+  transition: none;
+  transform: scale(1.02);
+  box-shadow: var(--shadow-md);
+  outline: 2px solid var(--wf-teal-ink);
+  outline-offset: -1px;
 }
 
 .calendar-job-time {
   font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* The shortest blocks fold time and client onto the single line they have. */
+.calendar-job-oneline {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Nobody assigned is the exception that matters most on a rota, so it shows
+   on the block's edge - short blocks have no room for the line of text that
+   used to be the only thing saying so. */
+.calendar-job.unassigned {
+  border-left-style: dashed;
+  border-left-color: var(--wf-overdue);
+}
+
+.calendar-job-staff.is-unassigned {
+  color: var(--wf-overdue);
+  font-weight: 700;
+  opacity: 1;
 }
 
 .calendar-job-client {
@@ -1496,16 +1684,65 @@ a.stat-card:focus-visible {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  opacity: 0.85;
+  opacity: 0.82;
 }
 
+.calendar-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-bottom: 20px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.calendar-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.calendar-legend-swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  background: #dbeafe;
+  border-left: 3px solid #1e40af;
+  box-sizing: border-box;
+}
+
+.calendar-legend-swatch.in_progress {
+  background: #ffedd5;
+  border-left-color: #c2410c;
+}
+
+.calendar-legend-swatch.completed {
+  background: #d1fae5;
+  border-left-color: #065f46;
+}
+
+.calendar-legend-swatch.missed {
+  background: #fee2e2;
+  border-left-color: #991b1b;
+}
+
+.calendar-legend-hint {
+  margin-left: auto;
+  font-style: italic;
+}
 
 @media (max-width: 720px) {
-  .calendar-header, .calendar-body {
-    grid-template-columns: 40px repeat(7, minmax(70px, 1fr));
+  .calendar-header,
+  .calendar-body {
+    grid-template-columns: 44px repeat(7, minmax(76px, 1fr));
+    min-width: 0;
   }
-  .calendar, .calendar-header, .calendar-scroll {
-    overflow-x: auto;
+  .calendar-scroll {
+    max-height: 70vh;
+  }
+  .calendar-legend-hint {
+    margin-left: 0;
   }
 }
 
@@ -1634,4 +1871,182 @@ body.has-install-bar .cleaner-shell {
 
 body.has-install-bar .emergency-fab {
   bottom: calc(92px + var(--wf-install-bar-h, 0px));
+}
+
+
+/* ---- Rota page header ---- */
+.rota-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.rota-eyebrow {
+  font-family: var(--wf-data);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 2px;
+}
+
+/* The week on screen is what changes as you navigate, so it leads. "Rota" is
+   the static label above it, not the headline. */
+.rota-week {
+  margin: 0;
+  font-size: 26px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.rota-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-compact {
+  padding: 9px 16px;
+  font-size: 14px;
+}
+
+a.btn-compact {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ---- Segmented control ---- */
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--wf-line);
+  border-radius: var(--wf-radius-sm);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.segmented-btn {
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--wf-line);
+  border-radius: 0;
+  width: auto;
+  margin: 0;
+  padding: 9px 14px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--wf-graphite);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.segmented-btn:first-child {
+  border-left: none;
+}
+
+.segmented-btn:hover:not(:disabled) {
+  background: var(--wf-ash);
+}
+
+.segmented-btn:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+/* ---- Job modal ---- */
+.job-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.job-modal-head h2 {
+  margin: 7px 0 0;
+  font-size: 19px;
+  line-height: 1.25;
+}
+
+.job-modal-sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.job-modal-close {
+  background: transparent;
+  border: none;
+  width: auto;
+  margin: 0;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  font-size: 24px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.job-modal-close:hover {
+  background: var(--wf-ash);
+  color: var(--ink);
+}
+
+/* Deleting sits at the foot of the panel, bounded and labelled. Beside Close
+   at the top, a destructive action and a dismissal looked interchangeable. */
+.job-modal-danger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--hairline);
+}
+
+.job-modal-danger-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.job-modal-danger-note {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.job-modal-danger-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.job-modal-danger-actions .btn-secondary,
+.job-modal-danger-actions .btn-danger {
+  width: auto;
+  margin: 0;
+  padding: 9px 14px;
+  font-size: 13.5px;
+}
+
+@media (max-width: 720px) {
+  .rota-header {
+    align-items: flex-start;
+  }
+  .rota-actions {
+    width: 100%;
+  }
+  .rota-actions .btn-compact {
+    flex: 1;
+    justify-content: center;
+    text-align: center;
+  }
 }

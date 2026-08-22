@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { ClipboardList, Clock, UserX, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
@@ -20,6 +21,15 @@ const HOUR_HEIGHT = 48;
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const QUICK_DURATIONS = [30, 60, 90, 120, 180, 240];
+
+// Dragging a job snaps to the same 15 minutes the manual time picker
+// offers. On a touchscreen a drag has to be a deliberate press-and-hold,
+// so an ordinary tap still opens the job and a swipe still scrolls.
+const DRAG_SNAP_MINUTES = 15;
+const DRAG_MOVE_THRESHOLD = 5;
+const TOUCH_HOLD_MS = 350;
+const EDGE_SCROLL_ZONE = 44;
+const EDGE_SCROLL_SPEED = 10;
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => h);
 const MINUTE_OPTIONS = [0, 15, 30, 45];
@@ -89,6 +99,16 @@ function formatDuration(mins) {
   return label.trim();
 }
 
+// A block only has so much room: 11px text on a 1.35 line-height needs about
+// 15px a line, and a one-hour job is 48px tall. Rather than let the address
+// spill out of sight, drop lines as the block gets shorter.
+function linesForHeight(height) {
+  if (height >= 66) return 4;
+  if (height >= 52) return 3;
+  if (height >= 37) return 2;
+  return 1;
+}
+
 function assignedNames(job) {
   return (job.job_assignments || []).map((a) => a.profiles?.full_name || 'Unknown');
 }
@@ -104,8 +124,14 @@ export default function AdminRota() {
   const [properties, setProperties] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [selectedJob, setSelectedJob] = useState(null);
-  const [draggingJobId, setDraggingJobId] = useState(null);
-  const [dragOverDayKey, setDragOverDayKey] = useState(null);
+  // `drag` is only what the calendar needs to paint (which column, what
+  // start time); everything the pointer handlers mutate mid-gesture lives
+  // in refs so a re-render can't hand them a stale gesture.
+  const [drag, setDrag] = useState(null);
+  const [pendingJobId, setPendingJobId] = useState(null);
+  // Starts null rather than `new Date()` so the server and the first client
+  // render agree - the now-line only appears once we're on the client.
+  const [now, setNow] = useState(null);
 
   const [showForm, setShowForm] = useState(false);
   const [clientId, setClientId] = useState('');
@@ -142,6 +168,12 @@ export default function AdminRota() {
   const [applyTemplateSelection, setApplyTemplateSelection] = useState('');
 
   const calendarScrollRef = useRef(null);
+  const dayColRefs = useRef([]);
+  const pointerSessionRef = useRef(null);
+  const pointerHandlersRef = useRef({});
+  const windowListenersRef = useRef(null);
+  const edgeScrollRef = useRef(0);
+  const edgeScrollFrameRef = useRef(null);
 
   useEffect(() => {
     if (calendarScrollRef.current) {
@@ -158,6 +190,26 @@ export default function AdminRota() {
     () => Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i),
     []
   );
+
+  // Escape puts away whichever panel is open. For the form it closes without
+  // clearing, so a stray keypress can't bin a half-filled job - discarding is
+  // what the Cancel button is for.
+  useEffect(() => {
+    if (!showForm && !selectedJob) return undefined;
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      if (selectedJob) setSelectedJob(null);
+      else setShowForm(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showForm, selectedJob]);
+
+  useEffect(() => {
+    setNow(new Date());
+    const tick = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(tick);
+  }, []);
 
   useEffect(() => {
     loadLookups();
@@ -632,49 +684,250 @@ export default function AdminRota() {
     return { top, height };
   };
 
-  const handleJobDragStart = (e, job) => {
-    e.dataTransfer.setData('text/plain', job.id);
-    e.dataTransfer.effectAllowed = 'move';
-    setDraggingJobId(job.id);
+  const minutesToTop = (minutes) => (minutes / 60 - START_HOUR) * HOUR_HEIGHT;
+
+  const formatMinutesOfDay = (minutes) =>
+    new Date(2000, 0, 1, Math.floor(minutes / 60), minutes % 60)
+      .toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+  // Where a job would land if it were let go right now: the column under
+  // the pointer picks the day, and the block's own grab point - not the
+  // pointer - picks the time, so it drops where it looks like it will.
+  const dragPositionFor = (clientX, clientY, grabOffsetY, duration) => {
+    const cols = dayColRefs.current;
+    if (!cols.some(Boolean)) return null;
+
+    let dayIndex = cols.findIndex((el) => {
+      if (!el) return false;
+      const r = el.getBoundingClientRect();
+      return clientX >= r.left && clientX < r.right;
+    });
+    if (dayIndex === -1) {
+      const first = cols.find(Boolean).getBoundingClientRect();
+      dayIndex = clientX < first.left ? 0 : cols.length - 1;
+    }
+
+    const rect = cols[dayIndex].getBoundingClientRect();
+    const rawMinutes = ((clientY - rect.top - grabOffsetY) / HOUR_HEIGHT + START_HOUR) * 60;
+    const snapped = Math.round(rawMinutes / DRAG_SNAP_MINUTES) * DRAG_SNAP_MINUTES;
+    // Keep at least the first hour of the job on the grid, so a job dragged
+    // off the bottom doesn't vanish past midnight.
+    const latestStart = (END_HOUR - START_HOUR) * 60 - Math.min(duration, 60);
+    return { dayIndex, minutes: Math.min(Math.max(snapped, 0), latestStart) };
   };
 
-  const handleJobDragEnd = () => {
-    setDraggingJobId(null);
-    setDragOverDayKey(null);
+  const updateDragPreview = () => {
+    const session = pointerSessionRef.current;
+    if (!session) return;
+    const next = dragPositionFor(session.lastX, session.lastY, session.grabOffsetY, session.duration);
+    if (!next) return;
+    setDrag((prev) =>
+      prev && prev.dayIndex === next.dayIndex && prev.minutes === next.minutes
+        ? prev
+        : { jobId: session.jobId, ...next }
+    );
   };
 
-  const handleDayDragOver = (e, day) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    setDragOverDayKey(day.toDateString());
+  // Holding a job near the top or bottom edge keeps the calendar scrolling,
+  // so a 7am job can be moved to 9pm without ever letting go of it.
+  const runEdgeScroll = () => {
+    const el = calendarScrollRef.current;
+    if (el && edgeScrollRef.current !== 0) {
+      el.scrollTop += edgeScrollRef.current;
+      updateDragPreview();
+    }
+    edgeScrollFrameRef.current = requestAnimationFrame(runEdgeScroll);
   };
 
-  const handleDayDragLeave = () => setDragOverDayKey(null);
+  const stopEdgeScroll = () => {
+    edgeScrollRef.current = 0;
+    if (edgeScrollFrameRef.current) {
+      cancelAnimationFrame(edgeScrollFrameRef.current);
+      edgeScrollFrameRef.current = null;
+    }
+  };
 
-  // Dropping a job re-times it to wherever it was released: the day column
-  // it landed in sets the date, the vertical offset (snapped to 15 minutes,
-  // matching the manual time picker's granularity) sets the time. Runs the
-  // same conflict checks as a manual edit so a drag can't silently create a
-  // double-booking or clash with approved time off.
-  const handleJobDrop = async (e, day) => {
-    e.preventDefault();
-    setDragOverDayKey(null);
+  const clearHoldTimer = () => {
+    const session = pointerSessionRef.current;
+    if (session && session.holdTimer) {
+      clearTimeout(session.holdTimer);
+      session.holdTimer = null;
+    }
+  };
 
-    const jobId = e.dataTransfer.getData('text/plain');
-    setDraggingJobId(null);
+  const activateDrag = () => {
+    const session = pointerSessionRef.current;
+    if (!session || session.active) return;
+    session.active = true;
+    session.holdTimer = null;
+    setPendingJobId(null);
+    updateDragPreview();
+    edgeScrollFrameRef.current = requestAnimationFrame(runEdgeScroll);
+  };
+
+  const detachPointerListeners = () => {
+    const listeners = windowListenersRef.current;
+    if (!listeners) return;
+    window.removeEventListener('pointermove', listeners.move);
+    window.removeEventListener('pointerup', listeners.up);
+    window.removeEventListener('pointercancel', listeners.up);
+    windowListenersRef.current = null;
+  };
+
+  // The listeners go on the window rather than the block, because a drag
+  // routinely ends over a different day column than it started in. They
+  // dispatch through a ref so a mid-drag re-render can't strand them on an
+  // old closure - or leave them attached once the drag is over.
+  const attachPointerListeners = () => {
+    detachPointerListeners();
+    const move = (e) => pointerHandlersRef.current.move(e);
+    const up = (e) => pointerHandlersRef.current.up(e);
+    window.addEventListener('pointermove', move, { passive: false });
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    windowListenersRef.current = { move, up };
+  };
+
+  const handleJobPointerDown = (e, job) => {
+    if (e.button !== undefined && e.button > 0) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const draggable = job.status === 'scheduled';
+    const session = {
+      jobId: job.id,
+      pointerId: e.pointerId,
+      pointerType: e.pointerType,
+      draggable,
+      startX: e.clientX,
+      startY: e.clientY,
+      lastX: e.clientX,
+      lastY: e.clientY,
+      grabOffsetY: e.clientY - rect.top,
+      duration: job.duration_minutes || 120,
+      active: false,
+      panning: false,
+      holdTimer: null,
+    };
+    pointerSessionRef.current = session;
+    attachPointerListeners();
+
+    if (draggable && e.pointerType !== 'mouse') {
+      setPendingJobId(job.id);
+      session.holdTimer = setTimeout(activateDrag, TOUCH_HOLD_MS);
+    }
+  };
+
+  const handlePointerMove = (e) => {
+    const session = pointerSessionRef.current;
+    if (!session || e.pointerId !== session.pointerId) return;
+
+    if (session.active) {
+      if (e.cancelable) e.preventDefault();
+      session.lastX = e.clientX;
+      session.lastY = e.clientY;
+      updateDragPreview();
+
+      const el = calendarScrollRef.current;
+      if (el) {
+        const r = el.getBoundingClientRect();
+        if (e.clientY < r.top + EDGE_SCROLL_ZONE) edgeScrollRef.current = -EDGE_SCROLL_SPEED;
+        else if (e.clientY > r.bottom - EDGE_SCROLL_ZONE) edgeScrollRef.current = EDGE_SCROLL_SPEED;
+        else edgeScrollRef.current = 0;
+      }
+      return;
+    }
+
+    if (
+      !session.panning
+      && Math.abs(e.clientX - session.startX) < DRAG_MOVE_THRESHOLD
+      && Math.abs(e.clientY - session.startY) < DRAG_MOVE_THRESHOLD
+    ) return;
+
+    if (session.pointerType === 'mouse') {
+      session.lastX = e.clientX;
+      session.lastY = e.clientY;
+      if (session.draggable) activateDrag();
+      return;
+    }
+
+    // A finger that moves before the hold completes was trying to scroll.
+    // Draggable blocks opt out of the browser's own touch scrolling (they
+    // have to, to be draggable at all), so pan the calendar by hand for
+    // those. The rest still scroll natively - panning them too would move
+    // the calendar twice as far as the finger.
+    session.panning = true;
+    clearHoldTimer();
+    setPendingJobId(null);
+    if (session.draggable) {
+      const el = calendarScrollRef.current;
+      if (el) {
+        el.scrollTop -= e.clientY - session.lastY;
+        el.scrollLeft -= e.clientX - session.lastX;
+      }
+    }
+    session.lastX = e.clientX;
+    session.lastY = e.clientY;
+  };
+
+  const handlePointerUp = (e) => {
+    const session = pointerSessionRef.current;
+    if (!session || e.pointerId !== session.pointerId) return;
+
+    const released = e.type === 'pointerup';
+    if (released) {
+      session.lastX = e.clientX;
+      session.lastY = e.clientY;
+    }
+
+    clearHoldTimer();
+    detachPointerListeners();
+    stopEdgeScroll();
+    pointerSessionRef.current = null;
+    setPendingJobId(null);
+    setDrag(null);
+
+    if (session.active) {
+      // A cancelled pointer (a system gesture taking over, say) leaves the
+      // job where it started rather than committing a half-meant move.
+      if (!released) return;
+      const target = dragPositionFor(session.lastX, session.lastY, session.grabOffsetY, session.duration);
+      if (target) moveJobTo(session.jobId, target.dayIndex, target.minutes);
+      return;
+    }
+
+    const movedFar =
+      Math.abs(session.lastX - session.startX) > DRAG_MOVE_THRESHOLD
+      || Math.abs(session.lastY - session.startY) > DRAG_MOVE_THRESHOLD;
+    if (released && !session.panning && !movedFar) {
+      const job = jobs.find((j) => j.id === session.jobId);
+      if (job) setSelectedJob(job);
+    }
+  };
+
+  useEffect(() => {
+    pointerHandlersRef.current = { move: handlePointerMove, up: handlePointerUp };
+  });
+
+  useEffect(() => () => {
+    detachPointerListeners();
+    clearHoldTimer();
+    stopEdgeScroll();
+  }, []);
+
+  // Commits a dragged job to its new slot. Runs the same conflict and time
+  // off checks as editing the time by hand, so a drag can't quietly create
+  // a double-booking or land someone in the middle of their holiday. The
+  // job row is what every cleaner's own rota reads from, so saving here is
+  // what moves the shift on their side too.
+  const moveJobTo = async (jobId, dayIndex, minutes) => {
     const job = jobs.find((j) => j.id === jobId);
     if (!job) return;
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const offsetY = e.clientY - rect.top;
-    const hourFloat = offsetY / HOUR_HEIGHT + START_HOUR;
-    const snappedMinutes = Math.round((hourFloat * 60) / 15) * 15;
-    const clampedMinutes = Math.min(Math.max(snappedMinutes, 0), (END_HOUR - START_HOUR) * 60 - 1);
+    const newDate = new Date(weekDays[dayIndex]);
+    newDate.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
 
-    const newDate = new Date(day);
-    newDate.setHours(Math.floor(clampedMinutes / 60), clampedMinutes % 60, 0, 0);
-
-    if (newDate.getTime() === new Date(job.scheduled_at).getTime()) return;
+    const previousAt = job.scheduled_at;
+    if (newDate.getTime() === new Date(previousAt).getTime()) return;
 
     for (const a of job.job_assignments || []) {
       const conflict = await findConflict(a.cleaner_id, newDate, job.duration_minutes || 120, job.id);
@@ -688,17 +941,28 @@ export default function AdminRota() {
       if (!(await confirmTimeOffConflict(a.cleaner_id, newDate))) return;
     }
 
+    // Show the new time straight away and put it back if the save fails -
+    // waiting on the round trip makes the block visibly snap back first.
+    setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, scheduled_at: newDate.toISOString() } : j)));
+
     const { data, error } = await supabase
       .from('jobs')
       .update({ scheduled_at: newDate.toISOString() })
-      .eq('id', job.id)
+      .eq('id', jobId)
       .select(JOB_SELECT)
       .single();
 
-    if (error) { toast.error('Could not move this job.'); return; }
+    if (error) {
+      setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, scheduled_at: previousAt } : j)));
+      toast.error('Could not move this job.');
+      return;
+    }
 
     setJobs((prev) => prev.map((j) => (j.id === data.id ? { ...j, ...data } : j)));
     setSelectedJob((sj) => (sj && sj.id === data.id ? { ...sj, ...data } : sj));
+    toast.success(
+      `Moved to ${newDate.toLocaleDateString(undefined, { weekday: 'short' })} ${formatMinutesOfDay(minutes)}.`
+    );
   };
 
   const jobsForDay = (day) =>
@@ -706,6 +970,27 @@ export default function AdminRota() {
       const d = new Date(j.scheduled_at);
       return d.toDateString() === day.toDateString();
     });
+
+  const todayKey = new Date().toDateString();
+  const isCurrentWeek = weekStart.getTime() === getMonday(new Date()).getTime();
+
+  // What an admin opens the rota to find out: is this week covered?
+  const weekStats = useMemo(() => ({
+    total: jobs.length,
+    hours: jobs.reduce((sum, j) => sum + (j.duration_minutes || 120), 0) / 60,
+    completed: jobs.filter((j) => j.status === 'completed').length,
+    unassigned: jobs.filter((j) => (j.job_assignments || []).length === 0).length,
+    missed: jobs.filter((j) => j.status === 'missed').length,
+  }), [jobs]);
+
+  // Vertical offset of the current-time line, or null when "now" is outside
+  // the hours the grid draws (or before the clock has started on the client).
+  const nowOffset = (() => {
+    if (!now) return null;
+    const hourFloat = now.getHours() + now.getMinutes() / 60;
+    if (hourFloat < START_HOUR || hourFloat > END_HOUR) return null;
+    return (hourFloat - START_HOUR) * HOUR_HEIGHT;
+  })();
 
   const weekLabel = `${weekStart.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${addDays(weekStart, 6).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`;
 
@@ -716,29 +1001,428 @@ export default function AdminRota() {
   return (
     <div className="page-inner">
       <BackButton />
-      <div className="page-header-row">
+      <div className="rota-header">
         <div>
-          <h1>Rota</h1>
-          <p className="page-subtitle">{weekLabel}</p>
+          <p className="rota-eyebrow">Rota</p>
+          <h1 className="rota-week">{weekLabel}</h1>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn-secondary" onClick={() => setWeekStart(addDays(weekStart, -7))} title="Go back a week">‹ Prev</button>
-          <button className="btn-secondary" onClick={() => setWeekStart(getMonday(new Date()))} title="Jump back to this week">Today</button>
-          <button className="btn-secondary" onClick={() => setWeekStart(addDays(weekStart, 7))} title="Go forward a week">Next ›</button>
-          <Link href="/admin/rota/history" className="btn-secondary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
-            History
-          </Link>
-          <button className="btn-primary" onClick={() => setShowForm((s) => !s)} title="Schedule a new job and assign staff to it">
-            {showForm ? 'Cancel' : '+ New Job'}
+        <div className="rota-actions">
+          {/* Prev / Today / Next are one control because they do one job -
+              moving through weeks. As three loose buttons they carried the
+              same weight as the page's primary action. */}
+          <div className="segmented" role="group" aria-label="Change week">
+            <button className="segmented-btn" onClick={() => setWeekStart(addDays(weekStart, -7))} title="Go back a week" aria-label="Previous week">‹</button>
+            <button className="segmented-btn" onClick={() => setWeekStart(getMonday(new Date()))} title="Jump back to this week" disabled={isCurrentWeek}>Today</button>
+            <button className="segmented-btn" onClick={() => setWeekStart(addDays(weekStart, 7))} title="Go forward a week" aria-label="Next week">›</button>
+          </div>
+          <Link href="/admin/rota/history" className="btn-secondary btn-compact">History</Link>
+          <button className="btn-primary btn-compact" onClick={() => setShowForm(true)} title="Schedule a new job and assign staff to it">
+            + New Job
           </button>
         </div>
       </div>
 
+      <div className="stat-row stat-row-compact">
+        <div className="stat-card">
+          <div className="stat-card-top"><div className="stat-card-icon"><ClipboardList size={16} /></div></div>
+          <div className="stat-number">{weekStats.total}</div>
+          <div className="stat-label">Jobs</div>
+          <div className="stat-sublabel">{weekStats.completed} completed</div>
+        </div>
+        <div className="stat-card stat-hours">
+          <div className="stat-card-top"><div className="stat-card-icon"><Clock size={16} /></div></div>
+          <div className="stat-number">{weekStats.hours.toFixed(1)}</div>
+          <div className="stat-label">Hours</div>
+          <div className="stat-sublabel">scheduled</div>
+        </div>
+        <div className={`stat-card stat-unassigned${weekStats.unassigned > 0 ? ' is-alert' : ''}`}>
+          <div className="stat-card-top"><div className="stat-card-icon"><UserX size={16} /></div></div>
+          <div className="stat-number">{weekStats.unassigned}</div>
+          <div className="stat-label">Unassigned</div>
+          <div className="stat-sublabel">no one on the job</div>
+        </div>
+        <div className={`stat-card stat-missed${weekStats.missed > 0 ? ' is-alert' : ''}`}>
+          <div className="stat-card-top"><div className="stat-card-icon"><AlertTriangle size={16} /></div></div>
+          <div className="stat-number">{weekStats.missed}</div>
+          <div className="stat-label">Missed</div>
+          <div className="stat-sublabel">this week</div>
+        </div>
+      </div>
+
+      <div className="calendar">
+        {/* The day headings live inside the scroller and stick to its top.
+            Outside it they'd be a separate grid, and the scrollbar's width
+            (or a sideways scroll on a phone) would pull them out of line
+            with the columns underneath. */}
+        <div className="calendar-scroll" ref={calendarScrollRef}>
+          <div className="calendar-header">
+            <div className="calendar-hour-col" />
+            {weekDays.map((day, i) => (
+              <div key={i} className={`calendar-day-head${day.toDateString() === todayKey ? ' today' : ''}`}>
+                <div className="calendar-day-name">{DAY_NAMES[i]}</div>
+                <div className="calendar-day-date">{day.getDate()}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="calendar-body" style={{ height: (END_HOUR - START_HOUR) * HOUR_HEIGHT }}>
+            <div className="calendar-hour-col">
+              {hourSlots.map((h) => (
+                <div key={h} className="calendar-hour-label" style={{ height: HOUR_HEIGHT }}>
+                  <span>{h % 12 === 0 ? 12 : h % 12}{h < 12 ? 'am' : 'pm'}</span>
+                </div>
+              ))}
+            </div>
+
+            {weekDays.map((day, i) => {
+              // A job being dragged is drawn in the column it's currently
+              // over, not the one it started in, so it follows the pointer
+              // across days instead of leaving a copy behind.
+              const draggedJob = drag ? jobs.find((j) => j.id === drag.jobId) : null;
+              const dayJobs = jobsForDay(day).filter((j) => !drag || j.id !== drag.jobId);
+              if (draggedJob && drag.dayIndex === i) dayJobs.push(draggedJob);
+
+              const isToday = day.toDateString() === todayKey;
+
+              return (
+              <div
+                key={i}
+                ref={(el) => { dayColRefs.current[i] = el; }}
+                className={[
+                  'calendar-day-col',
+                  isToday ? 'today' : '',
+                  i > 4 ? 'weekend' : '',
+                  drag && drag.dayIndex === i ? 'drag-over' : '',
+                ].filter(Boolean).join(' ')}
+              >
+                {hourSlots.map((h) => (
+                  <div key={h} className="calendar-hour-line" style={{ height: HOUR_HEIGHT }} />
+                ))}
+
+                {isToday && nowOffset !== null && (
+                  <div className="calendar-now" style={{ top: nowOffset }} />
+                )}
+
+                {dayJobs.map((job) => {
+                  const { top, height } = jobPosition(job);
+                  const isDragging = drag?.jobId === job.id;
+                  const isSelected = selectedJob?.id === job.id;
+                  const isDraggable = job.status === 'scheduled';
+                  const names = assignedNames(job);
+                  const unassigned = names.length === 0;
+                  const blockHeight = Math.max(height, 30);
+                  const lines = linesForHeight(blockHeight);
+                  const clientName = job.properties?.clients?.name || 'Unknown client';
+                  const timeLabel = isDragging
+                    ? formatMinutesOfDay(drag.minutes)
+                    : new Date(job.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                  return (
+                    <div
+                      key={job.id}
+                      className={[
+                        'calendar-job',
+                        job.status,
+                        isSelected ? 'selected' : '',
+                        isDraggable ? 'draggable' : '',
+                        isDragging ? 'dragging' : '',
+                        pendingJobId === job.id ? 'drag-pending' : '',
+                        unassigned ? 'unassigned' : '',
+                      ].filter(Boolean).join(' ')}
+                      style={{
+                        top: isDragging ? minutesToTop(drag.minutes) : top,
+                        height: blockHeight,
+                      }}
+                      onPointerDown={(e) => handleJobPointerDown(e, job)}
+                      title={isDraggable ? 'Drag to a new day or time - press and hold first on a touchscreen' : undefined}
+                    >
+                      {lines === 1 ? (
+                        <div className="calendar-job-time calendar-job-oneline">{timeLabel} · {clientName}</div>
+                      ) : (
+                        <>
+                          <div className="calendar-job-time">
+                            {timeLabel}{' · '}{formatDuration(job.duration_minutes || 120)}
+                          </div>
+                          <div className="calendar-job-client">{clientName}</div>
+                          {lines >= 3 && (
+                            <div className={`calendar-job-staff${unassigned ? ' is-unassigned' : ''}`}>
+                              {unassigned ? 'Unassigned' : names.join(', ')}
+                            </div>
+                          )}
+                          {lines >= 4 && <div className="calendar-job-address">{job.properties?.address}</div>}
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="calendar-legend">
+        {[
+          ['scheduled', 'Coming up'],
+          ['in_progress', 'In progress'],
+          ['completed', 'Completed'],
+          ['missed', 'Missed'],
+        ].map(([status, label]) => (
+          <span key={status} className="calendar-legend-item">
+            <span className={`calendar-legend-swatch ${status}`} />
+            {label}
+          </span>
+        ))}
+        <span className="calendar-legend-hint">
+          Drag a job to a new day or time. On a touchscreen, press and hold it first.
+        </span>
+      </div>
+
+      {selectedJob && (
+        <div className="job-modal-overlay" onClick={() => setSelectedJob(null)}>
+        <div className="card job-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="job-modal-head">
+            <div>
+              <span className={`badge ${selectedJob.status}`}>{selectedJob.status.replace('_', ' ')}</span>
+              <h2>{selectedJob.properties?.address}</h2>
+              <p className="job-modal-sub">
+                {selectedJob.properties?.clients?.name || 'Unknown client'}
+                {' · '}
+                {new Date(selectedJob.scheduled_at).toLocaleString(undefined, {
+                  weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
+                })}
+                {' · '}{formatDuration(selectedJob.duration_minutes || 120)}
+                {selectedJob.series_id && ' · part of a recurring series'}
+              </p>
+            </div>
+            <button className="job-modal-close" onClick={() => setSelectedJob(null)} aria-label="Close" title="Close">×</button>
+          </div>
+
+          <div style={{ marginTop: 14 }}>
+            <div className="field-row">
+              <div className="field">
+                <label className="field-label">Date</label>
+                <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
+              </div>
+              <div className="field">
+                <label className="field-label">Time</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <select value={editHour} onChange={(e) => setEditHour(e.target.value)} style={{ flex: 1.4, marginBottom: 0 }}>
+                    {HOUR_OPTIONS.map((h) => (
+                      <option key={h} value={String(h).padStart(2, '0')}>{formatHour12(h)}</option>
+                    ))}
+                  </select>
+                  <select value={editMinute} onChange={(e) => setEditMinute(e.target.value)} style={{ flex: 1, marginBottom: 0 }}>
+                    {MINUTE_OPTIONS.map((m) => (
+                      <option key={m} value={String(m).padStart(2, '0')}>:{String(m).padStart(2, '0')}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="field" style={{ marginTop: 10 }}>
+              <label className="field-label">Duration</label>
+              <div className="duration-chips">
+                {QUICK_DURATIONS.map((mins) => (
+                  <button
+                    type="button"
+                    key={mins}
+                    className={`duration-chip ${!editUseCustomDuration && editDuration === mins ? 'active' : ''}`}
+                    onClick={() => { setEditDuration(mins); setEditUseCustomDuration(false); }}
+                  >
+                    {formatDuration(mins)}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className={`duration-chip ${editUseCustomDuration ? 'active' : ''}`}
+                  onClick={() => setEditUseCustomDuration(true)}
+                  title="Enter a length that is not one of the presets"
+                >
+                  Custom
+                </button>
+              </div>
+              {editUseCustomDuration && (
+                <div className="duration-custom-select">
+                  <select value={editDuration} onChange={(e) => setEditDuration(Number(e.target.value))}>
+                    {DURATION_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            <div className="field" style={{ marginTop: 10 }}>
+              <label className="field-label">Notes</label>
+              <textarea
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="e.g. Client wants extra attention on the windows this visit"
+                rows={3}
+                style={{
+                  width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10,
+                  background: 'var(--wf-ash)', fontSize: 14, fontFamily: 'inherit', resize: 'vertical',
+                }}
+              />
+            </div>
+
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={saveJobDetails}
+              disabled={savingJob}
+              style={{ marginTop: 10, width: '100%' }}
+              title="Save the changes to this job's date, time and length"
+            >
+              {savingJob ? 'Saving...' : 'Save Changes'}
+            </button>
+            {jobSaveError && <p style={{ color: 'var(--wf-overdue)', fontSize: 13, marginTop: 8 }}>{jobSaveError}</p>}
+          </div>
+
+          <div style={{ marginTop: 16 }}>
+            <label>Assigned staff</label>
+            {(selectedJob.job_assignments || []).length === 0 && (
+              <p className="empty-state" style={{ padding: '4px 0' }}>No one assigned yet.</p>
+            )}
+            {(selectedJob.job_assignments || []).map((a) => (
+              <div key={a.cleaner_id} className="task-row" style={{ justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 14 }}>{a.profiles?.full_name || 'Unknown'}</span>
+                <button className="btn-secondary" onClick={() => removeCleanerFromJob(selectedJob.id, a.cleaner_id)} title="Take this person off the job - they are told it has been unassigned">Remove</button>
+              </div>
+            ))}
+            {availableToAdd.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                <select
+                  value={addCleanerSelection}
+                  onChange={(e) => setAddCleanerSelection(e.target.value)}
+                  style={{ flex: 1, marginBottom: 0 }}
+                >
+                  <option value="">Add a cleaner...</option>
+                  {availableToAdd.map((c) => (
+                    <option key={c.id} value={c.id}>{c.full_name || c.id}</option>
+                  ))}
+                </select>
+                <button
+                  className="btn-primary"
+                  disabled={!addCleanerSelection}
+                  onClick={() => { addCleanerToJob(selectedJob.id, addCleanerSelection); setAddCleanerSelection(''); }}
+                  title="Put this person on the job - they get a notification about the new shift"
+                >
+                  Add
+                </button>
+              </div>
+            )}
+          </div>
+
+          {jobCheckins.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <label>Check-ins</label>
+              {jobCheckins.map((c) => {
+                // Only flag a missing location as "unverified" when the
+                // property actually has coordinates to check against -
+                // otherwise geofencing was never attempted for this job.
+                const propertyHasCoords = selectedJob.properties?.lat != null && selectedJob.properties?.lng != null;
+                const unverified = propertyHasCoords && (c.lat == null || c.lng == null);
+                return (
+                  <div key={c.id} className="task-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ fontSize: 14 }}>{c.profiles?.full_name || 'Unknown'}</span>
+                      {unverified && <span className="badge scheduled">location unverified</span>}
+                    </div>
+                    <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>
+                      Checked in {new Date(c.checked_in_at).toLocaleTimeString()}
+                      {c.checked_out_at && ` – out ${new Date(c.checked_out_at).toLocaleTimeString()}`}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {jobPhotos.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <label>Photos</label>
+              <div className="photo-grid">
+                {jobPhotos.map((p) => (
+                  <img
+                    key={p.id}
+                    src={p.signedUrl}
+                    alt={p.caption || 'job photo'}
+                    onClick={() => window.open(p.signedUrl, '_blank', 'noopener,noreferrer')}
+                    style={{ cursor: 'pointer' }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div style={{ marginTop: 16 }}>
+            <label>To-do list</label>
+            {templates.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                <select
+                  value={applyTemplateSelection}
+                  onChange={(e) => setApplyTemplateSelection(e.target.value)}
+                  style={{ flex: 1, marginBottom: 0 }}
+                >
+                  <option value="">Apply a template...</option>
+                  {templates.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.job_template_items.length} items)</option>
+                  ))}
+                </select>
+                <button className="btn-secondary" disabled={!applyTemplateSelection} onClick={applyTemplateToJob} title="Copy every task from the chosen template onto this job">Apply</button>
+              </div>
+            )}
+            {jobTasks.length === 0 && (
+              <p className="empty-state" style={{ padding: '4px 0' }}>No tasks yet.</p>
+            )}
+            {jobTasks.map((task) => (
+              <div key={task.id} className={`task-row ${task.completed ? 'done' : ''}`}>
+                <span style={{ flex: 1 }}>{task.description}</span>
+                <button className="btn-secondary" onClick={() => deleteTask(task.id)} title="Remove this task from the job">Remove</button>
+              </div>
+            ))}
+            <form onSubmit={addTask} style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <input
+                value={newTaskText}
+                onChange={(e) => setNewTaskText(e.target.value)}
+                placeholder="e.g. Vacuum reception"
+                style={{ marginBottom: 0 }}
+              />
+              <button type="submit" className="btn-primary">Add</button>
+            </form>
+          </div>
+
+          {/* Deleting lives at the foot of the panel in its own bounded area.
+              Sat next to Close at the top, the two read as a matching pair of
+              ways to dismiss the job. */}
+          <div className="job-modal-danger">
+            <div>
+              <p className="job-modal-danger-title">Delete this job</p>
+              <p className="job-modal-danger-note">This cannot be undone.</p>
+            </div>
+            <div className="job-modal-danger-actions">
+              {selectedJob.series_id && (
+                <button className="btn-secondary" onClick={() => deleteFutureInSeries(selectedJob)} title="Delete this job and every future one in the recurring series - past ones are kept">
+                  Delete this + future
+                </button>
+              )}
+              <button className="btn-danger" onClick={() => deleteJob(selectedJob)} title="Delete just this one job - this cannot be undone">
+                Delete job
+              </button>
+            </div>
+          </div>
+        </div>
+        </div>
+      )}
       {showForm && (
-        <div className="card job-form-card">
+        <div className="job-modal-overlay">
+        <div className="card job-form-card job-form-modal">
           <div className="job-form-header">
             <h2>New Job</h2>
-            <button className="job-form-close" onClick={resetForm} type="button">×</button>
+            <button className="job-modal-close" onClick={() => setShowForm(false)} type="button" aria-label="Close" title="Close - keeps what you have filled in">×</button>
           </div>
 
           <form onSubmit={createJob}>
@@ -944,294 +1628,9 @@ export default function AdminRota() {
             </div>
           </form>
         </div>
-      )}
-
-      <div className="calendar">
-        <div className="calendar-header">
-          <div className="calendar-hour-col" />
-          {weekDays.map((day, i) => (
-            <div key={i} className="calendar-day-head">
-              <div className="calendar-day-name">{DAY_NAMES[i]}</div>
-              <div className="calendar-day-date">{day.getDate()}</div>
-            </div>
-          ))}
-        </div>
-
-        <div className="calendar-scroll" ref={calendarScrollRef}>
-          <div className="calendar-body" style={{ height: (END_HOUR - START_HOUR) * HOUR_HEIGHT }}>
-            <div className="calendar-hour-col">
-              {hourSlots.map((h) => (
-                <div key={h} className="calendar-hour-label" style={{ height: HOUR_HEIGHT }}>
-                  {h % 12 === 0 ? 12 : h % 12}{h < 12 ? 'am' : 'pm'}
-                </div>
-              ))}
-            </div>
-
-            {weekDays.map((day, i) => (
-              <div
-                key={i}
-                className={`calendar-day-col ${dragOverDayKey === day.toDateString() ? 'drag-over' : ''}`}
-                onDragOver={(e) => handleDayDragOver(e, day)}
-                onDragLeave={handleDayDragLeave}
-                onDrop={(e) => handleJobDrop(e, day)}
-              >
-                {hourSlots.map((h) => (
-                  <div key={h} className="calendar-hour-line" style={{ height: HOUR_HEIGHT }} />
-                ))}
-
-                {jobsForDay(day).map((job) => {
-                  const { top, height } = jobPosition(job);
-                  const isSelected = selectedJob?.id === job.id;
-                  const isDraggable = job.status === 'scheduled';
-                  const names = assignedNames(job);
-                  return (
-                    <div
-                      key={job.id}
-                      className={`calendar-job ${job.status} ${isSelected ? 'selected' : ''} ${draggingJobId === job.id ? 'dragging' : ''}`}
-                      style={{ top, height: Math.max(height, 24) }}
-                      onClick={() => setSelectedJob(job)}
-                      draggable={isDraggable}
-                      onDragStart={isDraggable ? (e) => handleJobDragStart(e, job) : undefined}
-                      onDragEnd={handleJobDragEnd}
-                      title={isDraggable ? 'Drag to reschedule' : undefined}
-                    >
-                      <div className="calendar-job-time">
-                        {new Date(job.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                        {' · '}{formatDuration(job.duration_minutes || 120)}
-                      </div>
-                      <div className="calendar-job-client">{job.properties?.clients?.name || 'Unknown client'}</div>
-                      <div className="calendar-job-staff">{names.length > 0 ? names.join(', ') : 'Unassigned'}</div>
-                      <div className="calendar-job-address">{job.properties?.address}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {selectedJob && (
-        <div className="job-modal-overlay" onClick={() => setSelectedJob(null)}>
-        <div className="card job-modal" onClick={(e) => e.stopPropagation()}>
-          <div className="page-header-row" style={{ marginBottom: 8 }}>
-            <h2 style={{ margin: 0 }}>{selectedJob.properties?.address}</h2>
-            <button className="btn-secondary" onClick={() => setSelectedJob(null)}>Close</button>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-            <span className={`badge ${selectedJob.status}`}>{selectedJob.status.replace('_', ' ')}</span>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {selectedJob.series_id && (
-                <button className="btn-secondary" onClick={() => deleteFutureInSeries(selectedJob)} title="Delete this job and every future one in the recurring series - past ones are kept">
-                  Delete this + future in series
-                </button>
-              )}
-              <button className="btn-secondary" onClick={() => deleteJob(selectedJob)} title="Delete just this one job - this cannot be undone">Delete Job</button>
-            </div>
-          </div>
-          {selectedJob.series_id && (
-            <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 6 }}>Part of a recurring series.</p>
-          )}
-
-          <div style={{ marginTop: 14 }}>
-            <div className="field-row">
-              <div className="field">
-                <label className="field-label">Date</label>
-                <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
-              </div>
-              <div className="field">
-                <label className="field-label">Time</label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <select value={editHour} onChange={(e) => setEditHour(e.target.value)} style={{ flex: 1.4, marginBottom: 0 }}>
-                    {HOUR_OPTIONS.map((h) => (
-                      <option key={h} value={String(h).padStart(2, '0')}>{formatHour12(h)}</option>
-                    ))}
-                  </select>
-                  <select value={editMinute} onChange={(e) => setEditMinute(e.target.value)} style={{ flex: 1, marginBottom: 0 }}>
-                    {MINUTE_OPTIONS.map((m) => (
-                      <option key={m} value={String(m).padStart(2, '0')}>:{String(m).padStart(2, '0')}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div className="field" style={{ marginTop: 10 }}>
-              <label className="field-label">Duration</label>
-              <div className="duration-chips">
-                {QUICK_DURATIONS.map((mins) => (
-                  <button
-                    type="button"
-                    key={mins}
-                    className={`duration-chip ${!editUseCustomDuration && editDuration === mins ? 'active' : ''}`}
-                    onClick={() => { setEditDuration(mins); setEditUseCustomDuration(false); }}
-                  >
-                    {formatDuration(mins)}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className={`duration-chip ${editUseCustomDuration ? 'active' : ''}`}
-                  onClick={() => setEditUseCustomDuration(true)}
-                  title="Enter a length that is not one of the presets"
-                >
-                  Custom
-                </button>
-              </div>
-              {editUseCustomDuration && (
-                <div className="duration-custom-select">
-                  <select value={editDuration} onChange={(e) => setEditDuration(Number(e.target.value))}>
-                    {DURATION_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-
-            <div className="field" style={{ marginTop: 10 }}>
-              <label className="field-label">Notes</label>
-              <textarea
-                value={editNotes}
-                onChange={(e) => setEditNotes(e.target.value)}
-                placeholder="e.g. Client wants extra attention on the windows this visit"
-                rows={3}
-                style={{
-                  width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10,
-                  background: 'var(--wf-ash)', fontSize: 14, fontFamily: 'inherit', resize: 'vertical',
-                }}
-              />
-            </div>
-
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={saveJobDetails}
-              disabled={savingJob}
-              style={{ marginTop: 10, width: '100%' }}
-              title="Save the changes to this job's date, time and length"
-            >
-              {savingJob ? 'Saving...' : 'Save Changes'}
-            </button>
-            {jobSaveError && <p style={{ color: 'var(--wf-overdue)', fontSize: 13, marginTop: 8 }}>{jobSaveError}</p>}
-          </div>
-
-          <div style={{ marginTop: 16 }}>
-            <label>Assigned staff</label>
-            {(selectedJob.job_assignments || []).length === 0 && (
-              <p className="empty-state" style={{ padding: '4px 0' }}>No one assigned yet.</p>
-            )}
-            {(selectedJob.job_assignments || []).map((a) => (
-              <div key={a.cleaner_id} className="task-row" style={{ justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 14 }}>{a.profiles?.full_name || 'Unknown'}</span>
-                <button className="btn-secondary" onClick={() => removeCleanerFromJob(selectedJob.id, a.cleaner_id)} title="Take this person off the job - they are told it has been unassigned">Remove</button>
-              </div>
-            ))}
-            {availableToAdd.length > 0 && (
-              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                <select
-                  value={addCleanerSelection}
-                  onChange={(e) => setAddCleanerSelection(e.target.value)}
-                  style={{ flex: 1, marginBottom: 0 }}
-                >
-                  <option value="">Add a cleaner...</option>
-                  {availableToAdd.map((c) => (
-                    <option key={c.id} value={c.id}>{c.full_name || c.id}</option>
-                  ))}
-                </select>
-                <button
-                  className="btn-primary"
-                  disabled={!addCleanerSelection}
-                  onClick={() => { addCleanerToJob(selectedJob.id, addCleanerSelection); setAddCleanerSelection(''); }}
-                  title="Put this person on the job - they get a notification about the new shift"
-                >
-                  Add
-                </button>
-              </div>
-            )}
-          </div>
-
-          {jobCheckins.length > 0 && (
-            <div style={{ marginTop: 16 }}>
-              <label>Check-ins</label>
-              {jobCheckins.map((c) => {
-                // Only flag a missing location as "unverified" when the
-                // property actually has coordinates to check against -
-                // otherwise geofencing was never attempted for this job.
-                const propertyHasCoords = selectedJob.properties?.lat != null && selectedJob.properties?.lng != null;
-                const unverified = propertyHasCoords && (c.lat == null || c.lng == null);
-                return (
-                  <div key={c.id} className="task-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                      <span style={{ fontSize: 14 }}>{c.profiles?.full_name || 'Unknown'}</span>
-                      {unverified && <span className="badge scheduled">location unverified</span>}
-                    </div>
-                    <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>
-                      Checked in {new Date(c.checked_in_at).toLocaleTimeString()}
-                      {c.checked_out_at && ` – out ${new Date(c.checked_out_at).toLocaleTimeString()}`}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {jobPhotos.length > 0 && (
-            <div style={{ marginTop: 16 }}>
-              <label>Photos</label>
-              <div className="photo-grid">
-                {jobPhotos.map((p) => (
-                  <img
-                    key={p.id}
-                    src={p.signedUrl}
-                    alt={p.caption || 'job photo'}
-                    onClick={() => window.open(p.signedUrl, '_blank', 'noopener,noreferrer')}
-                    style={{ cursor: 'pointer' }}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div style={{ marginTop: 16 }}>
-            <label>To-do list</label>
-            {templates.length > 0 && (
-              <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                <select
-                  value={applyTemplateSelection}
-                  onChange={(e) => setApplyTemplateSelection(e.target.value)}
-                  style={{ flex: 1, marginBottom: 0 }}
-                >
-                  <option value="">Apply a template...</option>
-                  {templates.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name} ({t.job_template_items.length} items)</option>
-                  ))}
-                </select>
-                <button className="btn-secondary" disabled={!applyTemplateSelection} onClick={applyTemplateToJob} title="Copy every task from the chosen template onto this job">Apply</button>
-              </div>
-            )}
-            {jobTasks.length === 0 && (
-              <p className="empty-state" style={{ padding: '4px 0' }}>No tasks yet.</p>
-            )}
-            {jobTasks.map((task) => (
-              <div key={task.id} className={`task-row ${task.completed ? 'done' : ''}`}>
-                <span style={{ flex: 1 }}>{task.description}</span>
-                <button className="btn-secondary" onClick={() => deleteTask(task.id)} title="Remove this task from the job">Remove</button>
-              </div>
-            ))}
-            <form onSubmit={addTask} style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-              <input
-                value={newTaskText}
-                onChange={(e) => setNewTaskText(e.target.value)}
-                placeholder="e.g. Vacuum reception"
-                style={{ marginBottom: 0 }}
-              />
-              <button type="submit" className="btn-primary">Add</button>
-            </form>
-          </div>
-        </div>
         </div>
       )}
+
     </div>
   );
 }
