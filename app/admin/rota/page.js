@@ -315,7 +315,7 @@ export default function AdminRota() {
   const loadCheckins = async (jobId) => {
     const { data } = await supabase
       .from('checkins')
-      .select('id, cleaner_id, checked_in_at, checked_out_at, lat, lng, profiles(full_name)')
+      .select('id, cleaner_id, checked_in_at, checked_out_at, auto_checked_out, lat, lng, profiles(full_name)')
       .eq('job_id', jobId)
       .order('checked_in_at', { ascending: true });
 
@@ -1363,6 +1363,7 @@ export default function AdminRota() {
                     <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>
                       Checked in {new Date(c.checked_in_at).toLocaleTimeString()}
                       {c.checked_out_at && ` – out ${new Date(c.checked_out_at).toLocaleTimeString()}`}
+                      {c.checked_out_at && c.auto_checked_out && ' (auto)'}
                     </span>
                   </div>
                 );

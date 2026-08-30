@@ -9,6 +9,7 @@ import PresenceIndicator from '../components/PresenceIndicator';
 import EmergencyButton from '../components/EmergencyButton';
 import EnablePush from '../components/EnablePush';
 import InstallPrompt from '../components/InstallPrompt';
+import AutoCheckoutWatcher from '../components/AutoCheckoutWatcher';
 
 const NAV_ITEMS = [
   { href: '/cleaner', label: 'Home', icon: Home },
@@ -61,6 +62,7 @@ export default function CleanerLayout({ children }) {
       </div>
       <EmergencyButton />
       <InstallPrompt />
+      <AutoCheckoutWatcher />
       {children}
       <nav className="bottom-nav">
         {NAV_ITEMS.map((item) => {
