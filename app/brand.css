@@ -29,6 +29,13 @@
                                  separation by hue, not by darkness, so it stops
                                  muddling with the coral button */
 
+  /* State tints. A job card has to carry its status as a fill, not just a
+     bar, or a week of them reads as one grey wall. These are the two fills
+     plus the ink that clears 4.5:1 on the green one. */
+  --wf-verified-bg:   #E9F7F0;
+  --wf-verified-text: #1B7A4B;
+  --wf-overdue-bg:    #FBE6E9;
+
   /* lines */
   --wf-line:        rgba(32, 35, 39, 0.14);
   --wf-line-dark:   rgba(255, 255, 255, 0.15);
@@ -160,6 +167,9 @@ td.num,
 .wf-pill-verified { color: var(--wf-verified); }
 .wf-pill-progress { color: var(--wf-progress); }
 .wf-pill-overdue  { color: var(--wf-overdue); }
+/* On site: happening right now, so it reads darker than the ones merely
+   waiting their turn. */
+.wf-pill-onsite   { color: var(--wf-graphite); }
 
 /* ---------- 5. CARDS AND TABLES ---------- */
 
