@@ -689,8 +689,18 @@ h3 { font-size: 15px; line-height: 1.35; }
 
 .admin-main {
   flex: 1;
+  /* Fills the window rather than stopping at a fixed column. The old 960px cap
+     left roughly 700px of a 1900px monitor empty, and the rota's week grid was
+     the worst hit - seven day columns squeezed into two thirds of the screen
+     while the rest sat blank. Still capped, so text-led pages don't run to
+     unreadable line lengths on an ultrawide.
+
+     min-width: 0 because this is a flex child: without it a wide child like the
+     week grid sets the floor and pushes the page into horizontal scroll instead
+     of scrolling inside its own container. */
+  min-width: 0;
+  max-width: 1600px;
   padding: 32px 40px;
-  max-width: 960px;
 }
 
 .page-inner h1 {
