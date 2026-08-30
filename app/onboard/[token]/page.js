@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { POLICY_SECTIONS } from '../../../lib/companyPolicies';
 import Logo from '../../components/Logo';
+import InstallSteps from '../../components/InstallSteps';
 
 // CrewConnect's actual zero-hours worker contract (supplied by admin).
 // Worker name/address are filled in from what they've entered above; pay
@@ -318,6 +319,7 @@ export default function OnboardPage() {
             email and password you just set. Your employer will be in touch.
           </p>
         </div>
+        <InstallSteps />
       </div>
     );
   }
