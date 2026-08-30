@@ -47,6 +47,17 @@ export default function RootLayout({ children }) {
         <link rel="apple-touch-icon" href="/apple-icon.png" sizes="180x180" />
         <link rel="icon" href="/brand-mark.svg" type="image/svg+xml" />
         <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192" />
+        {/* Chrome fires beforeinstallprompt as soon as it has the manifest
+            and service worker, which on a fast connection beats our own
+            bundle to it - and the event only ever fires once. Catching it
+            here, inline and before any chunk loads, is the only way to be
+            sure it is not lost; lib/pwaInstall.js adopts whatever landed. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__wfInstallEvent=e;});",
+          }}
+        />
       </head>
       <body>
         <ToastProvider>

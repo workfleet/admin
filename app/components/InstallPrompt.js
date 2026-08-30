@@ -2,34 +2,17 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { X, Share, SquarePlus, Download } from 'lucide-react';
-import { getInstallPrompt, onInstallPromptChange, fireInstallPrompt } from '../../lib/pwaInstall';
+import {
+  getInstallPrompt,
+  onInstallPromptChange,
+  fireInstallPrompt,
+  isStandalone,
+  isIos,
+  isIosSafari,
+} from '../../lib/pwaInstall';
 
 const DISMISS_KEY = 'wf-install-dismissed-at';
 const SNOOZE_DAYS = 30;
-
-function alreadyInstalled() {
-  // matchMedia covers Android and desktop; navigator.standalone is the
-  // iOS-only equivalent and the only one that works there.
-  return (
-    window.matchMedia?.('(display-mode: standalone)').matches ||
-    window.navigator.standalone === true
-  );
-}
-
-function isIos() {
-  const ua = navigator.userAgent;
-  // iPadOS 13+ claims to be a Mac. The touch-point count is what still
-  // gives it away - a real Mac reports 0.
-  return /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
-}
-
-function isIosSafari() {
-  // Every iOS browser is WebKit underneath, but the Add to Home Screen
-  // item lives in Safari's share sheet. Chrome and Firefox for iOS grew
-  // their own in 16.4, but the wording below only matches Safari's, so
-  // anyone else gets pointed at Safari instead.
-  return !/CriOS|FxiOS|EdgiOS|OPiOS|GSA\//i.test(navigator.userAgent);
-}
 
 function snoozed() {
   try {
@@ -54,7 +37,7 @@ export default function InstallPrompt() {
   const barRef = useRef(null);
 
   useEffect(() => {
-    if (alreadyInstalled() || snoozed()) return undefined;
+    if (isStandalone() || snoozed()) return undefined;
 
     if (isIos()) {
       setMode('ios');
