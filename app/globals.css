@@ -2005,12 +2005,53 @@ a.stat-card.is-alert:hover {
 
 .calendar-clash-more:hover { color: var(--ink); }
 
-/* Opened out, the block is as tall as its list and sits above the blocks
-   either side of it rather than being clipped by its own hour. */
-.calendar-clash.is-expanded {
+/* Four jobs abreast in a day column leave about 40px a card. The padding
+   an ordinary block can afford is then most of the card, so it comes back
+   as room for the client's name. */
+.calendar-job.is-narrow-lane {
+  padding: 6px 7px;
+  gap: 1px;
+}
+
+.calendar-job.is-narrow-lane .calendar-job-client { font-size: 11px; }
+
+/* Opened out, the block is replaced by the jobs themselves, back on the
+   clock in lanes - so all that is left of it is the way back. Sits just
+   above the run it belongs to rather than on top of its first card. */
+.calendar-clash-collapse {
+  position: absolute;
+  right: 5px;
   z-index: 3;
-  height: auto;
-  box-shadow: var(--shadow-md);
+  appearance: none;
+  border: 0;
+  font-family: var(--wf-data);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--wf-paper);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 2px 8px;
+  max-width: calc(100% - 10px);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.calendar-clash-collapse:hover {
+  color: var(--ink);
+  border-color: var(--wf-steel);
+}
+
+/* The same cleaner twice over still needs saying while the run is open -
+   side-by-side cards show there is a clash, not whose diary it is. */
+.calendar-clash-collapse.is-double-booked {
+  color: var(--wf-overdue);
+  border-color: var(--wf-overdue);
+  background: var(--wf-overdue-bg);
 }
 
 /* The same cleaner booked twice over isn't a drawing problem, it's a
