@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { Fragment, useEffect, useRef, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../../../lib/supabaseClient';
@@ -11,7 +11,7 @@ import AddressAutocomplete from '../../components/AddressAutocomplete';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
 import BackButton from '../../components/BackButton';
-import { groupOverlappingJobs, abbreviateName } from '../../../lib/jobOverlap';
+import { groupOverlappingJobs, assignLanes, abbreviateName } from '../../../lib/jobOverlap';
 
 // Full 24hr range with scroll (CrewConnect crews run early mornings through
 // overnight), defaulting the scroll position to business hours on load.
@@ -1099,8 +1099,10 @@ export default function AdminRota() {
     : [];
 
   // One job, drawn on the clock. `dragging` swaps the job's own start time
-  // for the one under the pointer, so the block follows the drag.
-  const renderJobCard = (job, dragging) => {
+  // for the one under the pointer, so the block follows the drag. `layout`
+  // narrows the card to one lane of an opened-out overlap, so jobs that
+  // share an hour sit beside each other instead of on top.
+  const renderJobCard = (job, dragging, layout) => {
     const { top, height } = jobPosition(job);
     const duration = job.duration_minutes || 120;
     const startMinutes = dragging ? drag.minutes : minutesOfDayFor(job);
@@ -1111,6 +1113,17 @@ export default function AdminRota() {
     const isDraggable = job.status === 'scheduled';
     const clientName = job.properties?.clients?.name || job.properties?.address || 'Unknown client';
     const timeLabel = `${formatClock(startMinutes)} – ${formatClock(startMinutes + duration)}`;
+
+    // The lanes this card holds, of however many the group needs. The 5px
+    // either side is the gutter an ungrouped card already leaves, kept so a
+    // lane of one looks no different from an ordinary block.
+    const laneStyle = layout && layout.lanes > 1
+      ? {
+        left: `calc(${(layout.lane / layout.lanes) * 100}% + 5px)`,
+        width: `calc(${((layout.span || 1) / layout.lanes) * 100}% - 10px)`,
+        right: 'auto',
+      }
+      : null;
 
     // The two states an admin is scanning for get a word as well as a
     // colour; the rest are read off the fill.
@@ -1133,10 +1146,18 @@ export default function AdminRota() {
           pendingJobId === job.id ? 'drag-pending' : '',
           unassigned ? 'unassigned' : '',
           isCompactHeight(blockHeight) ? 'compact' : '',
+          // Three or more abreast, the padding is worth more as characters
+          // of the client's name than as whitespace.
+          layout && layout.lanes >= 3 ? 'is-narrow-lane' : '',
         ].filter(Boolean).join(' ')}
-        style={{ top: dragging ? minutesToTop(drag.minutes) : top, height: blockHeight }}
+        style={{ top: dragging ? minutesToTop(drag.minutes) : top, height: blockHeight, ...laneStyle }}
         onPointerDown={(e) => handleJobPointerDown(e, job)}
-        title={isDraggable ? 'Drag to a new day or time - press and hold first on a touchscreen' : undefined}
+        // Four jobs sharing an hour leave a card too narrow to read a client
+        // name off, and the whole point of opening the run out is to see what
+        // is in it. Hovering says in full what the card had to cut.
+        title={layout
+          ? `${timeLabel} · ${clientName} · ${staffLabel}${isDraggable ? ' - drag to move, or click to open' : ''}`
+          : isDraggable ? 'Drag to a new day or time - press and hold first on a touchscreen' : undefined}
       >
         {lines === 1 ? (
           <div className="calendar-job-time calendar-job-oneline">
@@ -1172,25 +1193,45 @@ export default function AdminRota() {
     const top = Math.max(0, (startMinutes / 60 - START_HOUR) * HOUR_HEIGHT);
     const span = ((group.end - group.start) / 3600000) * HOUR_HEIGHT;
     const expanded = expandedGroupId === group.id;
-    const shown = expanded ? group.jobs : group.jobs.slice(0, MAX_CLASH_ENTRIES);
+
+    // Opened out, the group stops being a list and goes back on the clock:
+    // each job at its own start time, at its own length, in a lane beside
+    // the ones it shares an hour with. That is the view the block was
+    // standing in for - the list only exists because bars drawn straight
+    // onto the clock would cover one another.
+    if (expanded) {
+      const { lanes, placed } = assignLanes(group.jobs);
+      return (
+        <Fragment key={group.id}>
+          <button
+            type="button"
+            className={`calendar-clash-collapse${group.doubleBooked ? ' is-double-booked' : ''}`}
+            style={{ top: Math.max(0, top - 15) }}
+            onClick={() => setExpandedGroupId(null)}
+            title="Close these back into one block"
+          >
+            {group.doubleBooked
+              ? `${abbreviateName(group.doubleBookedName)} · double-booked · show less`
+              : `${group.jobs.length} jobs · show less`}
+          </button>
+          {placed.map(({ job, lane, span }) => renderJobCard(job, false, { lane, lanes, span }))}
+        </Fragment>
+      );
+    }
+
+    const shown = group.jobs.slice(0, MAX_CLASH_ENTRIES);
     // The clock alone can make the block shorter than the list inside it -
     // three half-hour jobs on top of each other span 30 minutes - and the
     // block clips what doesn't fit, which is no good when the thing at the
-    // bottom is the button to the rest of them. Opened out, the list decides
-    // the height instead: the block grows over the hours below it and lifts
-    // above its neighbours, so every job in the run can be reached.
+    // bottom is the button to the rest of them.
     const overflowing = group.jobs.length > MAX_CLASH_ENTRIES;
     const height = Math.max(span, (shown.length >= 3 ? 140 : 112) + (overflowing ? 18 : 0));
 
     return (
       <div
         key={group.id}
-        className={[
-          'calendar-clash',
-          group.doubleBooked ? 'is-double-booked' : '',
-          expanded ? 'is-expanded' : '',
-        ].filter(Boolean).join(' ')}
-        style={expanded ? { top, minHeight: span } : { top, height }}
+        className={`calendar-clash${group.doubleBooked ? ' is-double-booked' : ''}`}
+        style={{ top, height }}
       >
         <div className="calendar-clash-head">
           {group.doubleBooked
@@ -1233,11 +1274,11 @@ export default function AdminRota() {
           <button
             type="button"
             className="calendar-clash-more"
-            aria-expanded={expanded}
-            onClick={() => setExpandedGroupId(expanded ? null : group.id)}
-            title={expanded ? 'Collapse this overlap back to three jobs' : 'Show every job in this overlap'}
+            aria-expanded={false}
+            onClick={() => setExpandedGroupId(group.id)}
+            title="Put every job in this overlap back on the clock"
           >
-            {expanded ? 'Show less' : `+${group.jobs.length - shown.length} more`}
+            +{group.jobs.length - shown.length} more
           </button>
         )}
       </div>
