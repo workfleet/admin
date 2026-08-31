@@ -12,7 +12,10 @@ const defaultIcon = L.icon({ iconUrl: markerIcon.src || markerIcon, shadowUrl: m
 
 // Loaded via next/dynamic({ ssr: false }) wherever it's used — Leaflet
 // touches `window` at load time and can't run during server rendering.
-export default function PropertyMap({ lat, lng, address }) {
+// `height` and `showDirections` let the cleaner's job screen use the map as a
+// 132px band with its own Directions chip laid over it, while the emergency
+// location page keeps the taller map and the button underneath.
+export default function PropertyMap({ lat, lng, address, height = 160, showDirections = true }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
 
@@ -38,11 +41,21 @@ export default function PropertyMap({ lat, lng, address }) {
   const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 
   return (
-    <div>
-      <div ref={containerRef} style={{ height: 160, borderRadius: 10, overflow: 'hidden', marginBottom: 10 }} />
-      <a href={directionsUrl} target="_blank" rel="noreferrer" style={{ display: 'block' }}>
-        <button type="button" style={{ width: '100%' }}>Get Directions</button>
-      </a>
+    <div style={{ height: showDirections ? undefined : '100%' }}>
+      <div
+        ref={containerRef}
+        style={{
+          height: showDirections ? height : '100%',
+          borderRadius: showDirections ? 10 : 0,
+          overflow: 'hidden',
+          marginBottom: showDirections ? 10 : 0,
+        }}
+      />
+      {showDirections && (
+        <a href={directionsUrl} target="_blank" rel="noreferrer" style={{ display: 'block' }}>
+          <button type="button" style={{ width: '100%' }}>Get Directions</button>
+        </a>
+      )}
     </div>
   );
 }

@@ -730,40 +730,36 @@ h3 { font-size: 15px; line-height: 1.35; }
 }
 
 /* ---- Stat cards ---- */
+/* Equal columns that wrap rather than squeeze, so five cards read as one
+   row on a desktop and as a tidy block on a laptop. */
 .stat-row {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 28px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
 }
 
 .stat-card {
   background: var(--surface);
   border: 1px solid var(--hairline);
-  border-radius: var(--radius-lg);
-  padding: 20px 22px;
-  box-shadow: var(--shadow-sm);
-  flex: 1;
-  /* Wide enough that the longest label still clears the padding once the row
-     packs down to its tightest - the labels don't wrap, so anything narrower
-     truncates them instead. */
-  min-width: 150px;
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+  min-width: 0;
 }
 
-/* The cards are links now, so they get a hover state back - it was dropped
-   when they were inert and promising an action they didn't have. The border
-   picks up the card's own hue rather than a generic grey. */
+/* The cards are links, so they get a hover state - it was dropped when they
+   were inert and promising an action they didn't have. Graphite, not a hue
+   per card: an earlier pass gave every card its own colour, which lit the
+   row up but read as five unrelated things. */
 a.stat-card {
   display: block;
   text-decoration: none;
   color: inherit;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 a.stat-card:hover {
-  border-color: var(--stat-ink);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
+  border-color: var(--wf-graphite);
 }
 
 a.stat-card:focus-visible {
@@ -771,48 +767,21 @@ a.stat-card:focus-visible {
   outline-offset: 2px;
 }
 
-.stat-number {
-  font-family: var(--wf-data);
-  font-variant-numeric: tabular-nums;
-  font-size: 28px;
-  font-weight: 600;
-  color: var(--ink);
-  letter-spacing: -0.04em;
-  line-height: 1.1;
-}
-
-.stat-label {
-  font-family: var(--wf-data);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+/* Just the glyph. The tinted tile behind it was decoration competing with
+   the figure, which is the thing anyone actually reads. The tiled version
+   below is still what the client portal and the cleaner's hours page use. */
+.stat-icon {
   color: var(--muted);
-  margin-top: 6px;
-  /* One line each, so the five read as a row rather than a ragged block. The
-     ellipsis is a backstop for a label longer than min-width allows for. */
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.stat-sublabel {
-  font-family: var(--wf-data);
-  font-size: 11.5px;
-  color: var(--muted);
-  margin-top: 3px;
-  min-height: 17px;
-}
-
-.stat-card-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
-/* Each stat owns a hue: the tile behind its icon, the icon itself (lucide
-   inherits currentColor) and the figure. --stat-tint / --stat-ink default to
+.stat-card.is-alert .stat-icon { color: var(--wf-overdue); }
+
+/* ---- Tiled icon (client portal, cleaner hours) ----
+   Each stat there owns a hue: the tile behind its icon and the icon itself
+   (lucide inherits currentColor). --stat-tint / --stat-ink default to
    neutral so a card without a hue class still renders. */
 .stat-card {
   --stat-tint: var(--wf-neutral-tint);
@@ -823,55 +792,12 @@ a.stat-card:focus-visible {
 .stat-requests,
 .stat-hours      { --stat-tint: var(--wf-azure-tint);    --stat-ink: var(--wf-azure); }
 .stat-working    { --stat-tint: var(--wf-verified-tint); --stat-ink: var(--wf-proven); }
-.stat-unassigned { --stat-tint: var(--wf-neutral-tint);  --stat-ink: var(--wf-steel); }
 
-/* Unassigned is the one card whose colour still means something, so it stays
-   conditional - red only when there actually are unassigned jobs. */
-.stat-unassigned.is-alert {
-  --stat-tint: var(--wf-overdue-tint);
-  --stat-ink: var(--wf-overdue);
-}
-
-/* Same rule as unassigned: grey at zero, red only when there's something to
-   answer for - so a clean week doesn't read as an alarming one. */
-.stat-missed {
-  --stat-tint: var(--wf-neutral-tint);
-  --stat-ink: var(--wf-steel);
-}
-
-.stat-missed.is-alert {
-  --stat-tint: var(--wf-overdue-tint);
-  --stat-ink: var(--wf-overdue);
-}
-
-/* The rota leads with its grid, not its figures, so the same cards run at a
-   tighter size there. Same hues, same hierarchy, less height. */
-.stat-row-compact {
-  gap: 12px;
-  margin-bottom: 18px;
-}
-
-.stat-row-compact .stat-card {
-  padding: 14px 16px;
-  min-width: 132px;
-  border-radius: var(--radius-md);
-}
-
-.stat-row-compact .stat-card-top {
-  margin-bottom: 6px;
-}
-
-.stat-row-compact .stat-card-icon {
-  width: 30px;
-  height: 30px;
-}
-
-.stat-row-compact .stat-number {
-  font-size: 23px;
-}
-
-.stat-row-compact .stat-sublabel {
-  min-height: 0;
+.stat-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
 }
 
 .stat-card-icon {
@@ -886,19 +812,83 @@ a.stat-card:focus-visible {
   flex-shrink: 0;
 }
 
+.stat-number {
+  font-family: var(--wf-data);
+  font-variant-numeric: tabular-nums;
+  font-size: 30px;
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
+.stat-label {
+  font-family: var(--wf-data);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 4px;
+  /* One line each, so the row reads as a row rather than a ragged block. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stat-sublabel {
+  font-family: var(--wf-data);
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 2px;
+  min-height: 20px;
+}
+
+/* Red only when there is actually something to answer for, so a covered
+   week doesn't read as an alarming one. */
+.stat-card.is-alert {
+  border-color: var(--wf-overdue);
+}
+
+.stat-card.is-alert .stat-number,
+.stat-card.is-alert .stat-label,
+.stat-card.is-alert .stat-card-icon {
+  color: var(--wf-overdue);
+}
+
+a.stat-card.is-alert:hover {
+  background: var(--wf-overdue-bg);
+  border-color: var(--wf-overdue);
+}
+
+/* The rota leads with its grid, not its figures, so the same cards run
+   without icons there - and a touch roomier, being four across not five. */
+.stat-row-compact .stat-card {
+  padding: 18px 20px;
+}
+
 /* ---- Dashboard panel grid ---- */
+.dash-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
 .dash-grid-2 {
   display: grid;
-  grid-template-columns: 1.3fr 1fr;
+  grid-template-columns: 1.15fr 1fr;
   gap: 16px;
-  margin-bottom: 16px;
+  align-items: start;
+  margin-bottom: 18px;
 }
 
 .dash-grid-3 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
-  margin-bottom: 16px;
+  align-items: start;
+  margin-bottom: 18px;
 }
 
 /* Panels in a dashboard row stretch to a shared height, so the card becomes a
@@ -908,8 +898,11 @@ a.stat-card:focus-visible {
 .dash-grid-2 > .card,
 .dash-grid-3 > .card {
   margin-bottom: 0;
+  padding: 20px 22px;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
+  align-self: stretch;
 }
 
 /* Capped so a long list sets its own bounds rather than the height of the
@@ -938,77 +931,212 @@ a.stat-card:focus-visible {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  gap: 12px;
+  margin-bottom: 8px;
 }
-
-/* Opt-in, because .dash-panel-header is shared with the client portal and the
-   dashboard's own modals - only the five dashboard panels carry a hue. The
-   colour goes on the rule rather than the heading, which stays graphite. */
-.panel-today,
-.panel-attention,
-.panel-hours,
-.panel-glance,
-.panel-upcoming {
-  padding-bottom: 8px;
-  border-bottom: 2px solid var(--panel-accent);
-}
-
-.panel-today,
-.panel-attention,
-.panel-hours,
-.panel-glance,
-.panel-upcoming  { --panel-accent: var(--wf-azure); }
 
 .dash-panel-header h2 {
   margin: 0;
+  font-family: var(--wf-display);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
 }
 
 .dash-panel-link {
+  font-family: var(--wf-data);
   font-size: 13px;
   font-weight: 600;
-  color: var(--brand-link);
+  color: var(--ink);
   text-decoration: none;
   white-space: nowrap;
 }
 
-.dash-panel-link:hover {
-  text-decoration: underline;
+.dash-panel-link:hover { color: var(--wf-coral-dark); }
+
+.dash-panel-foot {
+  align-self: flex-start;
+  margin-top: 12px;
 }
+
+.dash-panel-more {
+  display: inline-block;
+  margin-top: 8px;
+  font-family: var(--wf-data);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.dash-panel-more:hover { color: var(--ink); }
 
 .dash-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 10px 0;
+  gap: 12px;
+  padding: 12px 0;
   border-bottom: 1px solid var(--hairline);
   cursor: pointer;
   text-decoration: none;
   color: inherit;
 }
 
-.dash-row:last-child {
-  border-bottom: none;
+.dash-row:last-child { border-bottom: none; }
+
+.dash-row-tight { padding: 10px 0; }
+.dash-row-quiet { cursor: default; padding: 9px 0; }
+
+.dash-row-main {
+  flex: 1;
+  min-width: 0;
 }
 
 .dash-row-title {
-  font-size: 14px;
-  font-weight: 600;
+  font-family: var(--wf-display);
+  font-size: 15px;
+  font-weight: 500;
   color: var(--ink);
 }
 
+.dash-row-title.is-urgent { color: var(--wf-overdue); }
+
+.dash-row-name {
+  color: var(--brand-link);
+  text-decoration: none;
+}
+
 .dash-row-subtitle {
-  font-size: 12.5px;
+  font-family: var(--wf-data);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
   color: var(--muted);
   margin-top: 2px;
+}
+
+.dash-row-subtitle.is-urgent { color: var(--wf-overdue); }
+
+/* A job with nobody on it gets a real button rather than a badge that looked
+   pressable and wasn't. */
+.dash-row .dash-row-action {
+  flex-shrink: 0;
+  font-family: var(--wf-display);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: var(--wf-radius-sm);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* Red for the ones that can't wait, steel for the rest - so the panel can be
+   read down the left edge without reading any of the words. */
+.dash-row-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex-shrink: 0;
+}
+
+.dash-row-dot.is-urgent { background: var(--wf-overdue); }
+
+.dash-row-check {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--wf-coral);
+}
+
+/* Native select, WorkFleet chrome: the platform picker and the keyboard both
+   still work, only the box around them changes. */
+.dash-period {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--hairline);
+  border-radius: var(--wf-radius-sm);
+  padding: 7px 10px;
+  color: var(--muted);
+}
+
+.dash-period select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  border: none;
+  margin: 0;
+  padding: 0 6px 0 0;
+  width: auto;
+  font-family: var(--wf-data);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.dash-period select:focus { outline: none; }
+.dash-period:focus-within { border-color: var(--wf-graphite); }
+
+.dash-ring {
+  display: flex;
+  justify-content: center;
+  margin: 4px 0 12px;
+}
+
+.dash-splits {
+  display: flex;
+  justify-content: space-around;
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.dash-splits strong {
+  display: block;
+  font-family: var(--wf-data);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.dash-splits span {
+  font-family: var(--wf-data);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.dash-person {
+  font-family: var(--wf-display);
+  font-size: 14px;
+}
+
+.dash-person-hours {
+  font-family: var(--wf-data);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .dash-glance-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 0;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--hairline);
+  font-family: var(--wf-display);
   font-size: 14px;
+}
+
+.dash-glance-row:hover { background: var(--wf-ash); }
+
+.dash-glance-row strong {
+  font-family: var(--wf-data);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .dash-glance-dot {
@@ -1016,6 +1144,59 @@ a.stat-card:focus-visible {
   height: 9px;
   border-radius: 50%;
   flex-shrink: 0;
+}
+
+/* ---- On site right now ---- */
+.dash-onsite { margin-top: 14px; }
+
+.dash-onsite-label {
+  font-family: var(--wf-data);
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.dash-onsite-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--wf-ash);
+  border-radius: var(--wf-radius-sm);
+  padding: 8px 10px;
+  margin-bottom: 6px;
+}
+
+.dash-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--wf-graphite);
+  color: var(--wf-white);
+  font-family: var(--wf-data);
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dash-onsite-main { min-width: 0; }
+
+.dash-onsite-name {
+  font-family: var(--wf-display);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.dash-onsite-where {
+  font-family: var(--wf-data);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ---- Buttons ---- */
@@ -1416,11 +1597,10 @@ a.stat-card:focus-visible {
   border-radius: var(--radius-lg);
   overflow: hidden;
   margin-bottom: 12px;
-  box-shadow: var(--shadow-sm);
 }
 
 .calendar-scroll {
-  max-height: 620px;
+  max-height: 672px;
   overflow: auto;
   overscroll-behavior: contain;
 }
@@ -1443,39 +1623,48 @@ a.stat-card:focus-visible {
 }
 
 .calendar-day-head {
-  text-align: center;
-  padding: 9px 4px 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 58px;
+  padding: 0 6px 0 10px;
   border-left: 1px solid var(--hairline);
 }
 
+.calendar-day-head.weekend { background: #F6F7F8; }
+.calendar-day-head.today   { background: rgba(255, 107, 91, 0.05); }
+
 .calendar-day-name {
-  font-size: 10.5px;
-  color: var(--muted);
+  font-family: var(--wf-data);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .calendar-day-date {
-  font-size: 16px;
-  font-weight: 700;
+  font-family: var(--wf-data);
+  font-size: 19px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
   color: var(--ink);
-  line-height: 1.5;
+  line-height: 1.25;
 }
 
-/* Today's date gets a filled pill, the way a calendar app marks it. */
-.calendar-day-head.today .calendar-day-name {
-  color: var(--wf-coral-ink);
-}
-
+/* Today is coral text rather than a filled pill. The pill was a second
+   coral shape on a screen whose one coral shape is meant to be the button
+   you press. */
+.calendar-day-head.today .calendar-day-name,
 .calendar-day-head.today .calendar-day-date {
-  display: inline-block;
-  min-width: 24px;
-  border-radius: 999px;
-  background: var(--wf-coral);
-  color: var(--wf-on-coral);
-  padding: 0 6px;
+  color: var(--wf-coral-dark);
 }
+
+.calendar-day-head.today .calendar-day-date { font-weight: 600; }
 
 .calendar-body {
   position: relative;
@@ -1493,44 +1682,37 @@ a.stat-card:focus-visible {
    than floating in the middle of the slot below it. */
 .calendar-hour-label {
   position: relative;
-  box-sizing: border-box;
   border-top: 1px solid var(--hairline);
 }
 
 .calendar-hour-label span {
   position: absolute;
   top: -7px;
-  right: 7px;
-  font-size: 10.5px;
-  font-weight: 600;
+  right: 8px;
+  font-family: var(--wf-data);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
   color: var(--muted);
   background: var(--surface);
   padding: 0 2px;
 }
 
-.calendar-hour-label:first-child span {
-  top: 1px;
-}
+.calendar-hour-label:first-child span { top: 1px; }
 
 .calendar-day-col {
   position: relative;
   border-left: 1px solid var(--hairline);
 }
 
-.calendar-day-col.weekend {
-  background: rgba(32, 35, 39, 0.022);
-}
-
-.calendar-day-col.today {
-  background: rgba(255, 107, 91, 0.055);
-}
+.calendar-day-col.weekend { background: #F6F7F8; }
+.calendar-day-col.today   { background: rgba(255, 107, 91, 0.05); }
 
 /* A solid line on the hour, a faint one on the half hour - enough to read a
    block's start time off the grid without counting. */
 .calendar-hour-line {
   position: relative;
-  box-sizing: border-box;
-  border-top: 1px solid var(--hairline);
+  border-top: 1px solid rgba(32, 35, 39, 0.1);
 }
 
 .calendar-hour-line::after {
@@ -1543,8 +1725,8 @@ a.stat-card:focus-visible {
 }
 
 .calendar-day-col.drag-over {
-  background: var(--wf-teal-tint);
-  box-shadow: inset 0 0 0 1px var(--wf-teal-ink);
+  background: rgba(255, 107, 91, 0.1);
+  box-shadow: inset 0 0 0 1px var(--wf-coral);
 }
 
 .calendar-now {
@@ -1552,7 +1734,7 @@ a.stat-card:focus-visible {
   left: 0;
   right: 0;
   height: 0;
-  border-top: 2px solid var(--wf-overdue);
+  border-top: 2px solid var(--wf-coral);
   z-index: 3;
   pointer-events: none;
 }
@@ -1560,60 +1742,141 @@ a.stat-card:focus-visible {
 .calendar-now::before {
   content: '';
   position: absolute;
-  left: -1px;
-  top: -5px;
-  width: 8px;
-  height: 8px;
+  left: -5px;
+  top: -6px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  background: var(--wf-overdue);
+  background: var(--wf-coral);
 }
 
+/* ---- Job blocks ----
+   Status is carried by the fill and the bar down the left, not by a badge:
+   at a week's worth of blocks a badge is too small to read, and the fill is
+   the only thing that survives a glance. Scheduled is the quiet default -
+   the ones needing something done about them are the ones that stand out. */
 .calendar-job {
   position: absolute;
-  left: 3px;
-  right: 3px;
+  left: 5px;
+  right: 5px;
   /* Small enough that a half-hour job keeps its true length, big enough to
      still be a target you can get hold of. */
-  min-height: 30px;
-  /* Default = "scheduled" (coming up) - blue. */
-  background: #dbeafe;
-  color: #1e3a8a;
-  border-radius: var(--radius-sm);
-  padding: 4px 7px;
-  font-size: 11px;
-  line-height: 1.35;
+  min-height: 34px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: var(--wf-ash);
+  border-left: 3px solid var(--wf-steel);
+  border-radius: var(--wf-radius-sm);
+  padding: 9px 11px;
   cursor: pointer;
   overflow: hidden;
-  box-shadow: none;
-  border-left: 3px solid #1e40af;
   user-select: none;
   -webkit-user-select: none;
-  transition: box-shadow 0.15s ease, transform 0.15s ease;
+  transition: filter 0.15s ease, box-shadow 0.15s ease;
+}
+
+.calendar-job.compact {
+  padding: 8px;
+  gap: 2px;
 }
 
 .calendar-job:hover {
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-1px);
+  filter: brightness(0.97);
   z-index: 2;
 }
 
-.calendar-job.in_progress {
-  background: #ffedd5;
-  color: #7c2d12;
-  border-left-color: #c2410c;
+.calendar-job-time {
+  font-family: var(--wf-data);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  line-height: 1.25;
 }
 
+/* The shortest blocks fold time and client onto the single line they have. */
+.calendar-job-oneline {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calendar-job-client {
+  font-family: var(--wf-display);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calendar-job-staff {
+  font-family: var(--wf-data);
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calendar-job.compact .calendar-job-staff { font-size: 11px; }
+
+.calendar-job-pill {
+  margin-top: auto;
+  align-self: flex-start;
+}
+
+/* Completed */
 .calendar-job.completed {
-  background: #d1fae5;
-  color: #065f46;
-  border-left-color: #065f46;
-  opacity: 0.8;
+  background: var(--wf-verified-bg);
+  border-left-color: var(--wf-verified);
+}
+.calendar-job.completed .calendar-job-time,
+.calendar-job.completed .calendar-job-pill { color: var(--wf-verified-text); }
+
+/* On site. White, so the job happening right now is the only block on the
+   grid that isn't a tint. */
+.calendar-job.in_progress {
+  background: var(--wf-white);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--wf-graphite);
+}
+.calendar-job.in_progress .calendar-job-time { color: var(--ink); }
+.calendar-job.in_progress .calendar-job-staff {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink);
 }
 
+/* Missed */
 .calendar-job.missed {
-  background: #fee2e2;
-  color: #991b1b;
-  border-left-color: #991b1b;
+  background: var(--wf-overdue-bg);
+  border-left-color: var(--wf-overdue);
+}
+.calendar-job.missed .calendar-job-time { color: var(--wf-overdue); }
+
+/* Nobody assigned is the exception that matters most on a rota, so it takes
+   precedence over the job's own status: a dashed outline all the way round,
+   which reads as a gap in the week rather than as a filled slot. */
+.calendar-job.unassigned {
+  background: var(--wf-white);
+  border: 1px dashed var(--wf-overdue);
+}
+.calendar-job.unassigned .calendar-job-time,
+.calendar-job.unassigned .calendar-job-staff.is-unassigned,
+.calendar-job.unassigned .calendar-job-pill { color: var(--wf-overdue); }
+
+/* Scheduled blocks are ash, which is also the weekend column's ground - on
+   Saturday and Sunday they go white with a line so they still read as
+   blocks rather than as part of the column. */
+.calendar-day-col.weekend .calendar-job.scheduled:not(.unassigned) {
+  background: var(--wf-white);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--wf-steel);
 }
 
 .calendar-job.selected {
@@ -1625,13 +1888,9 @@ a.stat-card:focus-visible {
 /* Draggable blocks opt out of the browser's own touch scrolling - they have
    to, to be draggable at all - so the page pans the calendar by hand when a
    swipe starts on one. */
-.calendar-job.draggable {
-  cursor: grab;
-  touch-action: none;
-}
+.calendar-job.draggable { cursor: grab; touch-action: none; }
 
 .calendar-job.drag-pending {
-  transform: scale(1.035);
   box-shadow: var(--shadow-md);
   z-index: 5;
 }
@@ -1640,60 +1899,108 @@ a.stat-card:focus-visible {
   cursor: grabbing;
   z-index: 6;
   transition: none;
-  transform: scale(1.02);
   box-shadow: var(--shadow-md);
-  outline: 2px solid var(--wf-teal-ink);
+  outline: 2px solid var(--wf-graphite);
   outline-offset: -1px;
 }
 
-.calendar-job-time {
-  font-weight: 700;
-  letter-spacing: -0.01em;
+/* ---- Grouped clash block ----
+   One block for a run of jobs that share a slice of clock, listing each
+   start time. Drawn as separate bars they sit on top of each other and the
+   one underneath can't be read or clicked at all. */
+.calendar-clash {
+  position: absolute;
+  left: 5px;
+  right: 5px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: var(--wf-ash);
+  border-left: 3px solid var(--wf-steel);
+  border-radius: var(--wf-radius-sm);
+  padding: 8px 10px;
+  overflow: hidden;
 }
 
-/* The shortest blocks fold time and client onto the single line they have. */
-.calendar-job-oneline {
+.calendar-clash-head {
+  font-family: var(--wf-data);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Nobody assigned is the exception that matters most on a rota, so it shows
-   on the block's edge - short blocks have no room for the line of text that
-   used to be the only thing saying so. */
-.calendar-job.unassigned {
-  border-left-style: dashed;
+.calendar-clash-job {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.calendar-clash-job.draggable { cursor: grab; touch-action: none; }
+.calendar-clash-job:hover { background: rgba(32, 35, 39, 0.05); }
+
+.calendar-clash-job.selected,
+.calendar-clash-job.drag-pending {
+  outline: 2px solid var(--wf-graphite);
+  outline-offset: 1px;
+}
+
+.calendar-clash-time {
+  font-family: var(--wf-data);
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calendar-clash-client {
+  font-family: var(--wf-display);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calendar-clash-more {
+  font-family: var(--wf-data);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* The same cleaner booked twice over isn't a drawing problem, it's a
+   mistake - nobody can be at two properties at once - so it gets the
+   overdue colour rather than the neutral one. */
+.calendar-clash.is-double-booked {
+  background: var(--wf-overdue-bg);
   border-left-color: var(--wf-overdue);
 }
+.calendar-clash.is-double-booked .calendar-clash-head,
+.calendar-clash.is-double-booked .calendar-clash-time,
+.calendar-clash.is-double-booked .calendar-clash-more { color: var(--wf-overdue); }
 
-.calendar-job-staff.is-unassigned {
-  color: var(--wf-overdue);
-  font-weight: 700;
-  opacity: 1;
-}
-
-.calendar-job-client {
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.calendar-job-staff,
-.calendar-job-address {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  opacity: 0.82;
-}
-
+/* ---- Legend and footer ---- */
 .calendar-legend {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px 16px;
-  margin-bottom: 20px;
+  gap: 6px 18px;
+  font-family: var(--wf-data);
   font-size: 12px;
+  font-weight: 500;
   color: var(--muted);
 }
 
@@ -1704,33 +2011,52 @@ a.stat-card:focus-visible {
 }
 
 .calendar-legend-swatch {
-  width: 11px;
-  height: 11px;
+  width: 12px;
+  height: 12px;
   border-radius: 3px;
-  background: #dbeafe;
-  border-left: 3px solid #1e40af;
-  box-sizing: border-box;
+  background: var(--wf-ash);
+  flex-shrink: 0;
 }
 
-.calendar-legend-swatch.in_progress {
-  background: #ffedd5;
-  border-left-color: #c2410c;
+.calendar-legend-swatch.completed   { background: var(--wf-verified); }
+.calendar-legend-swatch.in_progress { background: var(--wf-graphite); }
+.calendar-legend-swatch.scheduled   { background: var(--wf-steel); }
+
+.calendar-legend-swatch.unassigned {
+  background: var(--wf-white);
+  border: 1px dashed var(--wf-overdue);
 }
 
-.calendar-legend-swatch.completed {
-  background: #d1fae5;
-  border-left-color: #065f46;
+.calendar-legend-swatch.clash {
+  background: var(--wf-overdue-bg);
+  box-shadow: inset 3px 0 0 var(--wf-overdue);
 }
 
-.calendar-legend-swatch.missed {
-  background: #fee2e2;
-  border-left-color: #991b1b;
+.calendar-foot {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  margin: 10px 0 20px;
 }
 
-.calendar-legend-hint {
+.calendar-foot-hint {
+  font-family: var(--wf-data);
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.calendar-foot-link {
   margin-left: auto;
-  font-style: italic;
+  white-space: nowrap;
+  font-family: var(--wf-display);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+  text-decoration: none;
 }
+
+.calendar-foot-link:hover { color: var(--wf-coral-dark); }
 
 @media (max-width: 720px) {
   .calendar-header,
@@ -1741,9 +2067,593 @@ a.stat-card:focus-visible {
   .calendar-scroll {
     max-height: 70vh;
   }
-  .calendar-legend-hint {
+  .calendar-foot {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .calendar-foot-link {
     margin-left: 0;
   }
+}
+
+/* ============================================
+   Cleaner job screen
+
+   The field screen: one-handed, outdoors, poor signal. Three regions that
+   never move - a graphite app bar at the top, the job in the middle, and
+   one primary action pinned above the nav where a thumb already is. Every
+   state shows exactly one coral button; if you can see two things to press,
+   one of them is wrong.
+   ============================================ */
+
+.visit-screen {
+  display: flex;
+  flex-direction: column;
+  /* Tall enough that the action bar sits at the foot of a short job rather
+     than halfway up the screen, minus the shell's own nav clearance. */
+  min-height: calc(100vh - 76px);
+}
+
+/* ---- App bar ---- */
+.visit-appbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--wf-graphite);
+  color: var(--wf-white);
+  /* Clears the status bar when this is running as an installed app, and
+     collapses to ordinary padding in a browser tab. */
+  padding: calc(env(safe-area-inset-top) + 16px) 18px 14px;
+}
+
+.visit-appbar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.visit-appbar-back {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  color: var(--wf-white);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.visit-appbar-back:hover { background: none; }
+
+.visit-appbar-title {
+  font-family: var(--wf-display);
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Green on graphite, because it's a live state rather than a label. */
+.visit-status-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  background: rgba(52, 199, 123, 0.16);
+  border-radius: var(--wf-radius-sm);
+  padding: 10px 12px;
+}
+
+.visit-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--wf-verified);
+  flex-shrink: 0;
+}
+
+.visit-status-time {
+  font-family: var(--wf-data);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #7BE3AE;
+}
+
+.visit-status-left {
+  margin-left: auto;
+  font-family: var(--wf-data);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.visit-status-left.is-over { color: #FF9C84; }
+
+/* ---- Body ---- */
+.visit-body {
+  flex: 1;
+  background: var(--wf-ash);
+  padding: 16px 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.visit-title-block { margin-bottom: 2px; }
+
+.visit-when {
+  font-family: var(--wf-data);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.visit-place {
+  font-family: var(--wf-display);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  margin: 4px 0 4px;
+}
+
+.visit-address {
+  font-family: var(--wf-data);
+  font-size: 15px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.visit-map {
+  position: relative;
+  height: 132px;
+  border-radius: var(--wf-radius);
+  overflow: hidden;
+}
+
+.visit-map > * { height: 100%; }
+
+.visit-map-chip {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 500;
+  background: var(--wf-white);
+  color: var(--ink);
+  font-family: var(--wf-data);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: var(--wf-radius-sm);
+  text-decoration: none;
+  box-shadow: var(--shadow-sm);
+}
+
+.visit-card {
+  background: var(--wf-white);
+  border-radius: var(--wf-radius);
+  padding: 14px 16px;
+}
+
+/* Rows that draw their own dividers do their own padding too. */
+.visit-card-flush { padding: 0; }
+
+.visit-card-label {
+  font-family: var(--wf-data);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* The one thing that decides whether someone gets through the door. */
+.visit-access { border-left: 3px solid var(--wf-coral); }
+
+.visit-access-body {
+  font-family: var(--wf-display);
+  font-size: 15px;
+  font-weight: 300;
+  line-height: 1.5;
+  margin: 6px 0 0;
+}
+
+.visit-task-preview {
+  font-family: var(--wf-display);
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 1.5;
+  color: var(--muted);
+  margin: 6px 0 0;
+}
+
+.visit-empty {
+  font-family: var(--wf-display);
+  font-size: 14px;
+  color: var(--muted);
+  padding: 16px;
+  margin: 0;
+}
+
+/* ---- Progress ---- */
+.visit-progress-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.visit-progress-count {
+  font-family: var(--wf-display);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.visit-progress-hint {
+  font-family: var(--wf-data);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.visit-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: #D8DCDF;
+  overflow: hidden;
+}
+
+.visit-progress-fill {
+  height: 100%;
+  background: var(--wf-verified);
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+
+/* ---- Task list ---- */
+/* The whole row is the target, not the circle - 24px is not something to
+   aim at outdoors with cold hands. */
+.visit-task {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--hairline);
+  border-radius: 0;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.visit-task:last-child { border-bottom: none; }
+.visit-task:hover { background: var(--wf-ash); }
+.visit-task:active { transform: none; }
+
+.visit-task-check {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--wf-steel);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--wf-white);
+  flex-shrink: 0;
+}
+
+.visit-task.is-done .visit-task-check {
+  background: var(--wf-verified);
+  border-color: var(--wf-verified);
+}
+
+.visit-task-text {
+  font-family: var(--wf-display);
+  font-size: 16px;
+  font-weight: 300;
+  line-height: 1.35;
+}
+
+.visit-task.is-done .visit-task-text {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+/* ---- Photos ---- */
+.visit-photo-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.visit-photo-add {
+  width: 66px;
+  height: 66px;
+  border: 1px dashed var(--wf-steel);
+  border-radius: var(--wf-radius-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.visit-photo-add span {
+  font-family: var(--wf-data);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.visit-photo-add input { display: none; }
+
+.visit-photo-thumb {
+  width: 66px;
+  height: 66px;
+  border-radius: var(--wf-radius-sm);
+  object-fit: cover;
+}
+
+.visit-photo-count {
+  font-family: var(--wf-data);
+  font-size: 13px;
+  color: var(--muted);
+  margin: 10px 0 0;
+}
+
+/* With no photos yet, the count's slot carries the warning instead - it is
+   the last moment anyone can do anything about it. */
+.visit-photo-warning {
+  font-family: var(--wf-data);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--wf-overdue);
+  background: var(--wf-overdue-bg);
+  border-radius: var(--wf-radius-sm);
+  padding: 8px 12px;
+  margin: 10px 0 0;
+}
+
+.visit-photos-label { margin-bottom: 8px; }
+
+.visit-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.visit-photo-grid img {
+  width: 100%;
+  height: 96px;
+  object-fit: cover;
+  border-radius: var(--wf-radius);
+}
+
+/* ---- Extension requests ---- */
+.visit-extension { margin-top: 10px; }
+
+.visit-extension-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.visit-extension-text {
+  font-family: var(--wf-display);
+  font-size: 14px;
+}
+
+.visit-extension-note {
+  font-family: var(--wf-data);
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* ---- Property checklist disclosure ---- */
+.visit-disclosure {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 16px;
+  background: none;
+  border: none;
+  border-radius: 0;
+  color: inherit;
+  font-family: var(--wf-display);
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.visit-disclosure:hover { background: var(--wf-ash); }
+.visit-disclosure svg { transition: transform 0.15s ease; }
+.visit-disclosure.is-open svg { transform: rotate(180deg); }
+
+.visit-checklist { padding: 0 16px 14px; }
+.visit-checklist-room { margin-bottom: 10px; }
+
+.visit-checklist-item {
+  font-family: var(--wf-display);
+  font-size: 14px;
+  font-weight: 300;
+  padding: 3px 0;
+}
+
+/* ---- Checked out ---- */
+.visit-done-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--wf-verified-bg);
+  border-radius: var(--wf-radius);
+  padding: 16px;
+}
+
+.visit-done-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--wf-verified);
+  color: var(--wf-white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.visit-done-title {
+  font-family: var(--wf-display);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--wf-verified-text);
+}
+
+.visit-done-sub {
+  font-family: var(--wf-data);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--wf-verified-text);
+}
+
+.visit-receipt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.visit-receipt:last-child { border-bottom: none; }
+
+.visit-receipt span {
+  font-family: var(--wf-display);
+  font-size: 16px;
+  font-weight: 300;
+}
+
+.visit-receipt strong {
+  font-family: var(--wf-data);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.visit-locked {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--muted);
+}
+
+.visit-locked svg { flex-shrink: 0; margin-top: 1px; }
+
+.visit-locked p {
+  font-family: var(--wf-data);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ---- Action bar ----
+   Sticky rather than fixed, so it sits in the page's own flow and can never
+   end up underneath the nav or the install prompt. */
+.visit-actions {
+  position: sticky;
+  bottom: calc(68px + env(safe-area-inset-bottom) + var(--wf-install-bar-h, 0px));
+  z-index: 30;
+  background: var(--wf-white);
+  border-top: 1px solid var(--hairline);
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.visit-action-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.visit-btn-primary {
+  flex: 1;
+  width: 100%;
+  min-height: 56px;
+  background: var(--wf-coral);
+  color: var(--wf-on-coral);
+  font-family: var(--wf-display);
+  font-size: 18px;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--wf-radius-sm);
+  cursor: pointer;
+  margin: 0;
+}
+
+.visit-btn-primary:hover:not(:disabled) { background: var(--wf-coral-dark); }
+.visit-btn-primary:disabled { background: var(--wf-steel); color: var(--wf-white); opacity: 0.6; }
+
+.visit-btn-secondary {
+  width: 100%;
+  min-height: 48px;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--wf-display);
+  font-size: 15px;
+  font-weight: 500;
+  border: 1px solid var(--hairline);
+  border-radius: var(--wf-radius-sm);
+  cursor: pointer;
+  margin: 0;
+}
+
+.visit-btn-secondary:hover { background: var(--wf-ash); }
+
+.visit-btn-narrow {
+  flex: none;
+  width: 132px;
+}
+
+.visit-action-help {
+  font-family: var(--wf-data);
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+  margin: 0;
+}
+
+.visit-action-error {
+  font-family: var(--wf-data);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--wf-overdue);
+  margin: 0;
+}
+
+/* The panic button floats where the action bar now lives, so on this screen
+   it moves up above it rather than sitting on top of the check-in button. */
+.cleaner-shell:has(.visit-screen) .emergency-fab {
+  bottom: calc(230px + env(safe-area-inset-bottom) + var(--wf-install-bar-h, 0px));
 }
 
 /* ---- Install to home screen (cleaner app) ---- */
@@ -2147,4 +3057,24 @@ a.btn-compact {
 .install-steps-done svg {
   flex-shrink: 0;
   color: var(--wf-verified);
+}
+
+/* ---- Auto check-out grace window (job page) ---- */
+/* Shown in place of the on-site status strip while a cleaner can still
+   walk back in - see withinAutoCheckoutGrace in lib/autoCheckout.js.
+   Deliberately not the coral of an action or the green of a finished
+   job: nothing has gone wrong and nothing is settled, it is a question. */
+.visit-resume {
+  background: var(--wf-white);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--wf-coral);
+  border-radius: var(--wf-radius);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.visit-resume-text {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
 }
