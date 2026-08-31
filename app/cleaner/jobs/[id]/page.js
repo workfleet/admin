@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { ChevronLeft, Camera, Lock, Check, ChevronDown } from 'lucide-react';
@@ -8,6 +8,16 @@ import { supabase } from '../../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../../lib/authGate';
 import { notify } from '../../../../lib/notify';
 import { distanceMeters, GEOFENCE_RADIUS_METERS } from '../../../../lib/geo';
+import {
+  INSIDE_PERSIST_INTERVAL_MS,
+  autoCheckoutTimestamp,
+  classifyFix,
+  closeCheckin,
+  markSeenInside,
+  nextDepartureState,
+  shouldAutoCheckOut,
+  withinAutoCheckoutGrace,
+} from '../../../../lib/autoCheckout';
 import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 
@@ -51,6 +61,7 @@ export default function JobDetailPage() {
   const [checkInError, setCheckInError] = useState('');
   const [checkingIn, setCheckingIn] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
+  const [resuming, setResuming] = useState(false);
   const [checklistItems, setChecklistItems] = useState([]);
   const [showChecklist, setShowChecklist] = useState(false);
   const [coverOffer, setCoverOffer] = useState(null);
@@ -73,6 +84,61 @@ export default function JobDetailPage() {
     const tick = setInterval(() => setNow(new Date()), 30000);
     return () => clearInterval(tick);
   }, []);
+
+  // Read inside the auto check-out path, which runs from a watch set up
+  // several renders earlier and would otherwise close over a stale count.
+  const photoCountRef = useRef(0);
+  photoCountRef.current = photos.length;
+
+  // Auto check-out. While this page is open on a job they're checked into,
+  // watch where they are and close the shift once they've actually left.
+  //
+  // This only covers the case where the app is still awake as they walk
+  // out - the web has no background geofencing, and a pocketed phone stops
+  // reporting within seconds of locking. Someone who locks their phone and
+  // drives off is caught instead by AutoCheckoutWatcher, next time they
+  // open the app. See lib/autoCheckout.js.
+  useEffect(() => {
+    const property = job?.properties;
+    if (!checkin || checkin.checked_out_at) return;
+    if (property?.lat == null || property?.lng == null) return;
+    if (!navigator.geolocation) return;
+
+    let state = { lastInsideAt: null, outsideSince: null };
+    let lastPersistedInside = 0;
+    let finished = false;
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (finished) return;
+        const now = new Date();
+        const where = classifyFix(
+          { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy },
+          property
+        );
+        state = nextDepartureState(state, where, now);
+
+        // Persisted as they work, so if this page dies the catch-up pass
+        // still knows roughly how long they were on site.
+        if (where === 'inside' && now - lastPersistedInside > INSIDE_PERSIST_INTERVAL_MS) {
+          lastPersistedInside = now;
+          markSeenInside(checkin.id, now.toISOString());
+        }
+
+        if (!shouldAutoCheckOut(state, checkin.checked_in_at, now)) return;
+        finished = true;
+        navigator.geolocation.clearWatch(watchId);
+        autoCheckOut(state.lastInsideAt);
+      },
+      // A refused or failed fix just means no auto check-out - they check
+      // out by hand as before, rather than being told something is wrong.
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 30000, timeout: 30000 }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkin?.id, checkin?.checked_out_at, job?.properties?.lat, job?.properties?.lng]);
 
   const loadJob = async () => {
     const session = await getSessionWithRetry();
@@ -260,6 +326,70 @@ export default function JobDetailPage() {
     toast.success('Checked out.');
   };
 
+  // Walking back in after the app decided they'd gone. Only ever offered
+  // for its own guesses - a cleaner who pressed Check Out made a decision,
+  // and that stands. resume_auto_checkout() re-checks all of this server
+  // side, since reopening the job means writing to a table cleaners can't.
+  const handleResume = async () => {
+    setCheckInError('');
+    setResuming(true);
+    const { lat, lng } = await getLocation();
+
+    // Deliberately the same test as checking in, fallback included: with
+    // no property coordinates or no fix, it just goes through. Getting
+    // back to where you already were shouldn't be harder than arriving.
+    const propertyLat = job.properties?.lat;
+    const propertyLng = job.properties?.lng;
+    if (propertyLat != null && propertyLng != null && lat != null && lng != null) {
+      const distance = distanceMeters(lat, lng, propertyLat, propertyLng);
+      if (distance > GEOFENCE_RADIUS_METERS) {
+        setCheckInError(`You're too far from this property to check back in (about ${Math.round(distance)}m away). Move closer and try again.`);
+        setResuming(false);
+        return;
+      }
+    }
+
+    const { data: outcome, error } = await supabase.rpc('resume_auto_checkout', { target_checkin_id: checkin.id });
+    setResuming(false);
+
+    if (error || (outcome !== 'ok' && outcome !== 'already_open')) {
+      // 'expired' is the one a cleaner can actually act on - it means the
+      // shift has settled and the office has to reopen it. The rest are
+      // states they can't have caused and can't fix from here.
+      toast.error(
+        outcome === 'expired'
+          ? "It's been too long since you were checked out to undo it - tell the office and they'll sort the hours."
+          : "Couldn't check you back in. Please try again."
+      );
+      await loadJob();
+      return;
+    }
+
+    await loadJob();
+    toast.success('Checked back in - carry on where you left off.');
+  };
+
+  // The automatic path skips the "no photos yet?" confirm that guards the
+  // manual button - there's nobody watching the screen to answer it. They
+  // get told afterwards instead, and told about the photos specifically,
+  // because that's the part of checking out they can't undo.
+  const autoCheckOut = async (observedDepartureAt) => {
+    const at = autoCheckoutTimestamp({ observedDepartureAt, checkin, job, now: new Date() });
+    const { closed } = await closeCheckin(checkin.id, at);
+    if (!closed) return; // they beat us to it by hand, or it failed - leave their time alone
+
+    setCheckin((c) => ({ ...c, checked_out_at: at, auto_checked_out: true, auto_checked_out_at: new Date().toISOString() }));
+    const { data: jobRow } = await supabase.from('jobs').select('status').eq('id', id).single();
+    if (jobRow) setJob((j) => ({ ...j, status: jobRow.status }));
+
+    const time = new Date(at).toLocaleTimeString();
+    toast.success(
+      photoCountRef.current === 0
+        ? `Checked out at ${time} - you've left the property. No photos were added and the job is now closed.`
+        : `Checked out at ${time} - you've left the property.`
+    );
+  };
+
   const submitExtensionRequest = async (e) => {
     e.preventDefault();
     const minutes = Number(requestMinutes);
@@ -393,8 +523,19 @@ export default function JobDetailPage() {
   // Also locks down once THIS cleaner has personally checked out, even if
   // the job as a whole is still in_progress because a teammate on the
   // same job hasn't checked out yet - their part is done either way.
-  const isHistory = job.status === 'completed' || !!checkin?.checked_out_at;
-  const onSite = !!checkin && !checkin.checked_out_at && !isHistory;
+  // A check-out normally makes the job read-only. An automatic one holds
+  // that off for the grace window, so a wrong guess costs them nothing:
+  // the shift is recorded as closed, but the photos and tasks they were
+  // in the middle of are still there when they walk back in. Computed at
+  // render, so the lock reappears on the next re-render after it lapses -
+  // it's an affordance, not a security boundary (RLS is that).
+  const resumable = withinAutoCheckoutGrace(checkin);
+  const isHistory = (job.status === 'completed' || !!checkin?.checked_out_at) && !resumable;
+  // The grace window renders as a variant of being on site rather than a
+  // fourth state: the job is still workable, which is the entire point of
+  // holding the lock off. Without the `resumable` limb here a cleaner in
+  // the window matches none of the three states and gets an empty page.
+  const onSite = !!checkin && (!checkin.checked_out_at || resumable) && !isHistory;
   const beforeCheckIn = !checkin && !isHistory;
 
   const placeName = job.properties?.clients?.name || job.properties?.address || 'This job';
@@ -424,7 +565,7 @@ export default function JobDetailPage() {
           <span className="visit-appbar-title">{placeName}</span>
         </div>
 
-        {onSite && (
+        {onSite && !resumable && (
           <div className="visit-status-strip">
             <span className="visit-status-dot" />
             <span className="visit-status-time">
@@ -520,9 +661,18 @@ export default function JobDetailPage() {
           </>
         )}
 
-        {/* ---- State 2: on site ---- */}
+        {/* ---- State 2: on site (and the auto check-out grace window) ---- */}
         {onSite && (
           <>
+            {resumable && (
+              <div className="visit-resume">
+                <div className="visit-resume-text">
+                  You were checked out automatically because you left the property. Still here?
+                  Check back in and carry on - your photos and tasks are as you left them.
+                </div>
+                {checkInError && <p className="visit-action-error">{checkInError}</p>}
+              </div>
+            )}
             <div className="visit-progress">
               <div className="visit-progress-head">
                 <span className="visit-progress-count">{doneTasks} of {tasks.length} done</span>
@@ -670,6 +820,7 @@ export default function JobDetailPage() {
                     <>
                       {clock(checkin.checked_in_at)} – {clock(checkin.checked_out_at)}
                       {' · '}{formatSpan((new Date(checkin.checked_out_at) - new Date(checkin.checked_in_at)) / 60000)} on site
+                      {checkin.auto_checked_out && ' · checked out automatically when you left'}
                     </>
                   ) : 'No check-in was recorded.'}
                 </div>
@@ -736,7 +887,13 @@ export default function JobDetailPage() {
           </>
         )}
 
-        {onSite && (
+        {onSite && resumable && (
+          <button type="button" className="visit-btn-primary" onClick={handleResume} disabled={resuming}>
+            {resuming ? 'Checking location...' : 'Check back in'}
+          </button>
+        )}
+
+        {onSite && !resumable && (
           <div className="visit-action-row">
             <button
               type="button"

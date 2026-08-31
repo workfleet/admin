@@ -6,11 +6,15 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test:rls": "node scripts/rls-smoke-test.js"
+    "test:rls": "node scripts/rls-smoke-test.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:schema": "node scripts/schema-drift-check.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",
     "@react-pdf/renderer": "^4.6.1",
+    "@sentry/nextjs": "^10.72.0",
     "@supabase/supabase-js": "^2.45.0",
     "docx": "^9.7.1",
     "exceljs": "^4.4.0",
@@ -21,5 +25,8 @@
     "react-dom": "18.3.1",
     "resend": "^6.19.0",
     "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.11"
   }
 }

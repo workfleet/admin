@@ -2,10 +2,14 @@
 
 import { useEffect } from 'react';
 import Link from 'next/link';
+import * as Sentry from '@sentry/nextjs';
 
 export default function GlobalError({ error, reset }) {
   useEffect(() => {
+    // console.error keeps this visible in local development; Sentry is what
+    // makes it visible when it happens to a cleaner on site at 7am.
     console.error(error);
+    Sentry.captureException(error);
   }, [error]);
 
   return (

@@ -175,7 +175,7 @@ export default function ClientDetail() {
     const { data } = jobIds.length > 0
       ? await supabase
           .from('checkins')
-          .select('id, job_id, checked_in_at, checked_out_at, profiles(full_name)')
+          .select('id, job_id, checked_in_at, checked_out_at, auto_checked_out, profiles(full_name)')
           .in('job_id', jobIds)
           .order('checked_in_at', { ascending: false })
       : { data: [] };
@@ -905,6 +905,7 @@ export default function ClientDetail() {
                 <div style={{ fontSize: 13, color: 'var(--muted)' }}>
                   Clocked in {new Date(c.checked_in_at).toLocaleTimeString()}
                   {c.checked_out_at ? ` · out ${new Date(c.checked_out_at).toLocaleTimeString()}` : ' · still on site'}
+                  {c.checked_out_at && c.auto_checked_out && ' (auto)'}
                 </div>
               </div>
             );

@@ -148,7 +148,7 @@ export default function CleanerProfile() {
 
     const { data: checkinsData } = await supabase
       .from('checkins')
-      .select('id, job_id, checked_in_at, checked_out_at, jobs(scheduled_at, properties(address))')
+      .select('id, job_id, checked_in_at, checked_out_at, auto_checked_out, jobs(scheduled_at, properties(address))')
       .eq('cleaner_id', id)
       .order('checked_in_at', { ascending: false });
 
@@ -634,6 +634,7 @@ export default function CleanerProfile() {
                   <div style={{ fontSize: 13, color: 'var(--muted)' }}>
                     Clocked in {new Date(c.checked_in_at).toLocaleTimeString()}
                     {c.checked_out_at ? ` · out ${new Date(c.checked_out_at).toLocaleTimeString()}` : ' · still on site'}
+                    {c.checked_out_at && c.auto_checked_out && ' (auto - left the geofence)'}
                   </div>
                 </div>
               );

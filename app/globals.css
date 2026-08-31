@@ -1984,11 +1984,33 @@ a.stat-card.is-alert:hover {
   text-overflow: ellipsis;
 }
 
+/* The overflow line is a button, not a label. Three entries is all a block
+   sized by the clock can hold, and the jobs past that were unreachable -
+   nothing else on the rota lists them. */
 .calendar-clash-more {
   font-family: var(--wf-data);
   font-size: 10px;
   font-weight: 600;
   color: var(--muted);
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 2px 0 0;
+  margin-top: auto;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.calendar-clash-more:hover { color: var(--ink); }
+
+/* Opened out, the block is as tall as its list and sits above the blocks
+   either side of it rather than being clipped by its own hour. */
+.calendar-clash.is-expanded {
+  z-index: 3;
+  height: auto;
+  box-shadow: var(--shadow-md);
 }
 
 /* The same cleaner booked twice over isn't a drawing problem, it's a
@@ -3067,4 +3089,24 @@ a.btn-compact {
 .install-steps-done svg {
   flex-shrink: 0;
   color: var(--wf-verified);
+}
+
+/* ---- Auto check-out grace window (job page) ---- */
+/* Shown in place of the on-site status strip while a cleaner can still
+   walk back in - see withinAutoCheckoutGrace in lib/autoCheckout.js.
+   Deliberately not the coral of an action or the green of a finished
+   job: nothing has gone wrong and nothing is settled, it is a question. */
+.visit-resume {
+  background: var(--wf-white);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--wf-coral);
+  border-radius: var(--wf-radius);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.visit-resume-text {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
 }
