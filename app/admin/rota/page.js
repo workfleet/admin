@@ -157,10 +157,11 @@ export default function AdminRota() {
   // in refs so a re-render can't hand them a stale gesture.
   const [drag, setDrag] = useState(null);
   const [pendingJobId, setPendingJobId] = useState(null);
-  // Which overlap block has been opened out to show every job in it. Only
-  // one at a time - two expanded blocks in neighbouring columns overlap
-  // each other and put us back where we started.
-  const [expandedGroupId, setExpandedGroupId] = useState(null);
+  // Which overlap block has been opened out to show every job in it, and
+  // which day it is on - opening one widens that column, so the grid needs
+  // to know as well as the block. Only one at a time: two expanded blocks
+  // can't both have the width.
+  const [expanded, setExpanded] = useState(null);
   // A job id arrived in the URL and its modal hasn't been opened yet - the
   // week it belongs to has to load first.
   const [openJobId, setOpenJobId] = useState(null);
@@ -230,16 +231,16 @@ export default function AdminRota() {
   // clearing, so a stray keypress can't bin a half-filled job - discarding is
   // what the Cancel button is for.
   useEffect(() => {
-    if (!showForm && !selectedJob && !expandedGroupId) return undefined;
+    if (!showForm && !selectedJob && !expanded) return undefined;
     const onKey = (e) => {
       if (e.key !== 'Escape') return;
       if (selectedJob) setSelectedJob(null);
       else if (showForm) setShowForm(false);
-      else setExpandedGroupId(null);
+      else setExpanded(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [showForm, selectedJob, expandedGroupId]);
+  }, [showForm, selectedJob, expanded]);
 
   useEffect(() => {
     setNow(new Date());
@@ -1094,6 +1095,23 @@ export default function AdminRota() {
 
   const weekLabel = `${weekStart.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${addDays(weekStart, 6).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`;
 
+  // Seven equal columns give a day about 200px, and four jobs abreast in
+  // 200px is 50px a card - which is a start time and two letters of the
+  // client. So an opened day takes four columns' worth of the width and the
+  // other six give it up. They stay on screen and stay clickable: the week
+  // is the thing being read, and losing it to see one day of it would be a
+  // poor trade. Header and body share this so they can't fall out of line.
+  // How much wider depends on how bad the pile-up is: three jobs abreast
+  // need a third of the week, six need half of it. Floored at three so
+  // opening a run is always worth the click, and capped at six so the other
+  // days stay wide enough to still read as days.
+  const expandedWeight = Math.min(6, Math.max(3, expanded?.lanes || 3));
+  const columnTemplate = expanded
+    ? `60px ${Array.from({ length: 7 }, (_, i) => (
+      `minmax(0, ${i === expanded.dayIndex ? expandedWeight : 1}fr)`
+    )).join(' ')}`
+    : undefined;
+
   const availableToAdd = selectedJob
     ? cleaners.filter((c) => !(selectedJob.job_assignments || []).some((a) => a.cleaner_id === c.id))
     : [];
@@ -1188,18 +1206,18 @@ export default function AdminRota() {
   // one underneath can't be read or clicked at all. The same cleaner twice
   // over isn't a drawing problem but a mistake, so that block turns red and
   // names whose diary is clashing.
-  const renderClashBlock = (group) => {
+  const renderClashBlock = (group, dayIndex) => {
     const startMinutes = group.start.getHours() * 60 + group.start.getMinutes();
     const top = Math.max(0, (startMinutes / 60 - START_HOUR) * HOUR_HEIGHT);
     const span = ((group.end - group.start) / 3600000) * HOUR_HEIGHT;
-    const expanded = expandedGroupId === group.id;
+    const isOpen = expanded?.id === group.id;
 
     // Opened out, the group stops being a list and goes back on the clock:
     // each job at its own start time, at its own length, in a lane beside
     // the ones it shares an hour with. That is the view the block was
     // standing in for - the list only exists because bars drawn straight
     // onto the clock would cover one another.
-    if (expanded) {
+    if (isOpen) {
       const { lanes, placed } = assignLanes(group.jobs);
       return (
         <Fragment key={group.id}>
@@ -1207,7 +1225,7 @@ export default function AdminRota() {
             type="button"
             className={`calendar-clash-collapse${group.doubleBooked ? ' is-double-booked' : ''}`}
             style={{ top: Math.max(0, top - 15) }}
-            onClick={() => setExpandedGroupId(null)}
+            onClick={() => setExpanded(null)}
             title="Close these back into one block"
           >
             {group.doubleBooked
@@ -1275,7 +1293,7 @@ export default function AdminRota() {
             type="button"
             className="calendar-clash-more"
             aria-expanded={false}
-            onClick={() => setExpandedGroupId(group.id)}
+            onClick={() => setExpanded({ id: group.id, dayIndex, lanes: assignLanes(group.jobs).lanes })}
             title="Put every job in this overlap back on the clock"
           >
             +{group.jobs.length - shown.length} more
@@ -1337,7 +1355,7 @@ export default function AdminRota() {
             (or a sideways scroll on a phone) would pull them out of line
             with the columns underneath. */}
         <div className="calendar-scroll" ref={calendarScrollRef}>
-          <div className="calendar-header">
+          <div className="calendar-header" style={{ gridTemplateColumns: columnTemplate }}>
             <div className="calendar-hour-col" />
             {weekDays.map((day, i) => {
               const isToday = day.toDateString() === todayKey;
@@ -1357,7 +1375,7 @@ export default function AdminRota() {
             })}
           </div>
 
-          <div className="calendar-body" style={{ height: (END_HOUR - START_HOUR) * HOUR_HEIGHT }}>
+          <div className="calendar-body" style={{ height: (END_HOUR - START_HOUR) * HOUR_HEIGHT, gridTemplateColumns: columnTemplate }}>
             <div className="calendar-hour-col">
               {hourSlots.map((h) => (
                 <div key={h} className="calendar-hour-label" style={{ height: HOUR_HEIGHT }}>
@@ -1398,7 +1416,7 @@ export default function AdminRota() {
                 )}
 
                 {groups.map((group) => (
-                  group.jobs.length === 1 ? renderJobCard(group.jobs[0]) : renderClashBlock(group)
+                  group.jobs.length === 1 ? renderJobCard(group.jobs[0]) : renderClashBlock(group, i)
                 ))}
 
                 {draggedJob && drag.dayIndex === i && renderJobCard(draggedJob, true)}
