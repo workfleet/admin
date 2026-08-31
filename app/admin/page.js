@@ -144,7 +144,7 @@ export default function AdminDashboard() {
   const [payrollPeriod, setPayrollPeriod] = useState('this_week');
   const [payrollLoading, setPayrollLoading] = useState(true);
   const [payrollRows, setPayrollRows] = useState([]);
-  const [payrollTotals, setPayrollTotals] = useState({ completedHours: 0, totalHours: 0 });
+  const [payrollTotals, setPayrollTotals] = useState({ completedHours: 0, totalHours: 0, missedHours: 0, pendingClaims: 0 });
 
   useEffect(() => {
     loadDashboard();
@@ -177,9 +177,15 @@ export default function AdminDashboard() {
     const totals = {};
     let totalMinutes = 0;
     let completedMinutes = 0;
+    // Hours in this period that nobody clocked into. They sit inside
+    // "Scheduled" and never move to "Completed", so before this they showed
+    // up as "Remaining" - which reads as work still to come, right up until
+    // the period is a fortnight in the past and it plainly isn't.
+    let missedMinutes = 0;
     (allRows || []).forEach((row) => {
       const shareMinutes = (row.jobs.duration_minutes || 0) / assigneeCounts[row.jobs.id];
       totalMinutes += shareMinutes;
+      if (row.jobs.status === 'missed') missedMinutes += shareMinutes;
       if (row.jobs.status === 'completed') {
         completedMinutes += shareMinutes;
         const key = row.cleaner_id;
@@ -189,8 +195,21 @@ export default function AdminDashboard() {
       }
     });
 
+    // Claims waiting on a decision. Separate from the missed figure on
+    // purpose: these are hours somebody has already put their hand up for,
+    // and the only thing between them and payroll is an admin clicking.
+    const { count: pendingClaims } = await supabase
+      .from('missed_clockin_claims')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'pending');
+
     setPayrollRows(Object.values(totals).sort((a, b) => b.minutes - a.minutes));
-    setPayrollTotals({ completedHours: completedMinutes / 60, totalHours: totalMinutes / 60 });
+    setPayrollTotals({
+      completedHours: completedMinutes / 60,
+      totalHours: totalMinutes / 60,
+      missedHours: missedMinutes / 60,
+      pendingClaims: pendingClaims || 0,
+    });
     setPayrollLoading(false);
   };
 
@@ -207,6 +226,18 @@ export default function AdminDashboard() {
     // Auto-marks overdue jobs missed/completed based on elapsed time,
     // same as the Rota page, so Today's Jobs stays consistent with it.
     await supabase.rpc('reconcile_job_statuses');
+
+    // Nudge anyone who's started a shift without clocking in. Vercel Cron
+    // runs this every 15 minutes (vercel.json), which is the path that
+    // actually matters - a nudge is only worth sending while they're still
+    // on site. This piggyback is the fallback for a plan that won't run
+    // crons that often, and follows the same lazy-sweep reasoning as
+    // reconcile_job_statuses above. The route is idempotent per job
+    // (jobs.clockin_nudge_sent_at), so both firing costs nothing.
+    fetch('/api/admin/clockin-nudge', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    }).catch(() => {}); // best-effort: never hold up the dashboard for it
 
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
@@ -648,6 +679,27 @@ export default function AdminDashboard() {
                 <span>Remaining</span>
               </div>
             </div>
+            {/* The figure that decides whether this panel is telling the
+                truth. Hours nobody clocked into are paid as zero, so a
+                period showing them is a period whose "Completed" total is
+                short by that much until someone deals with it. */}
+            {!payrollLoading && (payrollTotals.missedHours > 0 || payrollTotals.pendingClaims > 0) && (
+              <Link
+                href="/admin/requests"
+                className="dash-row"
+                style={{ textDecoration: 'none', color: 'inherit', borderTop: '1px solid var(--hairline)', marginTop: 8, paddingTop: 10 }}
+              >
+                <span className="dash-person" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span className="dash-glance-dot" style={{ background: 'var(--wf-overdue)' }} />
+                  {payrollTotals.missedHours > 0
+                    ? 'Nobody clocked in'
+                    : `${payrollTotals.pendingClaims} claim${payrollTotals.pendingClaims === 1 ? '' : 's'} to confirm`}
+                </span>
+                <strong className="dash-person-hours">
+                  {payrollTotals.missedHours > 0 ? `${payrollTotals.missedHours.toFixed(1)}h` : 'Review'}
+                </strong>
+              </Link>
+            )}
             {!payrollLoading && payrollRows.slice(0, 4).map((r) => (
               <div key={r.name} className="dash-row dash-row-quiet">
                 <span className="dash-person">{r.name}</span>

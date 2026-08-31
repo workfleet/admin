@@ -18,6 +18,11 @@ import {
   shouldAutoCheckOut,
   withinAutoCheckoutGrace,
 } from '../../../../lib/autoCheckout';
+import {
+  claimWindowError,
+  defaultClaimWindow,
+  isClaimableMissedJob,
+} from '../../../../lib/missedClockin';
 import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 
@@ -35,6 +40,25 @@ function formatSpan(totalMinutes) {
   if (h === 0) return `${m}m`;
   if (m === 0) return `${h}h`;
   return `${h}h ${String(m).padStart(2, '0')}m`;
+}
+
+// <input type="time"> wants "HH:MM" in the phone's own timezone, which is
+// also the timezone the cleaner read the shift time off the rota in.
+function timeValue(date) {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+// A time typed against the day the job was booked for. A finish earlier in
+// the clock than the start is a shift that ran past midnight, not a typo -
+// commercial work does that - so it rolls onto the next day rather than
+// being rejected.
+function dateAtTime(baseDate, value, { rollPastMidnightFrom } = {}) {
+  const [hours, minutes] = (value || '').split(':').map(Number);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return null;
+  const result = new Date(baseDate);
+  result.setHours(hours, minutes, 0, 0);
+  if (rollPastMidnightFrom && result <= rollPastMidnightFrom) result.setDate(result.getDate() + 1);
+  return result;
 }
 
 const EXTENSION_PILL = {
@@ -69,6 +93,15 @@ export default function JobDetailPage() {
   const [coverReason, setCoverReason] = useState('');
   const [submittingCover, setSubmittingCover] = useState(false);
   const [nextJob, setNextJob] = useState(null);
+  // Putting right a shift they worked but never clocked into. See
+  // lib/missedClockin.js and migration 0076 for why this exists at all.
+  const [claim, setClaim] = useState(null);
+  const [showClaimForm, setShowClaimForm] = useState(false);
+  const [claimFrom, setClaimFrom] = useState('');
+  const [claimTo, setClaimTo] = useState('');
+  const [claimReason, setClaimReason] = useState('');
+  const [claimError, setClaimError] = useState('');
+  const [submittingClaim, setSubmittingClaim] = useState(false);
   // Starts null so the server and the first client render agree - the
   // on-site timer only starts once we're on the client.
   const [now, setNow] = useState(null);
@@ -191,6 +224,18 @@ export default function JobDetailPage() {
       .eq('status', 'open')
       .maybeSingle();
 
+    // Newest first rather than maybeSingle: a declined claim doesn't block a
+    // corrected one (0076's unique index only covers pending), so there can
+    // legitimately be more than one and the latest is the one they're owed
+    // an answer about.
+    const { data: claimData } = await supabase
+      .from('missed_clockin_claims')
+      .select('*')
+      .eq('job_id', id)
+      .eq('cleaner_id', session.user.id)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
     // What to send them to once this one is finished. Without it the end of
     // a job is a dead end and they go hunting through the rota for the next.
     const { data: nextData } = await supabase
@@ -210,6 +255,15 @@ export default function JobDetailPage() {
     setChecklistItems(checklistData || []);
     setCoverOffer(offerData || null);
     setNextJob(nextData?.[0]?.jobs || null);
+    setClaim(claimData?.[0] || null);
+
+    // Prefilled from the booked times, which is the right answer on nearly
+    // every claim - they still have to look at it and can change it.
+    if (jobData) {
+      const { from, to } = defaultClaimWindow(jobData);
+      setClaimFrom(timeValue(from));
+      setClaimTo(timeValue(to));
+    }
   };
 
   // photos.url stores the job-photos storage path (not a public URL) since
@@ -367,6 +421,63 @@ export default function JobDetailPage() {
 
     await loadJob();
     toast.success('Checked back in - carry on where you left off.');
+  };
+
+  // Telling the office they worked a shift the app has written off. This
+  // pays nothing on its own - an admin has to approve it (0076) - so it
+  // deliberately promises no more than "we've asked".
+  const handleSubmitClaim = async () => {
+    setClaimError('');
+
+    const base = new Date(job.scheduled_at);
+    const from = dateAtTime(base, claimFrom);
+    const to = dateAtTime(base, claimTo, { rollPastMidnightFrom: from });
+    const problem = claimWindowError({ from, to });
+    if (problem) { setClaimError(problem); return; }
+
+    setSubmittingClaim(true);
+    const { data, error } = await supabase
+      .from('missed_clockin_claims')
+      .insert({
+        job_id: id,
+        cleaner_id: userId,
+        worked_from: from.toISOString(),
+        worked_to: to.toISOString(),
+        reason: claimReason.trim() || null,
+      })
+      .select()
+      .single();
+    setSubmittingClaim(false);
+
+    if (error) {
+      // The insert policy is the only thing that knows whether this job is
+      // still claimable, so a refusal here usually means it stopped being
+      // one while the form was open - somebody else on the job clocked in,
+      // or an admin fixed it. Reloading shows them the state that won.
+      setClaimError("Couldn't send that to the office. Pull down to refresh and try again.");
+      await loadJob();
+      return;
+    }
+
+    setClaim(data);
+    setShowClaimForm(false);
+
+    // The trigger in 0076 already puts this in the admin notification feed.
+    // This is the push and the email on top, because the feed only helps
+    // somebody who opens the app, and an unapproved claim quietly turns into
+    // an unpaid shift the moment payroll runs.
+    const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', userId).single();
+    notify({
+      type: 'missed_clockin_claimed',
+      jobId: id,
+      cleanerName: profile?.full_name || 'A cleaner',
+      address: job.properties?.address,
+      scheduledAt: job.scheduled_at,
+      reason: claimReason.trim() || null,
+    });
+
+    setClaimReason('');
+    toast.success("Sent to the office - they'll confirm your hours.");
   };
 
   // The automatic path skips the "no photos yet?" confirm that guards the
@@ -538,6 +649,21 @@ export default function JobDetailPage() {
   const onSite = !!checkin && (!checkin.checked_out_at || resumable) && !isHistory;
   const beforeCheckIn = !checkin && !isHistory;
 
+  // A job whose time has run out with no check-in against it. Not a fourth
+  // state - it's still beforeCheckIn, and Check In stays the primary action,
+  // because turning up late is far commoner than forgetting entirely and a
+  // real clock-in is always the better record. This only adds a second way
+  // out for the cleaner who has already gone home. A pending claim hides the
+  // offer: they've asked, and asking twice is not a thing to invite.
+  // Gated on `now` rather than reading the clock inline: half of what makes
+  // a job claimable is that its time has run out, which the server can't
+  // agree with the client about. Same reason the on-site timer waits.
+  const jobTimePassed = !!now && isClaimableMissedJob(job, now);
+  const canClaimMissed = jobTimePassed
+    && beforeCheckIn
+    && claim?.status !== 'pending'
+    && claim?.status !== 'approved';
+
   const placeName = job.properties?.clients?.name || job.properties?.address || 'This job';
   const scheduled = new Date(job.scheduled_at);
   const duration = job.duration_minutes || 120;
@@ -657,6 +783,87 @@ export default function JobDetailPage() {
                   {submittingCover ? 'Sending...' : 'Request cover'}
                 </button>
               </form>
+            )}
+
+            {/* Says out loud what the rota has quietly decided. Without this
+                the only sign that a worked shift is about to go unpaid is a
+                job that looks the same as any other and a total on the hours
+                page that is short - which nobody spots until payday. */}
+            {jobTimePassed && !claim && (
+              <div className="visit-card">
+                <div className="visit-card-label">Nobody clocked in</div>
+                <p className="visit-task-preview">
+                  This shift's booked time has passed with no clock-in against it, so it
+                  won't count towards your hours or your holiday. If you worked it, tell
+                  the office below and they'll put it right.
+                </p>
+              </div>
+            )}
+
+            {claim?.status === 'pending' && (
+              <div className="visit-card">
+                <div className="visit-card-label">With the office</div>
+                <p className="visit-task-preview">
+                  You've told the office you worked {clock(claim.worked_from)} – {clock(claim.worked_to)}
+                  {' '}on this shift. It doesn't count towards your hours until they confirm it —
+                  you'll get a notification either way.
+                </p>
+              </div>
+            )}
+
+            {claim?.status === 'declined' && (
+              <div className="visit-card">
+                <div className="visit-card-label">Not confirmed</div>
+                <p className="visit-task-preview">
+                  The office didn't confirm this shift{claim.admin_note ? ` — "${claim.admin_note}"` : '.'}
+                  {' '}If that's not right, message them.
+                </p>
+              </div>
+            )}
+
+            {showClaimForm && canClaimMissed && (
+              <div className="visit-card">
+                <div className="visit-card-label">What did you actually work?</div>
+                <p className="visit-task-preview">
+                  Filled in from the booked times — change them if the day ran differently.
+                  An admin has to confirm this before it counts.
+                </p>
+                <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+                  <label style={{ flex: 1, fontSize: 13 }}>
+                    Started
+                    <input
+                      type="time"
+                      value={claimFrom}
+                      onChange={(e) => setClaimFrom(e.target.value)}
+                      style={{ width: '100%' }}
+                    />
+                  </label>
+                  <label style={{ flex: 1, fontSize: 13 }}>
+                    Finished
+                    <input
+                      type="time"
+                      value={claimTo}
+                      onChange={(e) => setClaimTo(e.target.value)}
+                      style={{ width: '100%' }}
+                    />
+                  </label>
+                </div>
+                <input
+                  value={claimReason}
+                  onChange={(e) => setClaimReason(e.target.value)}
+                  placeholder="What happened? (optional)"
+                  style={{ marginTop: 10 }}
+                />
+                {claimError && <p className="visit-action-error">{claimError}</p>}
+                <button
+                  type="button"
+                  className="visit-btn-secondary"
+                  onClick={handleSubmitClaim}
+                  disabled={submittingClaim}
+                >
+                  {submittingClaim ? 'Sending...' : 'Send to the office'}
+                </button>
+              </div>
             )}
           </>
         )}
@@ -878,10 +1085,21 @@ export default function JobDetailPage() {
             <button type="button" className="visit-btn-primary" onClick={handleCheckIn} disabled={checkingIn}>
               {checkingIn ? 'Checking location...' : 'Check in'}
             </button>
-            <p className="visit-action-help">Your location is checked — you need to be at the property.</p>
-            {!coverOffer && (
+            <p className="visit-action-help">
+              {jobTimePassed
+                ? "Still here? Check in — it's never too late to start the clock."
+                : 'Your location is checked — you need to be at the property.'}
+            </p>
+            {/* Offering to release a shift that has already been and gone is
+                nonsense, and the wrong door for someone who worked it. */}
+            {!coverOffer && !jobTimePassed && (
               <button type="button" className="visit-btn-secondary" onClick={() => setShowCoverForm((v) => !v)}>
                 {showCoverForm ? 'Cancel' : "Can't make this shift"}
+              </button>
+            )}
+            {canClaimMissed && (
+              <button type="button" className="visit-btn-secondary" onClick={() => setShowClaimForm((v) => !v)}>
+                {showClaimForm ? 'Cancel' : 'I worked this — I forgot to clock in'}
               </button>
             )}
           </>

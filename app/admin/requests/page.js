@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
+import { formatHours } from '../../../lib/hoursWorked';
 import { respondToEmergencyAlert } from '../../../lib/emergencyRespond';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
@@ -22,7 +23,7 @@ export default function AdminRequests() {
   const router = useRouter();
   const confirm = useConfirm();
   const toast = useToast();
-  const [section, setSection] = useState('requests'); // requests | timeoff | extensions | reschedules | clientRequests | pauses | emergencies
+  const [section, setSection] = useState('requests'); // requests | timeoff | extensions | missedClockins | reschedules | clientRequests | pauses | emergencies
   const [loading, setLoading] = useState(true);
   const [holidayBalances, setHolidayBalances] = useState({}); // cleanerId -> accrued hours
 
@@ -68,6 +69,15 @@ export default function AdminRequests() {
   const [decidingPauseId, setDecidingPauseId] = useState(null);
   const [pauseAdminNote, setPauseAdminNote] = useState('');
 
+  // missed clock-in claims - a cleaner saying they worked a shift the app
+  // has written off as missed. Until one of these is approved the hours are
+  // simply absent from payroll, so this queue is the one with a deadline on
+  // it: whatever is still pending on pay day gets paid as nothing.
+  const [missedClockins, setMissedClockins] = useState([]);
+  const [missedClockinFilter, setMissedClockinFilter] = useState('pending'); // pending | decided | all
+  const [decidingMissedClockinId, setDecidingMissedClockinId] = useState(null);
+  const [missedClockinNote, setMissedClockinNote] = useState('');
+
   // emergency alert log
   const [emergencies, setEmergencies] = useState([]);
   const [emergencyFilter, setEmergencyFilter] = useState('all'); // open | acknowledged | all
@@ -81,7 +91,7 @@ export default function AdminRequests() {
     const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
-    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, { data: assignmentsData }, { data: extensionsData }, { data: reschedulesData }, { data: clientRequestsData }, { data: pausesData }, { data: emergenciesData }] = await Promise.all([
+    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, { data: assignmentsData }, { data: extensionsData }, { data: reschedulesData }, { data: clientRequestsData }, { data: pausesData }, { data: emergenciesData }, { data: missedClockinData }] = await Promise.all([
       supabase
         .from('staff_requests')
         .select('id, type, description, status, created_at, resolved_at, resolution_note, resolved_by, cleaner_id, profiles!staff_requests_cleaner_id_fkey(full_name), resolver:profiles!staff_requests_resolved_by_fkey(full_name), jobs(scheduled_at, properties(address))')
@@ -112,6 +122,10 @@ export default function AdminRequests() {
         .from('emergency_alerts')
         .select('id, status, created_at, lat, lng, checkin_at, cleaner_id, acknowledged_by, acknowledged_at, profiles!emergency_alerts_cleaner_id_fkey(full_name), acknowledger:profiles!emergency_alerts_acknowledged_by_fkey(full_name)')
         .order('created_at', { ascending: false }),
+      supabase
+        .from('missed_clockin_claims')
+        .select('id, job_id, worked_from, worked_to, reason, status, admin_note, created_at, cleaner_id, profiles!missed_clockin_claims_cleaner_id_fkey(full_name), decider:profiles!missed_clockin_claims_decided_by_fkey(full_name), jobs(scheduled_at, duration_minutes, status, properties(address, clients(name)), job_assignments(cleaner_id))')
+        .order('created_at', { ascending: false }),
     ]);
 
     // A job's duration is split evenly across everyone assigned to it.
@@ -136,6 +150,7 @@ export default function AdminRequests() {
     setClientRequests(clientRequestsData || []);
     setPauses(pausesData || []);
     setEmergencies(emergenciesData || []);
+    setMissedClockins(missedClockinData || []);
     setLoading(false);
   };
 
@@ -424,6 +439,64 @@ export default function AdminRequests() {
     setDecidingRescheduleId(null);
   };
 
+  const startDecideMissedClockin = (id) => {
+    setDecidingMissedClockinId(id);
+    setMissedClockinNote('');
+  };
+
+  // Approving writes a self-declared check-in row AND flips the job to
+  // completed, neither of which an admin session can do directly - jobs.status
+  // is never written by hand anywhere in this app, and checkins belong to the
+  // cleaner. So the whole decision goes through decide_missed_clockin_claim()
+  // (0076) rather than being assembled from three updates here, where a
+  // half-applied approval would leave a claim marked approved against a job
+  // still paying nothing.
+  const confirmDecideMissedClockin = async (id, decision) => {
+    const target = missedClockins.find((c) => c.id === id);
+    if (!target) return;
+
+    const { data: outcome, error } = await supabase.rpc('decide_missed_clockin_claim', {
+      target_claim_id: id,
+      decision,
+      note: missedClockinNote.trim() || null,
+    });
+
+    if (error || outcome !== 'ok') {
+      toast.error(
+        outcome === 'already_decided'
+          ? 'Someone else has already dealt with this one.'
+          : 'Could not save that decision. Please try again.'
+      );
+      setDecidingMissedClockinId(null);
+      await load();
+      return;
+    }
+
+    notify({
+      type: 'missed_clockin_decided',
+      cleanerId: target.cleaner_id,
+      decision,
+      address: target.jobs?.properties?.address,
+      scheduledAt: target.jobs?.scheduled_at,
+      note: missedClockinNote.trim() || null,
+    });
+
+    toast.success(
+      decision === 'approved'
+        ? 'Approved — the shift now counts towards their pay and holiday.'
+        : 'Declined.'
+    );
+    setDecidingMissedClockinId(null);
+    await load();
+  };
+
+  const filteredMissedClockins = missedClockins.filter((c) => {
+    if (missedClockinFilter === 'all') return true;
+    if (missedClockinFilter === 'pending') return c.status === 'pending';
+    return c.status !== 'pending';
+  });
+  const pendingMissedClockinCount = missedClockins.filter((c) => c.status === 'pending').length;
+
   const filteredReschedules = reschedules.filter((r) => {
     if (rescheduleFilter === 'all') return true;
     if (rescheduleFilter === 'pending') return r.status === 'pending';
@@ -472,6 +545,9 @@ export default function AdminRequests() {
           </button>
           <button className={section === 'extensions' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('extensions')}>
             Time Extensions ({pendingExtensionCount})
+          </button>
+          <button className={section === 'missedClockins' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('missedClockins')}>
+            Missed Clock-ins ({pendingMissedClockinCount})
           </button>
           <button className={section === 'reschedules' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('reschedules')}>
             Reschedules ({pendingRescheduleCount})
@@ -716,6 +792,101 @@ export default function AdminRequests() {
                 )}
               </div>
             ))}
+          </div>
+        </>
+      )}
+
+      {section === 'missedClockins' && (
+        <>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <button className={missedClockinFilter === 'pending' ? 'btn-primary' : 'btn-secondary'} onClick={() => setMissedClockinFilter('pending')}>Pending</button>
+            <button className={missedClockinFilter === 'decided' ? 'btn-primary' : 'btn-secondary'} onClick={() => setMissedClockinFilter('decided')}>Decided</button>
+            <button className={missedClockinFilter === 'all' ? 'btn-primary' : 'btn-secondary'} onClick={() => setMissedClockinFilter('all')}>All</button>
+          </div>
+
+          <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 16px' }}>
+            A shift nobody clocked into pays nothing and earns no holiday. Approving one
+            records it as worked and puts the hours back; anything still pending on pay day
+            is paid as zero.
+          </p>
+
+          {filteredMissedClockins.length === 0 && <p className="empty-state">Nothing here.</p>}
+
+          <div className="job-list">
+            {filteredMissedClockins.map((c) => {
+              const booked = c.jobs?.scheduled_at ? new Date(c.jobs.scheduled_at) : null;
+              const bookedMinutes = c.jobs?.duration_minutes || 120;
+              const claimedMinutes = (new Date(c.worked_to) - new Date(c.worked_from)) / 60000;
+              // What the office is actually being asked to sign off. Hours are
+              // split across everyone assigned, so this is the figure that
+              // reaches one person's payslip - not the job's full duration.
+              const assignees = (c.jobs?.job_assignments || []).length || 1;
+              const payableHours = bookedMinutes / assignees / 60;
+              return (
+                <div key={c.id} className="card job-card" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                    <div>
+                      <h2>{c.profiles?.full_name || 'Unknown cleaner'}</h2>
+                      <p style={{ fontSize: 14, margin: '4px 0' }}>
+                        {c.jobs?.properties?.clients?.name ? `${c.jobs.properties.clients.name} · ` : ''}
+                        {c.jobs?.properties?.address}
+                      </p>
+                      <p style={{ fontSize: 14, margin: '0 0 4px', fontWeight: 600 }}>
+                        Says they worked {new Date(c.worked_from).toLocaleString()} – {new Date(c.worked_to).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {' '}({Math.round(claimedMinutes)} min)
+                      </p>
+                      {/* Booked against declared, side by side, because the
+                          gap between them is the only thing here an admin
+                          can actually check the claim against. */}
+                      <p style={{ fontSize: 13.5, color: 'var(--muted)', margin: '0 0 4px' }}>
+                        Booked for {booked ? booked.toLocaleString() : 'unknown'} · {bookedMinutes} min
+                        {assignees > 1 && ` · shared with ${assignees - 1} other${assignees === 2 ? '' : 's'}`}
+                      </p>
+                      <p style={{ fontSize: 13.5, margin: '0 0 4px' }}>
+                        Approving adds <strong>{formatHours(payableHours)}</strong> to their pay
+                        and {formatHours(payableHours * HOLIDAY_ACCRUAL_RATE)} of holiday.
+                      </p>
+                      {c.reason && <p style={{ fontSize: 13.5, color: 'var(--muted)', margin: '0 0 4px', fontStyle: 'italic' }}>"{c.reason}"</p>}
+                      <p className="job-time">Raised {new Date(c.created_at).toLocaleString()}</p>
+                      <span className={`badge ${c.status === 'approved' ? 'completed' : c.status === 'declined' ? 'missed' : 'scheduled'}`}>{c.status}</span>
+                      {c.status !== 'pending' && (
+                        <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 4 }}>
+                          Decided by {c.decider?.full_name || 'Unknown'}
+                        </p>
+                      )}
+                      {c.status !== 'pending' && c.admin_note && (
+                        <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 6, fontStyle: 'italic' }}>"{c.admin_note}"</p>
+                      )}
+                    </div>
+                    {c.status === 'pending' && (
+                      <div style={{ display: 'flex', gap: 8, height: 'fit-content' }}>
+                        <button className="btn-secondary" onClick={() => startDecideMissedClockin(c.id)} title="Turn down this claim - the shift stays unpaid. Add a note saying why first">Decline</button>
+                        <button className="btn-primary" onClick={() => startDecideMissedClockin(c.id)} title="Record the shift as worked so the hours reach payroll and holiday">Approve</button>
+                      </div>
+                    )}
+                  </div>
+
+                  {decidingMissedClockinId === c.id && (
+                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--hairline)' }}>
+                      <label>Note (optional)</label>
+                      <textarea
+                        value={missedClockinNote}
+                        onChange={(e) => setMissedClockinNote(e.target.value)}
+                        placeholder="e.g. Client confirmed they were there"
+                        rows={2}
+                        autoFocus
+                        style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10, background: 'var(--wf-ash)', fontSize: 14, fontFamily: 'inherit', marginBottom: 8, resize: 'vertical' }}
+                      />
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button className="btn-secondary" onClick={() => setDecidingMissedClockinId(null)}>Cancel</button>
+                        <button className="btn-secondary" onClick={() => confirmDecideMissedClockin(c.id, 'declined')} title="Send the decline, along with your note - the shift stays unpaid">Confirm Decline</button>
+                        <button className="btn-primary" onClick={() => confirmDecideMissedClockin(c.id, 'approved')} title="Record the shift as worked and put the hours back">Confirm Approval</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </>
       )}
