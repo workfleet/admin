@@ -1974,11 +1974,33 @@ a.stat-card.is-alert:hover {
   text-overflow: ellipsis;
 }
 
+/* The overflow line is a button, not a label. Three entries is all a block
+   sized by the clock can hold, and the jobs past that were unreachable -
+   nothing else on the rota lists them. */
 .calendar-clash-more {
   font-family: var(--wf-data);
   font-size: 10px;
   font-weight: 600;
   color: var(--muted);
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 2px 0 0;
+  margin-top: auto;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.calendar-clash-more:hover { color: var(--ink); }
+
+/* Opened out, the block is as tall as its list and sits above the blocks
+   either side of it rather than being clipped by its own hour. */
+.calendar-clash.is-expanded {
+  z-index: 3;
+  height: auto;
+  box-shadow: var(--shadow-md);
 }
 
 /* The same cleaner booked twice over isn't a drawing problem, it's a

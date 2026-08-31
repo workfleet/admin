@@ -26,7 +26,8 @@ const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const QUICK_DURATIONS = [30, 60, 90, 120, 180, 240];
 
 // Past three, a grouped clash block would grow taller than the run it
-// covers and start overlapping the jobs after it. The rest are counted.
+// covers and start overlapping the jobs after it. The rest are counted,
+// and the count opens the block out so they can still be reached.
 const MAX_CLASH_ENTRIES = 3;
 
 // Dragging a job snaps to the same 15 minutes the manual time picker
@@ -156,6 +157,10 @@ export default function AdminRota() {
   // in refs so a re-render can't hand them a stale gesture.
   const [drag, setDrag] = useState(null);
   const [pendingJobId, setPendingJobId] = useState(null);
+  // Which overlap block has been opened out to show every job in it. Only
+  // one at a time - two expanded blocks in neighbouring columns overlap
+  // each other and put us back where we started.
+  const [expandedGroupId, setExpandedGroupId] = useState(null);
   // A job id arrived in the URL and its modal hasn't been opened yet - the
   // week it belongs to has to load first.
   const [openJobId, setOpenJobId] = useState(null);
@@ -225,15 +230,16 @@ export default function AdminRota() {
   // clearing, so a stray keypress can't bin a half-filled job - discarding is
   // what the Cancel button is for.
   useEffect(() => {
-    if (!showForm && !selectedJob) return undefined;
+    if (!showForm && !selectedJob && !expandedGroupId) return undefined;
     const onKey = (e) => {
       if (e.key !== 'Escape') return;
       if (selectedJob) setSelectedJob(null);
-      else setShowForm(false);
+      else if (showForm) setShowForm(false);
+      else setExpandedGroupId(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [showForm, selectedJob]);
+  }, [showForm, selectedJob, expandedGroupId]);
 
   useEffect(() => {
     setNow(new Date());
@@ -1165,16 +1171,26 @@ export default function AdminRota() {
     const startMinutes = group.start.getHours() * 60 + group.start.getMinutes();
     const top = Math.max(0, (startMinutes / 60 - START_HOUR) * HOUR_HEIGHT);
     const span = ((group.end - group.start) / 3600000) * HOUR_HEIGHT;
-    const shown = group.jobs.slice(0, MAX_CLASH_ENTRIES);
+    const expanded = expandedGroupId === group.id;
+    const shown = expanded ? group.jobs : group.jobs.slice(0, MAX_CLASH_ENTRIES);
     // The clock alone can make the block shorter than the list inside it -
-    // three half-hour jobs on top of each other span 30 minutes.
-    const height = Math.max(span, shown.length >= 3 ? 140 : 112);
+    // three half-hour jobs on top of each other span 30 minutes - and the
+    // block clips what doesn't fit, which is no good when the thing at the
+    // bottom is the button to the rest of them. Opened out, the list decides
+    // the height instead: the block grows over the hours below it and lifts
+    // above its neighbours, so every job in the run can be reached.
+    const overflowing = group.jobs.length > MAX_CLASH_ENTRIES;
+    const height = Math.max(span, (shown.length >= 3 ? 140 : 112) + (overflowing ? 18 : 0));
 
     return (
       <div
         key={group.id}
-        className={`calendar-clash${group.doubleBooked ? ' is-double-booked' : ''}`}
-        style={{ top, height }}
+        className={[
+          'calendar-clash',
+          group.doubleBooked ? 'is-double-booked' : '',
+          expanded ? 'is-expanded' : '',
+        ].filter(Boolean).join(' ')}
+        style={expanded ? { top, minHeight: span } : { top, height }}
       >
         <div className="calendar-clash-head">
           {group.doubleBooked
@@ -1213,8 +1229,16 @@ export default function AdminRota() {
             </div>
           );
         })}
-        {group.jobs.length > shown.length && (
-          <div className="calendar-clash-more">+{group.jobs.length - shown.length} more</div>
+        {overflowing && (
+          <button
+            type="button"
+            className="calendar-clash-more"
+            aria-expanded={expanded}
+            onClick={() => setExpandedGroupId(expanded ? null : group.id)}
+            title={expanded ? 'Collapse this overlap back to three jobs' : 'Show every job in this overlap'}
+          >
+            {expanded ? 'Show less' : `+${group.jobs.length - shown.length} more`}
+          </button>
         )}
       </div>
     );
