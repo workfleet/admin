@@ -1,8 +1,12 @@
 name: CI
 
+# Every branch, not just master. The work happens on side branches and
+# reaches master already pushed - so watching master alone meant the checks
+# first ran on code that had nowhere left to fail safely, which is the one
+# place they are no use.
 on:
   push:
-    branches: [master]
+    branches: ['**']
   pull_request:
 
 jobs:
