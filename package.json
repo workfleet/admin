@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "test:rls": "node scripts/rls-smoke-test.js",
+    "test:missed-clockin": "node scripts/missed-clockin-e2e.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:schema": "node scripts/schema-drift-check.js"
