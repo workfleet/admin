@@ -128,6 +128,27 @@ export async function POST(request) {
       tag: `shift-moved-${payload.jobId || 'unknown'}`,
       url: '/cleaner/rota',
     });
+  } else if (payload.type === 'missed_clockin_claimed') {
+    // Goes to admin and supervisor both, like an emergency and unlike the
+    // usual admin-only escalation: an unapproved claim is an unpaid shift
+    // with a pay-run deadline on it, so whoever is actually at a screen
+    // should see it.
+    const { data: staff } = await supabaseAdmin.from('profiles').select('id').in('role', ['admin', 'supervisor']);
+    await pushToUserIds((staff || []).map((s) => s.id), {
+      title: 'Missed clock-in to confirm',
+      body: `${payload.cleanerName || 'A cleaner'} says they worked ${payload.address || 'a shift'} on ${formatShiftTime(payload.scheduledAt)} without clocking in.`,
+      tag: `missed-clockin-${payload.jobId || 'unknown'}`,
+      url: '/admin/requests',
+    });
+  } else if (payload.type === 'missed_clockin_decided') {
+    await pushToUserIds([payload.cleanerId], {
+      title: payload.decision === 'approved' ? 'Missed clock-in approved' : 'Missed clock-in not confirmed',
+      body: payload.decision === 'approved'
+        ? `Your shift at ${payload.address || 'the site'} on ${formatShiftTime(payload.scheduledAt)} now counts towards your hours.`
+        : `Your claim for ${payload.address || 'a shift'} on ${formatShiftTime(payload.scheduledAt)} wasn't confirmed${payload.note ? ` - ${payload.note}` : ''}.`,
+      tag: `missed-clockin-decided-${payload.jobId || 'unknown'}`,
+      url: '/cleaner/hours',
+    });
   } else if (payload.type === 'emergency_alert') {
     await pushAdminsAndSupervisors(payload.cleanerName);
   } else if (payload.type === 'emergency_alert_acknowledged') {
@@ -192,6 +213,23 @@ export async function POST(request) {
       subject = `${label} request from ${payload.cleanerName}`;
       text = `${payload.cleanerName} requested ${label.toLowerCase()} from ${payload.startDate} to ${payload.endDate}`
         + (payload.hours ? ` (${payload.hours} hours).` : '.');
+    } else if (payload.type === 'missed_clockin_claimed') {
+      to = await adminEmails();
+      if (to.length === 0) return NextResponse.json({ skipped: 'no_email' });
+      subject = `Missed clock-in to confirm - ${payload.cleanerName || 'a cleaner'}`;
+      text = `${payload.cleanerName || 'A cleaner'} says they worked ${payload.address || 'a shift'} on ${formatShiftTime(payload.scheduledAt)} but did not clock in.`
+        + (payload.reason ? `\n\nWhat they said: ${payload.reason}` : '')
+        + '\n\nUntil this is approved the shift pays nothing and earns no holiday. Confirm it under Requests > Missed Clock-ins.';
+    } else if (payload.type === 'missed_clockin_decided') {
+      const email = await emailForUserId(payload.cleanerId);
+      if (!email) return NextResponse.json({ skipped: 'no_email' });
+      to = [email];
+      subject = payload.decision === 'approved' ? 'Missed clock-in approved' : 'Missed clock-in not confirmed';
+      text = payload.decision === 'approved'
+        ? `Your shift at ${payload.address || 'the site'} on ${formatShiftTime(payload.scheduledAt)} has been recorded as worked. Those hours now count towards your pay and your holiday.`
+        : `Your claim for the shift at ${payload.address || 'the site'} on ${formatShiftTime(payload.scheduledAt)} was not confirmed.`
+          + (payload.note ? `\n\nNote from admin: ${payload.note}` : '')
+          + '\n\nIf that is not right, message the office.';
     } else if (payload.type === 'staff_invite') {
       // Unlike every other type above, the recipient here is a raw
       // client-supplied address (there's no account yet to resolve an

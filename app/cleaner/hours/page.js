@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Clock, CalendarDays, ChevronDown, ChevronRight, Users } from 'lucide-react';
+import { Clock, CalendarDays, ChevronDown, ChevronRight, Users, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import {
@@ -12,6 +12,7 @@ import {
   jobShareHours,
   formatHours,
 } from '../../../lib/hoursWorked';
+import { unpaidMissedJobs } from '../../../lib/missedClockin';
 import BackButton from '../../components/BackButton';
 
 // Months are keyed off the cleaner's own clock, not UTC - a 1am job on the
@@ -57,6 +58,10 @@ export default function CleanerHours() {
   const [totals, setTotals] = useState({ hours: 0, jobs: 0, scheduledThisMonth: 0 });
   const [expanded, setExpanded] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Shifts that have quietly fallen out of the total above. This is the page
+  // someone opens to check a payslip, so it's the one place a shortfall has
+  // to be visible rather than merely absent.
+  const [missed, setMissed] = useState([]);
 
   useEffect(() => {
     load();
@@ -84,6 +89,18 @@ export default function CleanerHours() {
       .filter((j) => (j.status === 'scheduled' || j.status === 'in_progress')
         && monthKey(new Date(j.scheduled_at)) === thisMonth)
       .reduce((sum, j) => sum + jobShareHours(j, assigneeCounts), 0);
+
+    const { data: claimRows } = await supabase
+      .from('missed_clockin_claims')
+      .select('job_id, status')
+      .eq('cleaner_id', session.user.id);
+
+    setMissed(unpaidMissedJobs(jobs, claimRows || []).map((job) => ({
+      id: job.id,
+      date: new Date(job.scheduled_at),
+      address: job.properties?.address || 'Job',
+      hours: jobShareHours(job, assigneeCounts),
+    })));
 
     setMonths(grouped);
     setTotals({
@@ -158,6 +175,48 @@ export default function CleanerHours() {
           </Link>
         </p>
       </div>
+
+      {/* Overdue red, not verified green: nothing here has been proven yet,
+          and --wf-verified is reserved for things that have been. */}
+      {missed.length > 0 && (
+        <div
+          className="card"
+          style={{ background: 'var(--wf-overdue-bg)', borderLeft: '3px solid var(--wf-overdue)' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <AlertTriangle size={16} />
+            <strong style={{ fontSize: 14 }}>
+              {missed.length} shift{missed.length === 1 ? '' : 's'} not counted
+            </strong>
+          </div>
+          <p style={{ fontSize: 13, margin: 0 }}>
+            Nobody clocked in on {missed.length === 1 ? 'this one' : 'these'}, so{' '}
+            <strong>{formatHours(missed.reduce((sum, j) => sum + j.hours, 0))}</strong> is missing
+            from the total above — and from the holiday it would have earned. If you worked{' '}
+            {missed.length === 1 ? 'it' : 'them'}, open the shift and tell the office.
+          </p>
+          <div style={{ marginTop: 10 }}>
+            {missed.map((job) => (
+              <Link
+                key={job.id}
+                href={`/cleaner/jobs/${job.id}`}
+                className="task-row"
+                style={{ textDecoration: 'none', color: 'inherit', display: 'flex', justifyContent: 'space-between', gap: 8 }}
+              >
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 13, fontWeight: 600 }}>{job.address}</span>
+                  <span style={{ display: 'block', fontSize: 12.5, color: 'var(--muted)' }}>
+                    {job.date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
+                  </span>
+                </span>
+                <span style={{ fontFamily: 'var(--wf-data)', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  {formatHours(job.hours)}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       <h2 style={{ marginTop: 24, marginBottom: 4 }}>Month by month</h2>
 
