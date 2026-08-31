@@ -91,6 +91,51 @@ key — never via a public URL.
 
 ## Testing
 
+### Unit tests
+
+```bash
+npm test
+```
+
+Covers the pure logic that decides money and time: the quote calculator
+(`lib/quoteCalculator.js`), hours worked and holiday accrual
+(`lib/hoursWorked.js`), staffed-contract shift patterns
+(`lib/shiftSchedule.js`), automatic check-out (`lib/autoCheckout.js`), and the
+local-date and reorder helpers. These are the files where a mistake reaches a
+client's invoice or a cleaner's payslip, so they assert the *reasoning* -
+that cost-plus pricing lands on the target margin, that the one-off minimums
+do not apply to a contract visit, that a setting which cannot be read falls
+back loudly instead of pricing labour at zero - rather than pinning today's
+numbers.
+
+`npm run test:watch` re-runs them as you edit.
+
+### Can the database be rebuilt?
+
+```bash
+npm run test:schema
+```
+
+Compares the live database against `schema.sql` + `migrations/` in both
+directions: columns added by hand in the dashboard that no file records, and
+migrations that were never applied. Reads schema metadata only, never rows.
+See `supabase/migrations/README.md`. CI additionally replays every file into
+an empty Postgres on each push, which is the only real proof the schema can
+be rebuilt from this repo.
+
+### Error reporting
+
+Set `NEXT_PUBLIC_SENTRY_DSN` to start receiving crash reports; leave it unset
+and the SDK initialises and sends nothing, so nothing about the app changes.
+`lib/sentryOptions.js` is where the redaction lives - request bodies,
+cookies, headers, query strings and onboarding tokens are stripped, and
+Session Replay is deliberately off, because the pages most worth debugging
+are the ones showing someone's NI number. Optionally set `SENTRY_ORG`,
+`SENTRY_PROJECT` and `SENTRY_AUTH_TOKEN` to upload source maps and get
+readable stack traces.
+
+### Security invariants
+
 `scripts/rls-smoke-test.js` exercises the security invariants this project
 has actually broken before (RLS recursion, cross-role data isolation, the
 cleaner-deactivation gate, self privilege escalation). Run it after any RLS

@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  # Can this repo still rebuild its own database? It could not, until
+  # 0075_jobs_duration_minutes.sql - a column added by hand in the dashboard
+  # meant a fresh project came up broken and nothing noticed, because the one
+  # database the app points at happened to have it. This job replays every
+  # file into an empty Postgres so the next hand-made change fails here
+  # instead of during a restore.
+  schema:
+    name: Schema rebuilds from scratch
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Replay schema.sql + migrations
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+        run: bash scripts/replay-schema.sh
+
+  # The pricing and hours calculations decide what clients are charged and
+  # what staff are paid. They are pure functions, so they can be checked
+  # properly - which is worth doing, given the last round of pricing faults
+  # was found by reading the code rather than by anything automatic.
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
+
+  build:
+    name: Next build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # The Supabase client falls back to placeholder values when these are
+      # unset (see lib/supabaseClient.js), so a build needs no real secrets -
+      # it is checking that every page compiles, not that it can connect.
+      - run: npm run build
