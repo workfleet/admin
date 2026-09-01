@@ -133,6 +133,15 @@ async function main() {
   const late = await mkJob(hoursAgo(26));
   await rest('PATCH', `jobs?id=eq.${late.id}`, admin.token, { status: 'missed' });
 
+  // For the admin-confirms-it-directly path (0078): one overdue job nobody
+  // has claimed, one with a pending claim to prove confirming absorbs it
+  // rather than leaving it stuck, and one with nobody assigned at all.
+  const unclaimed = await mkJob(hoursAgo(30));
+  const alreadyAsked = await mkJob(hoursAgo(30));
+  const { body: [orphan] } = await rest('POST', 'jobs', admin.token, {
+    property_id: property.id, scheduled_at: hoursAgo(30), duration_minutes: 120,
+  });
+
   try {
     // ---- What a cleaner may declare ----
 
@@ -222,6 +231,62 @@ async function main() {
     record('and it rescues the job out of missed',
       (await jobStatus(late.id, admin.token)) === 'in_progress',
       `status now ${await jobStatus(late.id, admin.token)}`);
+
+    // ---- The office recording a shift nobody asked about (0078) ----
+
+    const cleanerConfirm = await rpc('admin_confirm_missed_shift', cleaner.token, {
+      target_job_id: unclaimed.id, note: null,
+    });
+    record('cleaner cannot record their own shift as worked',
+      cleanerConfirm.body === 'not_allowed', `returned ${JSON.stringify(cleanerConfirm.body)}`);
+
+    const confirmFuture = await rpc('admin_confirm_missed_shift', admin.token, {
+      target_job_id: future.id, note: null,
+    });
+    record('admin cannot record a shift that has not happened yet',
+      confirmFuture.body === 'not_missed', `returned ${JSON.stringify(confirmFuture.body)}`);
+
+    const confirmOrphan = await rpc('admin_confirm_missed_shift', admin.token, {
+      target_job_id: orphan.id, note: null,
+    });
+    record('a job with nobody assigned is refused rather than silently completed',
+      confirmOrphan.body === 'no_assignees', `returned ${JSON.stringify(confirmOrphan.body)}`);
+
+    const confirmed = await rpc('admin_confirm_missed_shift', admin.token, {
+      target_job_id: unclaimed.id, note: '__e2e__ client confirmed',
+    });
+    record('admin can record an unclaimed shift as worked',
+      confirmed.body === 'ok', `returned ${JSON.stringify(confirmed.body)}`);
+    record('the recorded shift now counts as completed',
+      (await jobStatus(unclaimed.id, admin.token)) === 'completed');
+
+    const { body: adminClaims } = await rest(
+      'GET', `missed_clockin_claims?job_id=eq.${unclaimed.id}&select=status,raised_by_admin`, admin.token);
+    record('it leaves an approved record flagged as raised by the office',
+      adminClaims?.length === 1 && adminClaims[0].status === 'approved' && adminClaims[0].raised_by_admin === true,
+      JSON.stringify(adminClaims));
+
+    const { body: adminCheckins } = await rest(
+      'GET', `checkins?job_id=eq.${unclaimed.id}&select=self_declared`, admin.token);
+    record('and an attendance row marked self-declared',
+      adminCheckins?.length === 1 && adminCheckins[0].self_declared === true, JSON.stringify(adminCheckins));
+
+    // A pending claim must be absorbed, not duplicated - otherwise the
+    // cleaner's original sits in the queue for ever and 0076's unique index
+    // would have rejected a second row anyway.
+    await rest('POST', 'missed_clockin_claims', cleaner.token, {
+      job_id: alreadyAsked.id, cleaner_id: cleaner.userId,
+      worked_from: hoursAgo(30), worked_to: hoursAgo(28),
+    });
+    const absorbed = await rpc('admin_confirm_missed_shift', admin.token, {
+      target_job_id: alreadyAsked.id, note: null,
+    });
+    record('recording a shift somebody had already claimed succeeds',
+      absorbed.body === 'ok', `returned ${JSON.stringify(absorbed.body)}`);
+    const { body: absorbedClaims } = await rest(
+      'GET', `missed_clockin_claims?job_id=eq.${alreadyAsked.id}&select=status`, admin.token);
+    record('and approves their claim rather than leaving it pending beside a duplicate',
+      absorbedClaims?.length === 1 && absorbedClaims[0].status === 'approved', JSON.stringify(absorbedClaims));
   } finally {
     // Fixture teardown. jobs, assignments, checkins and claims all cascade
     // from the client, so this is enough - but it is in a finally so a failed

@@ -6,6 +6,7 @@ import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
 import { formatHours } from '../../../lib/hoursWorked';
+import { isClaimableMissedJob } from '../../../lib/missedClockin';
 import { respondToEmergencyAlert } from '../../../lib/emergencyRespond';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
@@ -78,6 +79,14 @@ export default function AdminRequests() {
   const [decidingMissedClockinId, setDecidingMissedClockinId] = useState(null);
   const [missedClockinNote, setMissedClockinNote] = useState('');
 
+  // Lost shifts nobody has put their hand up for. The admin is very often the
+  // one who notices - a red job on the rota, a payroll total that is short -
+  // and frequently already knows the answer, so they can confirm these
+  // directly rather than waiting to be asked by the person who lost the hours.
+  const [missedShifts, setMissedShifts] = useState([]);
+  const [confirmingShiftId, setConfirmingShiftId] = useState(null);
+  const [confirmShiftNote, setConfirmShiftNote] = useState('');
+
   // emergency alert log
   const [emergencies, setEmergencies] = useState([]);
   const [emergencyFilter, setEmergencyFilter] = useState('all'); // open | acknowledged | all
@@ -91,7 +100,7 @@ export default function AdminRequests() {
     const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
-    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, { data: assignmentsData }, { data: extensionsData }, { data: reschedulesData }, { data: clientRequestsData }, { data: pausesData }, { data: emergenciesData }, { data: missedClockinData }] = await Promise.all([
+    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, { data: assignmentsData }, { data: extensionsData }, { data: reschedulesData }, { data: clientRequestsData }, { data: pausesData }, { data: emergenciesData }, { data: missedClockinData }, { data: missedShiftData }] = await Promise.all([
       supabase
         .from('staff_requests')
         .select('id, type, description, status, created_at, resolved_at, resolution_note, resolved_by, cleaner_id, profiles!staff_requests_cleaner_id_fkey(full_name), resolver:profiles!staff_requests_resolved_by_fkey(full_name), jobs(scheduled_at, properties(address))')
@@ -124,8 +133,20 @@ export default function AdminRequests() {
         .order('created_at', { ascending: false }),
       supabase
         .from('missed_clockin_claims')
-        .select('id, job_id, worked_from, worked_to, reason, status, admin_note, created_at, cleaner_id, profiles!missed_clockin_claims_cleaner_id_fkey(full_name), decider:profiles!missed_clockin_claims_decided_by_fkey(full_name), jobs(scheduled_at, duration_minutes, status, properties(address, clients(name)), job_assignments(cleaner_id))')
+        .select('id, job_id, worked_from, worked_to, reason, status, admin_note, created_at, cleaner_id, raised_by_admin, profiles!missed_clockin_claims_cleaner_id_fkey(full_name), decider:profiles!missed_clockin_claims_decided_by_fkey(full_name), jobs(scheduled_at, duration_minutes, status, properties(address, clients(name)), job_assignments(cleaner_id))')
         .order('created_at', { ascending: false }),
+      // Both statuses, because 'missed' is only set when reconcile_job_statuses()
+      // happens to have run - an overdue job can still read 'scheduled'.
+      // isClaimableMissedJob() applies the same rule the cleaner's page and
+      // 0078 do, rather than a third version of it here. Ninety days keeps
+      // this bounded; anything older is history, not a pay run.
+      supabase
+        .from('jobs')
+        .select('id, scheduled_at, duration_minutes, status, properties(address, clients(name)), job_assignments(cleaner_id, profiles(full_name))')
+        .in('status', ['missed', 'scheduled'])
+        .lt('scheduled_at', new Date().toISOString())
+        .gt('scheduled_at', new Date(Date.now() - 90 * 86400000).toISOString())
+        .order('scheduled_at', { ascending: false }),
     ]);
 
     // A job's duration is split evenly across everyone assigned to it.
@@ -151,6 +172,17 @@ export default function AdminRequests() {
     setPauses(pausesData || []);
     setEmergencies(emergenciesData || []);
     setMissedClockins(missedClockinData || []);
+
+    // A shift somebody has already asked about belongs in the claims list
+    // below, where the admin can see the times they declared. Showing it in
+    // both places would be two buttons for one decision.
+    const alreadyClaimed = new Set(
+      (missedClockinData || []).filter((c) => c.status === 'pending').map((c) => c.job_id)
+    );
+    setMissedShifts(
+      (missedShiftData || [])
+        .filter((j) => isClaimableMissedJob(j) && !alreadyClaimed.has(j.id))
+    );
     setLoading(false);
   };
 
@@ -490,6 +522,48 @@ export default function AdminRequests() {
     await load();
   };
 
+  const startConfirmShift = (id) => {
+    setConfirmingShiftId(id);
+    setConfirmShiftNote('');
+  };
+
+  // Recording a shift as worked without anyone having asked. Same end state as
+  // approving a claim - an approved record, an attendance row, a completed job
+  // - but flagged raised_by_admin so the two are told apart afterwards. It
+  // pays everyone assigned, so the confirm names them.
+  const confirmMissedShift = async (job) => {
+    const names = (job.job_assignments || []).map((a) => a.profiles?.full_name).filter(Boolean);
+    const proceed = await confirm(
+      `Record ${names.length > 0 ? names.join(' and ') : 'the assigned cleaner(s)'} as having worked `
+      + `${job.properties?.address || 'this shift'} on ${new Date(job.scheduled_at).toLocaleDateString()}? `
+      + 'This pays the shift and accrues holiday on it.',
+      { title: 'Confirm the shift was worked', confirmLabel: 'Yes, they worked it' }
+    );
+    if (!proceed) return;
+
+    const { data: outcome, error } = await supabase.rpc('admin_confirm_missed_shift', {
+      target_job_id: job.id,
+      note: confirmShiftNote.trim() || null,
+    });
+
+    if (error || outcome !== 'ok') {
+      toast.error(
+        outcome === 'no_assignees'
+          ? 'Nobody is assigned to that job - assign someone on the rota first.'
+          : outcome === 'not_missed'
+            ? 'That shift is no longer missed - someone may have just clocked in.'
+            : 'Could not record that. Please try again.'
+      );
+      setConfirmingShiftId(null);
+      await load();
+      return;
+    }
+
+    toast.success('Recorded as worked — the hours now count towards pay and holiday.');
+    setConfirmingShiftId(null);
+    await load();
+  };
+
   const filteredMissedClockins = missedClockins.filter((c) => {
     if (missedClockinFilter === 'all') return true;
     if (missedClockinFilter === 'pending') return c.status === 'pending';
@@ -547,7 +621,10 @@ export default function AdminRequests() {
             Time Extensions ({pendingExtensionCount})
           </button>
           <button className={section === 'missedClockins' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('missedClockins')}>
-            Missed Clock-ins ({pendingMissedClockinCount})
+            {/* Both halves of the same problem: shifts somebody has asked
+                about, and shifts nobody has. The second kind is the one that
+                reaches pay day unpaid, so it has to be in the count. */}
+            Missed Clock-ins ({pendingMissedClockinCount + missedShifts.length})
           </button>
           <button className={section === 'reschedules' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('reschedules')}>
             Reschedules ({pendingRescheduleCount})
@@ -810,6 +887,88 @@ export default function AdminRequests() {
             is paid as zero.
           </p>
 
+          {/* Shifts nobody has asked about. Above the claims deliberately:
+              these are the ones with no one chasing them, so they are the ones
+              that quietly reach pay day unpaid. */}
+          {missedShifts.length > 0 && (
+            <>
+              <h2 style={{ fontSize: 15, margin: '0 0 4px' }}>
+                Nobody clocked in ({missedShifts.length})
+              </h2>
+              <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
+                No one has asked about these. If you know the shift was worked — the client
+                confirmed it, or you spoke to them at the time — record it here rather than
+                waiting to be asked.
+              </p>
+              <div className="job-list" style={{ marginBottom: 24 }}>
+                {missedShifts.map((job) => {
+                  const names = (job.job_assignments || []).map((a) => a.profiles?.full_name).filter(Boolean);
+                  const assignees = (job.job_assignments || []).length || 1;
+                  const payableHours = (job.duration_minutes || 120) / assignees / 60;
+                  return (
+                    <div key={job.id} className="card job-card" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                        <div>
+                          <h2>{job.properties?.clients?.name || job.properties?.address || 'Job'}</h2>
+                          <p style={{ fontSize: 14, margin: '4px 0' }}>{job.properties?.address}</p>
+                          <p style={{ fontSize: 14, margin: '0 0 4px', fontWeight: 600 }}>
+                            {new Date(job.scheduled_at).toLocaleString()} · {job.duration_minutes || 120} min
+                          </p>
+                          <p style={{ fontSize: 13.5, color: 'var(--muted)', margin: '0 0 4px' }}>
+                            {names.length > 0 ? names.join(', ') : 'Nobody assigned'}
+                          </p>
+                          {/* Says who gets paid what, because confirming pays
+                              everyone assigned - the hours model splits a job
+                              across its team and cannot express one of two
+                              having turned up. */}
+                          {names.length > 0 && (
+                            <p style={{ fontSize: 13.5, margin: '0 0 4px' }}>
+                              Recording this adds <strong>{formatHours(payableHours)}</strong>
+                              {assignees > 1 ? ` to each of ${assignees} people` : ' to their pay'}.
+                            </p>
+                          )}
+                          <span className="badge missed">missed</span>
+                        </div>
+                        {names.length > 0 && (
+                          <div style={{ display: 'flex', gap: 8, height: 'fit-content' }}>
+                            <button
+                              className="btn-primary"
+                              onClick={() => startConfirmShift(job.id)}
+                              title="Record this shift as worked so the hours reach payroll and holiday"
+                            >
+                              They worked it
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {confirmingShiftId === job.id && (
+                        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--hairline)' }}>
+                          <label>How do you know? (optional, shown to the cleaner)</label>
+                          <textarea
+                            value={confirmShiftNote}
+                            onChange={(e) => setConfirmShiftNote(e.target.value)}
+                            placeholder="e.g. Client confirmed they were there"
+                            rows={2}
+                            autoFocus
+                            style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: 10, background: 'var(--wf-ash)', fontSize: 14, fontFamily: 'inherit', marginBottom: 8, resize: 'vertical' }}
+                          />
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button className="btn-secondary" onClick={() => setConfirmingShiftId(null)}>Cancel</button>
+                            <button className="btn-primary" onClick={() => confirmMissedShift(job)}>
+                              Record as worked
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <h2 style={{ fontSize: 15, margin: '0 0 12px' }}>Claims from staff</h2>
+            </>
+          )}
+
           {filteredMissedClockins.length === 0 && <p className="empty-state">Nothing here.</p>}
 
           <div className="job-list">
@@ -851,7 +1010,13 @@ export default function AdminRequests() {
                       <span className={`badge ${c.status === 'approved' ? 'completed' : c.status === 'declined' ? 'missed' : 'scheduled'}`}>{c.status}</span>
                       {c.status !== 'pending' && (
                         <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 4 }}>
-                          Decided by {c.decider?.full_name || 'Unknown'}
+                          {/* "They asked and we agreed" and "we recorded it
+                              ourselves" are different statements about the
+                              same shift, and this is the record someone gets
+                              pulled up on. */}
+                          {c.raised_by_admin
+                            ? `Recorded by ${c.decider?.full_name || 'Unknown'} — not claimed by staff`
+                            : `Decided by ${c.decider?.full_name || 'Unknown'}`}
                         </p>
                       )}
                       {c.status !== 'pending' && c.admin_note && (
