@@ -10,6 +10,7 @@ import EmergencyButton from '../components/EmergencyButton';
 import EnablePush from '../components/EnablePush';
 import InstallPrompt from '../components/InstallPrompt';
 import AutoCheckoutWatcher from '../components/AutoCheckoutWatcher';
+import ShiftLocationWatcher from '../components/ShiftLocationWatcher';
 
 const NAV_ITEMS = [
   { href: '/cleaner', label: 'Home', icon: Home },
@@ -62,7 +63,11 @@ export default function CleanerLayout({ children }) {
       </div>
       <EmergencyButton />
       <InstallPrompt />
+      {/* Two halves of the same job: AutoCheckoutWatcher takes one fix when
+          the app is opened, ShiftLocationWatcher watches continuously while
+          it is in front of them. Neither can see a locked phone. */}
       <AutoCheckoutWatcher />
+      <ShiftLocationWatcher />
       {children}
       <nav className="bottom-nav">
         {NAV_ITEMS.map((item) => {

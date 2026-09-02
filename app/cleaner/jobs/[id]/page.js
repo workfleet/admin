@@ -350,11 +350,25 @@ export default function JobDetailPage() {
       .single();
 
     setCheckingIn(false);
-    if (!error) {
-      setCheckin(data);
-      const { data: jobRow } = await supabase.from('jobs').select('status').eq('id', id).single();
-      if (jobRow) setJob((j) => ({ ...j, status: jobRow.status }));
+
+    // A failed check-in used to do nothing at all: no message, no toast, the
+    // button simply stopped spinning. On a basement job or a rural property
+    // with no signal that reads exactly like success, so the cleaner walks
+    // away believing they are clocked in - and the shift is marked missed
+    // hours later. That is not a rare edge case, it is the likeliest single
+    // cause of the missed clock-ins this whole flow exists to mop up.
+    if (error) {
+      setCheckInError(
+        navigator.onLine === false
+          ? "You're offline, so that didn't save. Check in again when you have signal — or tell the office you worked it and they'll confirm the hours."
+          : "That didn't save. Try again — if it keeps failing, tell the office you're on site."
+      );
+      return;
     }
+
+    setCheckin(data);
+    const { data: jobRow } = await supabase.from('jobs').select('status').eq('id', id).single();
+    if (jobRow) setJob((j) => ({ ...j, status: jobRow.status }));
   };
 
   const handleCheckOut = async () => {
