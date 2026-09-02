@@ -6,7 +6,7 @@ import { supabase } from '../../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../../lib/authGate';
 import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
-import { lateMinutes } from '../../../../lib/clockIn';
+import { claimFor, describeClockRecord, indexClaims, lateMinutes } from '../../../../lib/clockIn';
 import BackButton from '../../../components/BackButton';
 
 const HOLIDAY_ACCRUAL_RATE = 0.1207; // UK statutory: 5.6 weeks / 46.4 working weeks
@@ -53,6 +53,7 @@ export default function CleanerProfile() {
   const [jobs, setJobs] = useState([]);
   const [checkins, setCheckins] = useState(null);
   const [showClockIns, setShowClockIns] = useState(false);
+  const [claimIndex, setClaimIndex] = useState(() => new Map());
   const [timeOffRequests, setTimeOffRequests] = useState([]);
   const [submission, setSubmission] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -148,9 +149,17 @@ export default function CleanerProfile() {
 
     const { data: checkinsData } = await supabase
       .from('checkins')
-      .select('id, job_id, checked_in_at, checked_out_at, auto_checked_out, jobs(scheduled_at, properties(address))')
+      .select('id, job_id, cleaner_id, checked_in_at, checked_out_at, auto_checked_out, self_declared, jobs(scheduled_at, properties(address))')
       .eq('cleaner_id', id)
       .order('checked_in_at', { ascending: false });
+
+    // Only needed to tell "they told us and we agreed" from "we recorded it
+    // for them". Bounded to this cleaner, so one extra query rather than one
+    // per row - see describeClockRecord in lib/clockIn.js.
+    const { data: claimRows } = await supabase
+      .from('missed_clockin_claims')
+      .select('job_id, cleaner_id, status, raised_by_admin')
+      .eq('cleaner_id', id);
 
     const pastJobs = jobsData.filter((j) => j.status === 'completed' || j.status === 'missed');
     const completedJobIds = jobsData.filter((j) => j.status === 'completed').map((j) => j.id);
@@ -167,6 +176,7 @@ export default function CleanerProfile() {
     setCleaner(cleanerData);
     setJobs(jobsData);
     setCheckins(checkinsData || []);
+    setClaimIndex(indexClaims(claimRows || []));
     setCertifications(certsData || []);
     setReliability(computeReliability(pastJobs, completedJobIds, checkinsData || [], photoRows || [], ratingRows || []));
     setTimeOffRequests(timeOffData || []);
@@ -634,8 +644,18 @@ export default function CleanerProfile() {
                   <div style={{ fontSize: 13, color: 'var(--muted)' }}>
                     Clocked in {new Date(c.checked_in_at).toLocaleTimeString()}
                     {c.checked_out_at ? ` · out ${new Date(c.checked_out_at).toLocaleTimeString()}` : ' · still on site'}
-                    {c.checked_out_at && c.auto_checked_out && ' (auto - left the geofence)'}
                   </div>
+                  {/* How this row came to exist, when that is not simply
+                      "they pressed the button". */}
+                  {(() => {
+                    const how = describeClockRecord(c, claimFor(claimIndex, c));
+                    if (!how) return null;
+                    return (
+                      <div style={{ fontSize: 12.5, color: 'var(--muted)', fontStyle: 'italic', marginTop: 2 }}>
+                        {how.label}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}

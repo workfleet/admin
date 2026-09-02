@@ -9,7 +9,7 @@ import AddressAutocomplete from '../../../components/AddressAutocomplete';
 import { INDUSTRY_OPTIONS } from '../../../../lib/clientIndustries';
 import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
-import { lateMinutes } from '../../../../lib/clockIn';
+import { claimFor, describeClockRecord, indexClaims, lateMinutes } from '../../../../lib/clockIn';
 import BackButton from '../../../components/BackButton';
 
 export default function ClientDetail() {
@@ -53,6 +53,7 @@ export default function ClientDetail() {
 
   const [clockIns, setClockIns] = useState(null);
   const [clockInsLoading, setClockInsLoading] = useState(false);
+  const [clockInClaims, setClockInClaims] = useState(() => new Map());
 
   const [clientDocs, setClientDocs] = useState(null);
   const [docsLoading, setDocsLoading] = useState(false);
@@ -175,12 +176,22 @@ export default function ClientDetail() {
     const { data } = jobIds.length > 0
       ? await supabase
           .from('checkins')
-          .select('id, job_id, checked_in_at, checked_out_at, auto_checked_out, profiles(full_name)')
+          .select('id, job_id, cleaner_id, checked_in_at, checked_out_at, auto_checked_out, self_declared, profiles(full_name)')
           .in('job_id', jobIds)
           .order('checked_in_at', { ascending: false })
       : { data: [] };
 
+    // Only to tell an approved claim from an office-recorded one when
+    // labelling a self-declared row. Bounded to this client's jobs.
+    const { data: claimRows } = jobIds.length > 0
+      ? await supabase
+          .from('missed_clockin_claims')
+          .select('job_id, cleaner_id, status, raised_by_admin')
+          .in('job_id', jobIds)
+      : { data: [] };
+
     setClockIns((data || []).map((c) => ({ ...c, job: jobMap[c.job_id] })));
+    setClockInClaims(indexClaims(claimRows || []));
     setClockInsLoading(false);
   };
 
@@ -905,8 +916,14 @@ export default function ClientDetail() {
                 <div style={{ fontSize: 13, color: 'var(--muted)' }}>
                   Clocked in {new Date(c.checked_in_at).toLocaleTimeString()}
                   {c.checked_out_at ? ` · out ${new Date(c.checked_out_at).toLocaleTimeString()}` : ' · still on site'}
-                  {c.checked_out_at && c.auto_checked_out && ' (auto)'}
                 </div>
+                {(() => {
+                  const how = describeClockRecord(c, claimFor(clockInClaims, c));
+                  if (!how) return null;
+                  return (
+                    <div style={{ fontSize: 12.5, color: 'var(--muted)', fontStyle: 'italic' }}>{how.label}</div>
+                  );
+                })()}
               </div>
             );
           })}
