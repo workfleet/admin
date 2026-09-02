@@ -4,6 +4,7 @@ import { Fragment, useEffect, useRef, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../../../lib/supabaseClient';
+import { claimFor, describeClockRecord, indexClaims } from '../../../lib/clockIn';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
 import { localDateString } from '../../../lib/localDate';
@@ -42,7 +43,7 @@ const EDGE_SCROLL_SPEED = 10;
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => h);
 const MINUTE_OPTIONS = [0, 15, 30, 45];
 
-const JOB_SELECT = 'id, scheduled_at, status, duration_minutes, notes, series_id, properties(address, lat, lng, clients(name)), job_assignments(cleaner_id, profiles(full_name))';
+const JOB_SELECT = 'id, scheduled_at, status, duration_minutes, notes, series_id, property_id, properties(address, lat, lng, clients(name)), job_assignments(cleaner_id, profiles(full_name))';
 
 // Sanity cap against a mistake (e.g. daily "forever") generating an
 // unbounded number of jobs in one go.
@@ -190,6 +191,7 @@ export default function AdminRota() {
   const [jobTasks, setJobTasks] = useState([]);
   const [newTaskText, setNewTaskText] = useState('');
   const [jobCheckins, setJobCheckins] = useState([]);
+  const [jobCheckinClaims, setJobCheckinClaims] = useState(() => new Map());
   const [jobPhotos, setJobPhotos] = useState([]);
 
   const [editDate, setEditDate] = useState('');
@@ -198,6 +200,8 @@ export default function AdminRota() {
   const [editDuration, setEditDuration] = useState(120);
   const [editUseCustomDuration, setEditUseCustomDuration] = useState(false);
   const [editNotes, setEditNotes] = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [editAddressCoords, setEditAddressCoords] = useState(null);
   const [savingJob, setSavingJob] = useState(false);
   const [jobSaveError, setJobSaveError] = useState('');
   const [addCleanerSelection, setAddCleanerSelection] = useState('');
@@ -320,6 +324,8 @@ export default function AdminRota() {
     setEditDuration(selectedJob.duration_minutes || 120);
     setEditUseCustomDuration(!QUICK_DURATIONS.includes(selectedJob.duration_minutes));
     setEditNotes(selectedJob.notes || '');
+    setEditAddress(selectedJob.properties?.address || '');
+    setEditAddressCoords(null);
     setJobSaveError('');
     setAddCleanerSelection('');
   }, [selectedJob?.id]);
@@ -342,6 +348,23 @@ export default function AdminRota() {
         if (!proceed) { setSavingJob(false); return; }
       }
       if (!(await confirmTimeOffConflict(a.cleaner_id, scheduledAtDate))) { setSavingJob(false); return; }
+    }
+
+    // Address lives on the property, not the job - editing it here updates
+    // that property's record directly (same as editing it from the client
+    // page), so it also corrects every other job at this same address,
+    // not just this one instance.
+    if (editAddress.trim() && editAddress.trim() !== selectedJob.properties?.address) {
+      const { error: addressError } = await supabase
+        .from('properties')
+        .update({
+          address: editAddress.trim(),
+          ...(editAddressCoords ? { lat: editAddressCoords.lat, lng: editAddressCoords.lng } : {}),
+        })
+        .eq('id', selectedJob.property_id);
+
+      if (addressError) { setSavingJob(false); setJobSaveError('Something went wrong saving the address.'); return; }
+      setProperties((prev) => prev.map((p) => (p.id === selectedJob.property_id ? { ...p, address: editAddress.trim(), ...(editAddressCoords || {}) } : p)));
     }
 
     const { data, error } = await supabase
@@ -381,11 +404,19 @@ export default function AdminRota() {
   const loadCheckins = async (jobId) => {
     const { data } = await supabase
       .from('checkins')
-      .select('id, cleaner_id, checked_in_at, checked_out_at, auto_checked_out, lat, lng, profiles(full_name)')
+      .select('id, job_id, cleaner_id, checked_in_at, checked_out_at, auto_checked_out, self_declared, lat, lng, profiles(full_name)')
       .eq('job_id', jobId)
       .order('checked_in_at', { ascending: true });
 
     setJobCheckins(data || []);
+
+    // Only to tell an approved claim from an office-recorded one when
+    // labelling a self-declared row. One job, so one small query.
+    const { data: claimRows } = await supabase
+      .from('missed_clockin_claims')
+      .select('job_id, cleaner_id, status, raised_by_admin')
+      .eq('job_id', jobId);
+    setJobCheckinClaims(indexClaims(claimRows || []));
   };
 
   const loadPhotos = async (jobId) => {
@@ -1472,7 +1503,20 @@ export default function AdminRota() {
           </div>
 
           <div style={{ marginTop: 14 }}>
-            <div className="field-row">
+            <div className="field">
+              <label className="field-label">Address</label>
+              <AddressAutocomplete
+                value={editAddress}
+                onChange={setEditAddress}
+                onSelect={({ address, lat, lng }) => { setEditAddress(address); setEditAddressCoords({ lat, lng }); }}
+                placeholder="Start typing an address..."
+              />
+              <p style={{ fontSize: 12, color: 'var(--muted)', margin: '4px 0 0' }}>
+                Changing this updates the address for every job at this property, not just this one.
+              </p>
+            </div>
+
+            <div className="field-row" style={{ marginTop: 10 }}>
               <div className="field">
                 <label className="field-label">Date</label>
                 <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
@@ -1607,8 +1651,14 @@ export default function AdminRota() {
                     <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>
                       Checked in {new Date(c.checked_in_at).toLocaleTimeString()}
                       {c.checked_out_at && ` – out ${new Date(c.checked_out_at).toLocaleTimeString()}`}
-                      {c.checked_out_at && c.auto_checked_out && ' (auto)'}
                     </span>
+                    {(() => {
+                      const how = describeClockRecord(c, claimFor(jobCheckinClaims, c));
+                      if (!how) return null;
+                      return (
+                        <span style={{ fontSize: 12, color: 'var(--muted)', fontStyle: 'italic' }}>{how.label}</span>
+                      );
+                    })()}
                   </div>
                 );
               })}
