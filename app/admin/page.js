@@ -227,13 +227,20 @@ export default function AdminDashboard() {
     // same as the Rota page, so Today's Jobs stays consistent with it.
     await supabase.rpc('reconcile_job_statuses');
 
-    // Nudge anyone who's started a shift without clocking in. Vercel Cron
-    // runs this every 15 minutes (vercel.json), which is the path that
-    // actually matters - a nudge is only worth sending while they're still
-    // on site. This piggyback is the fallback for a plan that won't run
-    // crons that often, and follows the same lazy-sweep reasoning as
-    // reconcile_job_statuses above. The route is idempotent per job
-    // (jobs.clockin_nudge_sent_at), so both firing costs nothing.
+    // Nudge anyone who's started a shift without clocking in.
+    //
+    // This is the only thing that runs the sweep. It was meant to be a
+    // fallback behind a quarter-hourly Vercel Cron, but a sub-daily schedule
+    // needs a paid plan and the entry failed the deploy, so it came out of
+    // vercel.json - and a daily cron would be worse than none, since it would
+    // send "you haven't clocked in" about yesterday and then mark the job as
+    // already nudged. Same lazy-sweep reasoning as reconcile_job_statuses
+    // above: no scheduler, so it runs when somebody opens a page.
+    //
+    // The cost is that nudges only go out while an admin has the dashboard
+    // open. Restoring the cron is one entry in vercel.json if the plan ever
+    // allows it; the route is idempotent per job (jobs.clockin_nudge_sent_at),
+    // so both firing costs nothing.
     fetch('/api/admin/clockin-nudge', {
       method: 'POST',
       headers: { Authorization: `Bearer ${session.access_token}` },

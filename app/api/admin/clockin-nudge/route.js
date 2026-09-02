@@ -13,8 +13,15 @@ export const runtime = 'nodejs';
 // the record instead of a declared one. So this sweeps for jobs that have
 // started with nobody checked in and prods whoever is assigned.
 //
-// Same two ways in as api/admin/enforce-retention: Vercel Cron with the
-// CRON_SECRET it injects, or an admin's own session for a manual run.
+// Driven from the admin dashboard rather than a timer. It was written for a
+// quarter-hourly Vercel Cron, but sub-daily schedules need a paid plan and
+// the entry failed the deploy, so it is not in vercel.json - and a daily one
+// would be worse than none, prodding people about yesterday and then marking
+// the job nudged. It still accepts the cron secret so restoring that entry is
+// a one-line change if the plan ever allows it.
+//
+// Same two ways in as api/admin/enforce-retention: the CRON_SECRET Vercel
+// injects, or an admin's own session.
 async function isAuthorised(request) {
   const authHeader = request.headers.get('authorization') || '';
   const token = authHeader.replace('Bearer ', '');
