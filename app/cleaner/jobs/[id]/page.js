@@ -24,6 +24,7 @@ import {
   isClaimableMissedJob,
 } from '../../../../lib/missedClockin';
 import { shiftShortfall } from '../../../../lib/shortShift';
+import { enqueue, makeId } from '../../../../lib/clockQueue';
 import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 
@@ -343,9 +344,16 @@ export default function JobDetailPage() {
       }
     }
 
+    // The id is decided here rather than by the database, so that a check-in
+    // taken with no signal still has something for a later check-out to point
+    // at, and so replaying it can collide harmlessly instead of writing the
+    // shift twice. See lib/clockQueue.js.
+    const checkinId = makeId();
+    const at = new Date().toISOString();
+
     const { data, error } = await supabase
       .from('checkins')
-      .insert({ job_id: id, cleaner_id: userId, checked_in_at: new Date().toISOString(), lat, lng })
+      .insert({ id: checkinId, job_id: id, cleaner_id: userId, checked_in_at: at, lat, lng })
       .select()
       .single();
 
@@ -357,12 +365,16 @@ export default function JobDetailPage() {
     // away believing they are clocked in - and the shift is marked missed
     // hours later. That is not a rare edge case, it is the likeliest single
     // cause of the missed clock-ins this whole flow exists to mop up.
+    //
+    // Now it is kept instead. They are checked in as far as the app is
+    // concerned - clock running, tasks and photos available - and the write
+    // goes out when signal returns, stamped with the time they actually
+    // tapped rather than the time it synced.
     if (error) {
-      setCheckInError(
-        navigator.onLine === false
-          ? "You're offline, so that didn't save. Check in again when you have signal — or tell the office you worked it and they'll confirm the hours."
-          : "That didn't save. Try again — if it keeps failing, tell the office you're on site."
-      );
+      enqueue({ id: checkinId, kind: 'check_in', jobId: id, at, lat, lng });
+      setCheckin({ id: checkinId, job_id: id, cleaner_id: userId, checked_in_at: at, checked_out_at: null, lat, lng, pendingSync: true });
+      setJob((j) => ({ ...j, status: 'in_progress' }));
+      toast.success("No signal — your check-in is saved on your phone and will send itself. Carry on.");
       return;
     }
 
@@ -394,7 +406,17 @@ export default function JobDetailPage() {
       .eq('id', checkin.id);
 
     setCheckingOut(false);
-    if (error) { toast.error('Could not check out. Please try again.'); return; }
+
+    // Same reasoning as check-in, and if anything more important: a check-out
+    // that does not save leaves the shift open, which reconcile later closes
+    // at the job's allotted end - quietly paying the booked hours instead of
+    // the ones worked.
+    if (error) {
+      enqueue({ id: makeId(), kind: 'check_out', checkinId: checkin.id, jobId: id, at });
+      setCheckin((c) => ({ ...c, checked_out_at: at, pendingSync: true }));
+      toast.success('No signal — your check-out is saved on your phone and will send itself.');
+      return;
+    }
 
     const { data: jobRow } = await supabase.from('jobs').select('status').eq('id', id).single();
     if (jobRow) setJob((j) => ({ ...j, status: jobRow.status }));
