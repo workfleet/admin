@@ -43,8 +43,23 @@ if (!SUPABASE_URL || !ANON_KEY) {
   console.error('Missing NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local');
   process.exit(1);
 }
-if (!ADMIN_EMAIL || !ADMIN_PASSWORD || !CLEANER_EMAIL || !CLEANER_PASSWORD) {
-  console.error('Set TEST_ADMIN_EMAIL/PASSWORD and TEST_CLEANER_EMAIL/PASSWORD (existing logins) to run this.');
+// Access tokens are an alternative to passwords, for running this without
+// anybody typing a credential into a terminal - a session minted from the
+// service role (see scripts/mint-test-tokens.js) works exactly as a
+// password login does here, because it is the same kind of token and RLS
+// cannot tell the difference. That is the point: the test is only worth
+// anything if the database treats it as the real user.
+const ADMIN_TOKEN = process.env.TEST_ADMIN_TOKEN;
+const CLEANER_TOKEN = process.env.TEST_CLEANER_TOKEN;
+const ADMIN_ID = process.env.TEST_ADMIN_ID;
+const CLEANER_ID = process.env.TEST_CLEANER_ID;
+
+const haveTokens = ADMIN_TOKEN && CLEANER_TOKEN && ADMIN_ID && CLEANER_ID;
+const havePasswords = ADMIN_EMAIL && ADMIN_PASSWORD && CLEANER_EMAIL && CLEANER_PASSWORD;
+
+if (!haveTokens && !havePasswords) {
+  console.error('Set TEST_ADMIN_EMAIL/PASSWORD and TEST_CLEANER_EMAIL/PASSWORD (existing logins) to run this,');
+  console.error('or TEST_ADMIN_TOKEN/ID and TEST_CLEANER_TOKEN/ID from scripts/mint-test-tokens.js.');
   process.exit(1);
 }
 
@@ -107,8 +122,8 @@ async function jobStatus(id, token) {
 }
 
 async function main() {
-  const admin = await login(ADMIN_EMAIL, ADMIN_PASSWORD);
-  const cleaner = await login(CLEANER_EMAIL, CLEANER_PASSWORD);
+  const admin = haveTokens ? { token: ADMIN_TOKEN, userId: ADMIN_ID } : await login(ADMIN_EMAIL, ADMIN_PASSWORD);
+  const cleaner = haveTokens ? { token: CLEANER_TOKEN, userId: CLEANER_ID } : await login(CLEANER_EMAIL, CLEANER_PASSWORD);
 
   const { body: [client] } = await rest('POST', 'clients', admin.token, { name: '__e2e_missed_clockin__' });
   const { body: [property] } = await rest('POST', 'properties', admin.token, {
