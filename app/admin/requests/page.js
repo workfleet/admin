@@ -7,6 +7,7 @@ import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
 import { formatHours } from '../../../lib/hoursWorked';
 import { isClaimableMissedJob } from '../../../lib/missedClockin';
+import { describeShortfall, shiftShortfall } from '../../../lib/shortShift';
 import { respondToEmergencyAlert } from '../../../lib/emergencyRespond';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
@@ -24,7 +25,7 @@ export default function AdminRequests() {
   const router = useRouter();
   const confirm = useConfirm();
   const toast = useToast();
-  const [section, setSection] = useState('requests'); // requests | timeoff | extensions | missedClockins | reschedules | clientRequests | pauses | emergencies
+  const [section, setSection] = useState('requests'); // requests | timeoff | extensions | shortShifts | missedClockins | reschedules | clientRequests | pauses | emergencies
   const [loading, setLoading] = useState(true);
   const [holidayBalances, setHolidayBalances] = useState({}); // cleanerId -> accrued hours
 
@@ -87,6 +88,13 @@ export default function AdminRequests() {
   const [confirmingShiftId, setConfirmingShiftId] = useState(null);
   const [confirmShiftNote, setConfirmShiftNote] = useState('');
 
+  // Shifts held back because the clock and the booking disagree - somebody
+  // checked out well before the time the job pays for. Held, not rejected:
+  // these do not reach payroll until a person has looked.
+  const [shortShifts, setShortShifts] = useState([]);
+  const [reviewingShiftId, setReviewingShiftId] = useState(null);
+  const [correctedMinutes, setCorrectedMinutes] = useState('');
+
   // emergency alert log
   const [emergencies, setEmergencies] = useState([]);
   const [emergencyFilter, setEmergencyFilter] = useState('all'); // open | acknowledged | all
@@ -100,7 +108,7 @@ export default function AdminRequests() {
     const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
-    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, { data: assignmentsData }, { data: extensionsData }, { data: reschedulesData }, { data: clientRequestsData }, { data: pausesData }, { data: emergenciesData }, { data: missedClockinData }, { data: missedShiftData }] = await Promise.all([
+    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, { data: assignmentsData }, { data: extensionsData }, { data: reschedulesData }, { data: clientRequestsData }, { data: pausesData }, { data: emergenciesData }, { data: missedClockinData }, { data: missedShiftData }, { data: shortShiftData }] = await Promise.all([
       supabase
         .from('staff_requests')
         .select('id, type, description, status, created_at, resolved_at, resolution_note, resolved_by, cleaner_id, profiles!staff_requests_cleaner_id_fkey(full_name), resolver:profiles!staff_requests_resolved_by_fkey(full_name), jobs(scheduled_at, properties(address))')
@@ -147,6 +155,11 @@ export default function AdminRequests() {
         .lt('scheduled_at', new Date().toISOString())
         .gt('scheduled_at', new Date(Date.now() - 90 * 86400000).toISOString())
         .order('scheduled_at', { ascending: false }),
+      supabase
+        .from('jobs')
+        .select('id, scheduled_at, duration_minutes, status, properties(address, clients(name)), job_assignments(cleaner_id, profiles(full_name)), checkins(checked_in_at, checked_out_at)')
+        .eq('hours_review_needed', true)
+        .order('scheduled_at', { ascending: false }),
     ]);
 
     // A job's duration is split evenly across everyone assigned to it.
@@ -182,6 +195,9 @@ export default function AdminRequests() {
     setMissedShifts(
       (missedShiftData || [])
         .filter((j) => isClaimableMissedJob(j) && !alreadyClaimed.has(j.id))
+    );
+    setShortShifts(
+      (shortShiftData || []).map((j) => ({ ...j, shortfall: shiftShortfall(j, j.checkins) }))
     );
     setLoading(false);
   };
@@ -522,6 +538,38 @@ export default function AdminRequests() {
     await load();
   };
 
+  // Two ways a held shift can be resolved, kept as two functions because they
+  // are two different statements: "the booking was right and they worked it"
+  // versus "the booking was wrong and here is the real length". Collapsing
+  // them into one button with a prefilled number would make the second one
+  // the accidental default.
+  const resolveShortShift = async (job, actualMinutes) => {
+    const correcting = actualMinutes != null;
+    const { data: outcome, error } = correcting
+      ? await supabase.rpc('correct_short_shift', { target_job_id: job.id, actual_minutes: actualMinutes })
+      : await supabase.rpc('confirm_short_shift', { target_job_id: job.id });
+
+    if (error || outcome !== 'ok') {
+      toast.error(
+        outcome === 'not_flagged'
+          ? 'Someone else has already dealt with this one.'
+          : outcome === 'bad_minutes'
+            ? 'Enter how many minutes the shift actually ran.'
+            : 'Could not save that. Please try again.'
+      );
+      setReviewingShiftId(null);
+      await load();
+      return;
+    }
+
+    toast.success(correcting
+      ? `Corrected to ${actualMinutes} min — that is what will be paid.`
+      : 'Confirmed — the shift pays its booked hours.');
+    setReviewingShiftId(null);
+    setCorrectedMinutes('');
+    await load();
+  };
+
   const startConfirmShift = (id) => {
     setConfirmingShiftId(id);
     setConfirmShiftNote('');
@@ -619,6 +667,9 @@ export default function AdminRequests() {
           </button>
           <button className={section === 'extensions' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('extensions')}>
             Time Extensions ({pendingExtensionCount})
+          </button>
+          <button className={section === 'shortShifts' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('shortShifts')}>
+            Hours to Check ({shortShifts.length})
           </button>
           <button className={section === 'missedClockins' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('missedClockins')}>
             {/* Both halves of the same problem: shifts somebody has asked
@@ -869,6 +920,92 @@ export default function AdminRequests() {
                 )}
               </div>
             ))}
+          </div>
+        </>
+      )}
+
+      {section === 'shortShifts' && (
+        <>
+          <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 16px' }}>
+            Shifts where someone clocked well under the time the job is booked for. These
+            are <strong>held</strong> — they pay nothing until you confirm the hours or
+            correct the booking, so clear them before a pay run.
+          </p>
+
+          {shortShifts.length === 0 && <p className="empty-state">Nothing to check.</p>}
+
+          <div className="job-list">
+            {shortShifts.map((job) => {
+              const names = (job.job_assignments || []).map((a) => a.profiles?.full_name).filter(Boolean);
+              const clockedRounded = Math.max(1, Math.round(job.shortfall.clocked));
+              return (
+                <div key={job.id} className="card job-card" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                    <div>
+                      <h2>{names.length > 0 ? names.join(', ') : 'Unassigned'}</h2>
+                      <p style={{ fontSize: 14, margin: '4px 0' }}>
+                        {job.properties?.clients?.name ? `${job.properties.clients.name} · ` : ''}
+                        {job.properties?.address}
+                      </p>
+                      {/* Both numbers in one breath. A percentage alone would
+                          not tell an admin whether this is a mis-tap or a
+                          slightly early finish, and those want opposite
+                          answers. */}
+                      <p style={{ fontSize: 15, margin: '0 0 4px', fontWeight: 600 }}>
+                        {describeShortfall(job.shortfall)}
+                      </p>
+                      <p style={{ fontSize: 13.5, color: 'var(--muted)', margin: '0 0 4px' }}>
+                        {new Date(job.scheduled_at).toLocaleString()}
+                      </p>
+                      <span className="badge missed">held — unpaid</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, height: 'fit-content' }}>
+                      <button
+                        className="btn-secondary"
+                        onClick={() => { setReviewingShiftId(job.id); setCorrectedMinutes(String(clockedRounded)); }}
+                        title="The shift really was shorter than booked - set what it actually ran to"
+                      >
+                        Correct it
+                      </button>
+                      <button
+                        className="btn-primary"
+                        onClick={() => resolveShortShift(job, null)}
+                        title="They worked the full shift and just clocked out early - pay the booked hours"
+                      >
+                        Hours are right
+                      </button>
+                    </div>
+                  </div>
+
+                  {reviewingShiftId === job.id && (
+                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--hairline)' }}>
+                      <label>How long did it actually run? (minutes)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={correctedMinutes}
+                        onChange={(e) => setCorrectedMinutes(e.target.value)}
+                        autoFocus
+                        style={{ width: 140, marginBottom: 8 }}
+                      />
+                      <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '0 0 8px' }}>
+                        This rewrites the job's booked duration, which is what pay and
+                        holiday are both worked out from.
+                      </p>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button className="btn-secondary" onClick={() => setReviewingShiftId(null)}>Cancel</button>
+                        <button
+                          className="btn-primary"
+                          onClick={() => resolveShortShift(job, parseInt(correctedMinutes, 10))}
+                        >
+                          Save and pay {correctedMinutes || '—'} min
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </>
       )}

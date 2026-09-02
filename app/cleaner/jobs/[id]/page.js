@@ -23,6 +23,7 @@ import {
   defaultClaimWindow,
   isClaimableMissedJob,
 } from '../../../../lib/missedClockin';
+import { shiftShortfall } from '../../../../lib/shortShift';
 import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 
@@ -365,10 +366,17 @@ export default function JobDetailPage() {
       if (!proceed) return;
     }
 
+    const at = new Date().toISOString();
+    // What the clock will say about this shift once it closes. Deliberately
+    // not surfaced to the cleaner - checking out early behaves exactly as it
+    // always has from their side, and the office is told separately. Per
+    // Jess: no warning to staff.
+    const shortfall = shiftShortfall(job, [{ ...checkin, checked_out_at: at }]);
+
     setCheckingOut(true);
     const { error } = await supabase
       .from('checkins')
-      .update({ checked_out_at: new Date().toISOString() })
+      .update({ checked_out_at: at })
       .eq('id', checkin.id);
 
     setCheckingOut(false);
@@ -376,7 +384,25 @@ export default function JobDetailPage() {
 
     const { data: jobRow } = await supabase.from('jobs').select('status').eq('id', id).single();
     if (jobRow) setJob((j) => ({ ...j, status: jobRow.status }));
-    setCheckin((c) => ({ ...c, checked_out_at: new Date().toISOString() }));
+    setCheckin((c) => ({ ...c, checked_out_at: at }));
+
+    if (shortfall.isShort) {
+      // The trigger in 0079 already puts this in the office's notification
+      // feed. This is the push and the email on top: the feed only reaches
+      // somebody who opens the app, and the useful moment for a question
+      // about an early finish is while the cleaner is still nearby.
+      const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', userId).single();
+      notify({
+        type: 'short_shift_checkout',
+        jobId: id,
+        cleanerName: profile?.full_name || 'A cleaner',
+        address: job.properties?.address,
+        scheduledAt: job.scheduled_at,
+        clockedLabel: formatSpan(shortfall.clocked),
+        bookedLabel: formatSpan(shortfall.booked),
+      });
+    }
+
     toast.success('Checked out.');
   };
 

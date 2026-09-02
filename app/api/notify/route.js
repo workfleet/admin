@@ -149,6 +149,18 @@ export async function POST(request) {
       tag: `missed-clockin-decided-${payload.jobId || 'unknown'}`,
       url: '/cleaner/hours',
     });
+  } else if (payload.type === 'short_shift_checkout') {
+    // Somebody has closed a shift well before its booked time. Admin and
+    // supervisor both, and promptly: while the cleaner may still be near the
+    // property this is a question ("everything alright?"), and an hour later
+    // it is an argument about a payslip.
+    const { data: staff } = await supabaseAdmin.from('profiles').select('id').in('role', ['admin', 'supervisor']);
+    await pushToUserIds((staff || []).map((s) => s.id), {
+      title: 'Early check-out',
+      body: `${payload.cleanerName || 'A cleaner'} checked out of ${payload.address || 'a shift'} after ${payload.clockedLabel || 'a short time'} of ${payload.bookedLabel || 'the booked time'}.`,
+      tag: `short-shift-${payload.jobId || 'unknown'}`,
+      url: '/admin/requests',
+    });
   } else if (payload.type === 'emergency_alert') {
     await pushAdminsAndSupervisors(payload.cleanerName);
   } else if (payload.type === 'emergency_alert_acknowledged') {
@@ -213,6 +225,12 @@ export async function POST(request) {
       subject = `${label} request from ${payload.cleanerName}`;
       text = `${payload.cleanerName} requested ${label.toLowerCase()} from ${payload.startDate} to ${payload.endDate}`
         + (payload.hours ? ` (${payload.hours} hours).` : '.');
+    } else if (payload.type === 'short_shift_checkout') {
+      to = await adminEmails();
+      if (to.length === 0) return NextResponse.json({ skipped: 'no_email' });
+      subject = `Early check-out - ${payload.cleanerName || 'a cleaner'}`;
+      text = `${payload.cleanerName || 'A cleaner'} checked out of ${payload.address || 'a shift'} on ${formatShiftTime(payload.scheduledAt)} after ${payload.clockedLabel || 'a short time'}, against ${payload.bookedLabel || 'the booked time'}.`
+        + '\n\nThe shift has NOT been paid - it is held under Requests > Hours to Check until you confirm the hours or correct the booked time.';
     } else if (payload.type === 'missed_clockin_claimed') {
       to = await adminEmails();
       if (to.length === 0) return NextResponse.json({ skipped: 'no_email' });
