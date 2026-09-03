@@ -38,13 +38,16 @@ describe('describeClockRecord', () => {
     expect(how.label).toMatch(/not clocked/);
   });
 
-  it('still says a self-declared row was not clocked even with no claim to hand', () => {
-    // The claim lookup can miss - an old row, or a query that returned
-    // nothing. Falling back to "clocked in normally" would be the one wrong
-    // answer, so the self_declared flag alone has to be enough.
+  it('stays neutral about a self-declared row with no claim behind it', () => {
+    // The claim lookup can miss, and a check-out the office corrected by hand
+    // has no claim at all. Blaming staff for a time the office wrote in is a
+    // guess, and "clocked in normally" is the one outright wrong answer - so
+    // it says what is known and no more.
     const how = describeClockRecord({ self_declared: true }, null);
     expect(how.tone).toBe('declared');
     expect(how.label).toMatch(/not clocked/);
+    expect(how.label).not.toMatch(/staff/);
+    expect(how.label).not.toMatch(/office/);
   });
 
   it('lets self-declared win over the auto flag', () => {
