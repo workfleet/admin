@@ -12,6 +12,7 @@ import InstallPrompt from '../components/InstallPrompt';
 import AutoCheckoutWatcher from '../components/AutoCheckoutWatcher';
 import ShiftLocationWatcher from '../components/ShiftLocationWatcher';
 import ClockQueueFlusher from '../components/ClockQueueFlusher';
+import PhotoQueueFlusher from '../components/PhotoQueueFlusher';
 
 const NAV_ITEMS = [
   { href: '/cleaner', label: 'Home', icon: Home },
@@ -70,6 +71,7 @@ export default function CleanerLayout({ children }) {
       <AutoCheckoutWatcher />
       <ShiftLocationWatcher />
       <ClockQueueFlusher />
+      <PhotoQueueFlusher />
       {children}
       <nav className="bottom-nav">
         {NAV_ITEMS.map((item) => {

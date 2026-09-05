@@ -25,6 +25,7 @@ import {
 } from '../../../../lib/missedClockin';
 import { shiftShortfall } from '../../../../lib/shortShift';
 import { enqueue, makeId } from '../../../../lib/clockQueue';
+import { makePhotoPath, pendingPhotos, queuePhoto } from '../../../../lib/photoQueue';
 import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 
@@ -251,7 +252,20 @@ export default function JobDetailPage() {
 
     setJob(jobData);
     setTasks(taskData || []);
-    setPhotos(await withSignedUrls(photoData || []));
+    // Photos still waiting to upload are shown alongside the sent ones, and
+    // survive a reload because they live in IndexedDB rather than in state.
+    // A cleaner who cannot see the photo they just took will take it again.
+    const waiting = await pendingPhotos(id);
+    setPhotos([
+      ...waiting.map((p) => ({
+        id: `pending:${p.path}`,
+        url: p.path,
+        created_at: p.takenAt,
+        signedUrl: URL.createObjectURL(p.blob),
+        pendingSync: true,
+      })).reverse(),
+      ...(await withSignedUrls(photoData || [])),
+    ]);
     setCheckin(checkinData);
     setExtensionRequests(extensionData || []);
     setChecklistItems(checklistData || []);
@@ -667,14 +681,34 @@ export default function JobDetailPage() {
     setUploading(true);
 
     const file = await compressImage(rawFile);
-    const fileName = `${id}/${Date.now()}-${rawFile.name.replace(/\.[^.]+$/, '.jpg')}`;
+    // Path decided now, from when the photo was taken, so a queued upload and
+    // a replay of it both write to the same place. See lib/photoQueue.js.
+    const takenAt = new Date().toISOString();
+    const fileName = makePhotoPath(id, takenAt, rawFile.name);
+
     const { error: uploadError } = await supabase.storage
       .from('job-photos')
       .upload(fileName, file, { contentType: 'image/jpeg' });
 
+    // "Check your signal and try again" was no use to somebody who has no
+    // signal and is about to drive away: the photo could only be taken while
+    // they were standing in front of the room. It is kept instead, and sent
+    // when the phone next has a connection.
     if (uploadError) {
+      const queued = await queuePhoto({ jobId: id, blob: file, path: fileName, takenAt });
       setUploading(false);
-      toast.error("Couldn't send that photo - check your signal and try again.");
+      if (!queued) {
+        toast.error("Couldn't save that photo on your phone. Try again when you have signal.");
+        return;
+      }
+      setPhotos((prev) => [{
+        id: `pending:${fileName}`,
+        url: fileName,
+        created_at: takenAt,
+        signedUrl: URL.createObjectURL(file),
+        pendingSync: true,
+      }, ...prev]);
+      toast.success('No signal — that photo is saved on your phone and will send itself.');
       return;
     }
 
@@ -1118,7 +1152,21 @@ export default function JobDetailPage() {
                 <div className="visit-card-label visit-photos-label">Your photos</div>
                 <div className="visit-photo-grid">
                   {photos.map((p) => (
-                    <img key={p.id} src={p.signedUrl} alt="job" />
+                    // A photo still on the phone is dimmed and labelled, so
+                    // nobody assumes it has reached the office - and nobody
+                    // takes it a second time because it looks missing.
+                    <span key={p.id} style={{ position: 'relative', display: 'block' }}>
+                      <img src={p.signedUrl} alt="job" style={p.pendingSync ? { opacity: 0.55 } : undefined} />
+                      {p.pendingSync && (
+                        <span style={{
+                          position: 'absolute', left: 4, bottom: 4, fontSize: 10, fontWeight: 600,
+                          background: 'var(--wf-graphite)', color: 'var(--wf-white)',
+                          borderRadius: 4, padding: '2px 5px',
+                        }}>
+                          Waiting to send
+                        </span>
+                      )}
+                    </span>
                   ))}
                 </div>
               </div>
