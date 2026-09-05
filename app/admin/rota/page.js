@@ -8,6 +8,7 @@ import { claimFor, describeClockRecord, indexClaims } from '../../../lib/clockIn
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
 import { localDateString } from '../../../lib/localDate';
+import { generateOccurrenceDates, MAX_OCCURRENCES, WEEKDAY_OPTIONS } from '../../../lib/recurrence';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
@@ -44,24 +45,6 @@ const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => h);
 const MINUTE_OPTIONS = [0, 15, 30, 45];
 
 const JOB_SELECT = 'id, scheduled_at, status, duration_minutes, notes, series_id, property_id, properties(address, lat, lng, clients(name)), job_assignments(cleaner_id, profiles(full_name))';
-
-// Sanity cap against a mistake (e.g. daily "forever") generating an
-// unbounded number of jobs in one go.
-const MAX_OCCURRENCES = 104;
-
-function generateOccurrenceDates(start, recurrenceType, intervalCount, endMode, endDate, count) {
-  const dates = [];
-  const current = new Date(start);
-  while (dates.length < MAX_OCCURRENCES) {
-    dates.push(new Date(current));
-    if (endMode === 'count' && dates.length >= count) break;
-    if (recurrenceType === 'daily') current.setDate(current.getDate() + intervalCount);
-    else if (recurrenceType === 'weekly') current.setDate(current.getDate() + intervalCount * 7);
-    else if (recurrenceType === 'monthly') current.setMonth(current.getMonth() + intervalCount);
-    if (endMode === 'date' && current > endDate) break;
-  }
-  return dates;
-}
 
 function formatHour12(h) {
   const period = h < 12 ? 'AM' : 'PM';
@@ -187,6 +170,41 @@ export default function AdminRota() {
   const [recurrenceEndMode, setRecurrenceEndMode] = useState('count');
   const [recurrenceCount, setRecurrenceCount] = useState(8);
   const [recurrenceEndDate, setRecurrenceEndDate] = useState('');
+  // Null until the office ticks or unticks a day: the default follows
+  // whatever date is typed in above, and stops following once touched.
+  const [recurrenceWeekdays, setRecurrenceWeekdays] = useState(null);
+
+  const weeklyDays = useMemo(() => {
+    if (recurrenceWeekdays) return recurrenceWeekdays;
+    if (!jobDate) return [];
+    return [new Date(`${jobDate}T12:00`).getDay()];
+  }, [recurrenceWeekdays, jobDate]);
+
+  const toggleWeekday = (day) => {
+    setRecurrenceWeekdays(
+      weeklyDays.includes(day) ? weeklyDays.filter((d) => d !== day) : [...weeklyDays, day]
+    );
+  };
+
+  // What the form as it stands would book, so the office can see "12 jobs,
+  // Mon 7 Sep to Fri 16 Oct" before pressing Create rather than after.
+  const recurrencePreview = useMemo(() => {
+    if (!repeatJob || !jobDate || !jobHour) return null;
+    if (recurrenceType === 'weekly' && weeklyDays.length === 0) return null;
+    if (recurrenceEndMode === 'date' && !recurrenceEndDate) return null;
+    const dates = generateOccurrenceDates(
+      new Date(`${jobDate}T${jobHour}:${jobMinute}`),
+      recurrenceType,
+      recurrenceInterval,
+      recurrenceEndMode,
+      recurrenceEndMode === 'date' ? new Date(`${recurrenceEndDate}T23:59`) : null,
+      recurrenceCount,
+      weeklyDays
+    );
+    if (dates.length === 0) return null;
+    const fmt = (d) => d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+    return { count: dates.length, first: fmt(dates[0]), last: fmt(dates[dates.length - 1]) };
+  }, [repeatJob, jobDate, jobHour, jobMinute, recurrenceType, recurrenceInterval, recurrenceEndMode, recurrenceEndDate, recurrenceCount, weeklyDays]);
 
   const [jobTasks, setJobTasks] = useState([]);
   const [newTaskText, setNewTaskText] = useState('');
@@ -651,6 +669,7 @@ export default function AdminRota() {
     setRecurrenceEndMode('count');
     setRecurrenceCount(8);
     setRecurrenceEndDate('');
+    setRecurrenceWeekdays(null);
     setShowForm(false);
   };
 
@@ -658,6 +677,7 @@ export default function AdminRota() {
     e.preventDefault();
     if (!clientId || !propertyAddress.trim() || !jobDate || !jobHour) return;
     if (repeatJob && recurrenceEndMode === 'date' && !recurrenceEndDate) return;
+    if (repeatJob && recurrenceType === 'weekly' && weeklyDays.length === 0) return;
 
     const jobTime = `${jobHour}:${jobMinute}`;
     const firstDate = new Date(`${jobDate}T${jobTime}`);
@@ -669,7 +689,8 @@ export default function AdminRota() {
           recurrenceInterval,
           recurrenceEndMode,
           recurrenceEndMode === 'date' ? new Date(`${recurrenceEndDate}T23:59`) : null,
-          recurrenceCount
+          recurrenceCount,
+          weeklyDays
         )
       : [firstDate];
 
@@ -724,6 +745,7 @@ export default function AdminRota() {
           duration_minutes: duration,
           recurrence_type: recurrenceType,
           interval_count: recurrenceInterval,
+          weekdays: recurrenceType === 'weekly' ? [...weeklyDays].sort((a, b) => a - b) : null,
           created_by: session.user.id,
         })
         .select('id')
@@ -1911,6 +1933,28 @@ export default function AdminRota() {
                       </div>
                     </div>
 
+                    {recurrenceType === 'weekly' && (
+                      <div className="field">
+                        <label className="field-label">On these days</label>
+                        <div className="weekday-ticks">
+                          {WEEKDAY_OPTIONS.map((w) => (
+                            <label key={w.day} className={`weekday-tick ${weeklyDays.includes(w.day) ? 'active' : ''}`} title={w.label}>
+                              <input
+                                type="checkbox"
+                                checked={weeklyDays.includes(w.day)}
+                                onChange={() => toggleWeekday(w.day)}
+                                aria-label={w.label}
+                              />
+                              {w.short}
+                            </label>
+                          ))}
+                        </div>
+                        {weeklyDays.length === 0 && (
+                          <p style={{ fontSize: 12, color: 'var(--wf-coral)', margin: '6px 0 0' }}>Tick at least one day.</p>
+                        )}
+                      </div>
+                    )}
+
                     <label className="field-label">Ends</label>
                     <div className="field-row">
                       <div className="field">
@@ -1938,6 +1982,12 @@ export default function AdminRota() {
                         )}
                       </div>
                     </div>
+                    {recurrencePreview && (
+                      <p style={{ fontSize: 13, color: 'var(--ink)', margin: '0 0 6px', fontWeight: 600 }}>
+                        Books {recurrencePreview.count} job{recurrencePreview.count === 1 ? '' : 's'}
+                        {recurrencePreview.count > 1 ? `, ${recurrencePreview.first} to ${recurrencePreview.last}` : ` on ${recurrencePreview.first}`}.
+                      </p>
+                    )}
                     <p style={{ fontSize: 12, color: 'var(--muted)', margin: 0 }}>
                       Capped at {MAX_OCCURRENCES} occurrences. Each one can be moved, reassigned, or deleted individually afterwards.
                     </p>

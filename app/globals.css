@@ -3165,3 +3165,45 @@ a.btn-compact {
   line-height: 1.5;
   color: var(--ink-soft);
 }
+
+/* Weekday tick boxes on the recurring-job form */
+.weekday-ticks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.weekday-tick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--wf-radius);
+  background: var(--wf-white);
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.weekday-tick:hover {
+  border-color: var(--brand-accent);
+}
+
+.weekday-tick.active {
+  border-color: var(--wf-graphite);
+  background: var(--wf-neutral-tint);
+  color: var(--ink);
+}
+
+.weekday-tick input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--wf-graphite);
+  cursor: pointer;
+}
