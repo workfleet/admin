@@ -206,6 +206,9 @@ export default function AdminQuotes() {
   const [role, setRole] = useState(null);
   const [quotes, setQuotes] = useState([]);
   const [clients, setClients] = useState([]);
+  // Every client's saved addresses, so a quote for an existing client can
+  // pick a site off the list rather than type it again.
+  const [properties, setProperties] = useState([]);
   const [pricingSettings, setPricingSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('open'); // open | decided | all
@@ -243,6 +246,24 @@ export default function AdminQuotes() {
   const useCalculator = pricingMode === 'calculator';
   const useShiftSchedule = pricingMode === 'schedule';
 
+  const savedAddresses = useMemo(
+    () => (recipientType === 'client' && clientId ? properties.filter((p) => p.client_id === clientId) : []),
+    [properties, recipientType, clientId]
+  );
+
+  const chooseClient = (id) => {
+    setClientId(id);
+    // Fill in the address when the new client has exactly one on file, but
+    // never over the top of something the office typed by hand - only a
+    // blank box or an address that came off the previous client's list.
+    const current = siteAddress.trim();
+    const cameFromList = current !== '' && properties.some((p) => p.address === current);
+    if (current !== '' && !cameFromList) return;
+    const saved = properties.filter((p) => p.client_id === id);
+    if (saved.length === 1) setSiteAddress(saved[0].address);
+    else if (cameFromList) setSiteAddress('');
+  };
+
   const [expandedQuoteId, setExpandedQuoteId] = useState(null);
 
   useEffect(() => {
@@ -253,13 +274,14 @@ export default function AdminQuotes() {
     const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
-    const [{ data: ownProfile }, { data: quotesData }, { data: clientsData }, { data: pricingData }, { data: companyData }] = await Promise.all([
+    const [{ data: ownProfile }, { data: quotesData }, { data: clientsData }, { data: propertiesData }, { data: pricingData }, { data: companyData }] = await Promise.all([
       supabase.from('profiles').select('role').eq('id', session.user.id).single(),
       supabase
         .from('quotes')
         .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, status, valid_until, notes, created_at, archived_at, calculator_input, calculator_breakdown, shift_schedule, clients(name)')
         .order('created_at', { ascending: false }),
       supabase.from('clients').select('id, name').order('name'),
+      supabase.from('properties').select('id, client_id, address'),
       supabase.from('pricing_settings').select('*').single(),
       supabase.from('company_settings').select('*').limit(1).single(),
     ]);
@@ -267,6 +289,7 @@ export default function AdminQuotes() {
     setRole(ownProfile?.role || null);
     setQuotes(quotesData || []);
     setClients(clientsData || []);
+    setProperties(propertiesData || []);
     setPricingSettings(pricingData || null);
     setCompanySettings(companyData || null);
     setLoading(false);
@@ -693,7 +716,7 @@ export default function AdminQuotes() {
               {recipientType === 'client' ? (
                 <div className="field">
                   <label className="field-label">Client</label>
-                  <select value={clientId} onChange={(e) => setClientId(e.target.value)} required>
+                  <select value={clientId} onChange={(e) => chooseClient(e.target.value)} required>
                     <option value="">Select...</option>
                     {clients.map((c) => (
                       <option key={c.id} value={c.id}>{c.name}</option>
@@ -725,8 +748,28 @@ export default function AdminQuotes() {
                   value={siteAddress}
                   onChange={setSiteAddress}
                   onSelect={({ address }) => setSiteAddress(address)}
-                  placeholder="Start typing an address..."
+                  placeholder={savedAddresses.length > 0 ? 'Pick a saved address below, or type a new one...' : 'Start typing an address...'}
                 />
+                {savedAddresses.length > 0 && (
+                  <div className="saved-addresses" role="group" aria-label="Saved addresses for this client">
+                    <span className="saved-addresses-label">Saved for this client</span>
+                    {savedAddresses.map((p) => {
+                      const active = p.address === siteAddress.trim();
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          className={`saved-address ${active ? 'active' : ''}`}
+                          aria-pressed={active}
+                          onClick={() => setSiteAddress(p.address)}
+                          title="Use this address"
+                        >
+                          {p.address}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <div className="field">
