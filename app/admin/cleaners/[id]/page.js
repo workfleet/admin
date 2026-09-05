@@ -149,7 +149,7 @@ export default function CleanerProfile() {
 
     const { data: checkinsData } = await supabase
       .from('checkins')
-      .select('id, job_id, cleaner_id, checked_in_at, checked_out_at, auto_checked_out, self_declared, jobs(scheduled_at, properties(address))')
+      .select('id, job_id, cleaner_id, checked_in_at, checked_out_at, auto_checked_out, self_declared, closed_at_booked_end, jobs(scheduled_at, properties(address))')
       .eq('cleaner_id', id)
       .order('checked_in_at', { ascending: false });
 

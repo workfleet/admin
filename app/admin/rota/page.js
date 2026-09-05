@@ -404,7 +404,7 @@ export default function AdminRota() {
   const loadCheckins = async (jobId) => {
     const { data } = await supabase
       .from('checkins')
-      .select('id, job_id, cleaner_id, checked_in_at, checked_out_at, auto_checked_out, self_declared, lat, lng, profiles(full_name)')
+      .select('id, job_id, cleaner_id, checked_in_at, checked_out_at, auto_checked_out, self_declared, closed_at_booked_end, lat, lng, profiles(full_name)')
       .eq('job_id', jobId)
       .order('checked_in_at', { ascending: true });
 

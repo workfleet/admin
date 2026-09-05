@@ -60,6 +60,36 @@ describe('describeClockRecord', () => {
     expect(how.tone).toBe('declared');
   });
 
+  it('marks a shift closed at the booked end because nobody clocked out', () => {
+    const how = describeClockRecord({ closed_at_booked_end: true, checked_out_at: 'y' }, null);
+    expect(how.tone).toBe('inferred');
+    expect(how.label).toMatch(/Never clocked out/);
+    // Must not claim a departure was seen. Nothing was: the job ran out of
+    // time with the shift still open, and "left the geofence" would be
+    // inventing evidence about where somebody was.
+    expect(how.label).not.toMatch(/geofence/);
+  });
+
+  it('does not claim a departure was observed when both flags are set', () => {
+    // Should not happen, but if a row ever carried both, the weaker claim is
+    // the only one that can be stood behind.
+    const how = describeClockRecord(
+      { closed_at_booked_end: true, auto_checked_out: true, checked_out_at: 'y' },
+      null
+    );
+    expect(how.label).not.toMatch(/geofence/);
+  });
+
+  it('lets a self-declared shift outrank a booked-end close', () => {
+    // A declared row is written with both timestamps at once; it was never
+    // left open for reconcile to close.
+    const how = describeClockRecord(
+      { self_declared: true, closed_at_booked_end: true, checked_out_at: 'y' },
+      { status: 'approved', raised_by_admin: true }
+    );
+    expect(how.label).toMatch(/Recorded by the office/);
+  });
+
   it('returns nothing for no row at all', () => {
     expect(describeClockRecord(null, null)).toBeNull();
   });

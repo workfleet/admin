@@ -176,7 +176,7 @@ export default function ClientDetail() {
     const { data } = jobIds.length > 0
       ? await supabase
           .from('checkins')
-          .select('id, job_id, cleaner_id, checked_in_at, checked_out_at, auto_checked_out, self_declared, profiles(full_name)')
+          .select('id, job_id, cleaner_id, checked_in_at, checked_out_at, auto_checked_out, self_declared, closed_at_booked_end, profiles(full_name)')
           .in('job_id', jobIds)
           .order('checked_in_at', { ascending: false })
       : { data: [] };
