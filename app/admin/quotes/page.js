@@ -13,7 +13,7 @@ import {
   PROPERTY_TYPES, PROPERTY_TYPE_DEFAULTS, ADDON_TYPES, OVEN_OPTIONS,
   SERVICE_TYPES, GARDEN_SIZE_OPTIONS, GARDEN_ADDON_TYPES, COMMERCIAL_FREQUENCY_OPTIONS,
   calculateQuote, defaultQuoteDescription, rebaseBreakdownToPrice,
-  DEFAULT_COMMERCIAL_RECURRING_MIN_HOURS,
+  PRICING_DEFAULTS,
 } from '../../../lib/quoteCalculator';
 import {
   WEEKDAYS, RECURRENCE_OPTIONS, EMPTY_SHIFT_PATTERN, EMPTY_SHIFT_SCHEDULE,
@@ -298,10 +298,7 @@ export default function AdminQuotes() {
   const startEditPricing = () => {
     // Seeded before the saved row so a setting whose migration hasn't run
     // yet opens on its default rather than as a blank required field.
-    setPricingForm({
-      commercial_recurring_min_hours: DEFAULT_COMMERCIAL_RECURRING_MIN_HOURS,
-      ...pricingSettings,
-    });
+    setPricingForm({ ...PRICING_DEFAULTS, ...pricingSettings });
     setShowPricingSettings(true);
   };
 
