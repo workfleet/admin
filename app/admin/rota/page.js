@@ -244,6 +244,29 @@ export default function AdminRota() {
     [weekStart]
   );
 
+  // Every address on file for the chosen client, so the office can click one
+  // instead of typing it again. A property is saved the first time a job is
+  // booked at it (or when it is added on the client's page), so this list
+  // fills up on its own.
+  const savedAddresses = useMemo(
+    () => (clientId ? properties.filter((p) => p.client_id === clientId) : []),
+    [properties, clientId]
+  );
+
+  const chooseSavedAddress = (p) => {
+    setPropertyAddress(p.address);
+    setPropertyCoords(p.lat != null && p.lng != null ? { lat: p.lat, lng: p.lng } : null);
+  };
+
+  const chooseClient = (id) => {
+    setClientId(id);
+    // One address on file means there is nothing to choose between, so fill
+    // it in; otherwise clear whatever the previous client had.
+    const saved = properties.filter((p) => p.client_id === id);
+    if (saved.length === 1) chooseSavedAddress(saved[0]);
+    else { setPropertyAddress(''); setPropertyCoords(null); }
+  };
+
   const hourSlots = useMemo(
     () => Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i),
     []
@@ -1777,7 +1800,7 @@ export default function AdminRota() {
                 <label className="field-label">Client</label>
                 <select
                   value={clientId}
-                  onChange={(e) => { setClientId(e.target.value); setPropertyAddress(''); setPropertyCoords(null); }}
+                  onChange={(e) => chooseClient(e.target.value)}
                   required
                 >
                   <option value="">Select a client</option>
@@ -1790,12 +1813,36 @@ export default function AdminRota() {
               <div className="field">
                 <label className="field-label">Address</label>
                 {clientId ? (
-                  <AddressAutocomplete
-                    value={propertyAddress}
-                    onChange={(text) => { setPropertyAddress(text); setPropertyCoords(null); }}
-                    onSelect={({ address, lat, lng }) => { setPropertyAddress(address); setPropertyCoords({ lat, lng }); }}
-                    placeholder="Start typing an address..."
-                  />
+                  <>
+                    <AddressAutocomplete
+                      value={propertyAddress}
+                      onChange={(text) => { setPropertyAddress(text); setPropertyCoords(null); }}
+                      onSelect={({ address, lat, lng }) => { setPropertyAddress(address); setPropertyCoords({ lat, lng }); }}
+                      placeholder={savedAddresses.length > 0 ? 'Pick a saved address below, or type a new one...' : 'Start typing an address...'}
+                    />
+                    {savedAddresses.length > 0 ? (
+                      <div className="saved-addresses" role="group" aria-label="Saved addresses for this client">
+                        <span className="saved-addresses-label">Saved for this client</span>
+                        {savedAddresses.map((p) => {
+                          const active = p.address === propertyAddress.trim();
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              className={`saved-address ${active ? 'active' : ''}`}
+                              aria-pressed={active}
+                              onClick={() => chooseSavedAddress(p)}
+                              title="Use this address"
+                            >
+                              {p.address}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="saved-addresses-note">No address saved for this client yet - this one will be saved for next time.</p>
+                    )}
+                  </>
                 ) : (
                   <input value="" disabled placeholder="Select a client first" />
                 )}
