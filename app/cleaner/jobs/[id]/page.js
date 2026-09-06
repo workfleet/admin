@@ -26,6 +26,7 @@ import {
 import { shiftShortfall } from '../../../../lib/shortShift';
 import { enqueue, makeId } from '../../../../lib/clockQueue';
 import { makePhotoPath, pendingPhotos, queuePhoto } from '../../../../lib/photoQueue';
+import { missingAreas } from '../../../../lib/photoCheck';
 import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 
@@ -91,6 +92,10 @@ export default function JobDetailPage() {
   const [resuming, setResuming] = useState(false);
   const [checklistItems, setChecklistItems] = useState([]);
   const [showChecklist, setShowChecklist] = useState(false);
+  // The last photo-vs-checklist comparison for this visit (api/jobs/photo-check),
+  // and whether one is running. Shown under the photos and used at check-out.
+  const [photoCheck, setPhotoCheck] = useState(null);
+  const [checkingPhotos, setCheckingPhotos] = useState(false);
   const [coverOffer, setCoverOffer] = useState(null);
   const [showCoverForm, setShowCoverForm] = useState(false);
   const [coverReason, setCoverReason] = useState('');
@@ -397,6 +402,54 @@ export default function JobDetailPage() {
     if (jobRow) setJob((j) => ({ ...j, status: jobRow.status }));
   };
 
+  // Ask the server to compare this job's uploaded photos with the property
+  // checklist. Null means "no answer" - offline, not configured, nothing to
+  // compare against - and every caller treats that as "carry on": a check
+  // that cannot run must never stop somebody leaving.
+  const runPhotoCheck = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return null;
+      const res = await fetch('/api/jobs/photo-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ job_id: id }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (data.skipped) return null;
+      setPhotoCheck(data);
+      return data;
+    } catch {
+      return null;
+    }
+  };
+
+  // Best effort, like notify(): the check-out must not wait on this.
+  const acknowledgePhotoCheck = async (checkId) => {
+    if (!checkId) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      await fetch('/api/jobs/photo-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ job_id: id, acknowledge: checkId }),
+      });
+    } catch {
+      // recorded if it can be
+    }
+  };
+
+  const handleManualPhotoCheck = async () => {
+    setCheckingPhotos(true);
+    const check = await runPhotoCheck();
+    setCheckingPhotos(false);
+    if (!check) toast.error("Couldn't check the photos just now - you can still check out.");
+  };
+
+  const canCheckPhotos = photos.some((p) => !p.pendingSync) && (checklistItems.length > 0 || tasks.length > 0);
+
   const handleCheckOut = async () => {
     if (photos.length === 0) {
       const proceed = await confirm(
@@ -404,6 +457,26 @@ export default function JobDetailPage() {
         { title: 'No photos added', danger: true, confirmLabel: 'Check out anyway' }
       );
       if (!proceed) return;
+    }
+
+    // The moment this is worth asking: the cleaner is still in the building,
+    // so a room with no photo is a thirty-second walk rather than a complaint
+    // next week with nothing to answer it. Photos still queued on the phone
+    // cannot be seen by the server, so a no-signal check-out skips this
+    // rather than judging half the evidence.
+    if (canCheckPhotos) {
+      setCheckingPhotos(true);
+      const check = await runPhotoCheck();
+      setCheckingPhotos(false);
+      const missing = check ? missingAreas(check) : [];
+      if (missing.length > 0) {
+        const proceed = await confirm(
+          `No photo yet of: ${missing.join(', ')}. You can take ${missing.length === 1 ? 'it' : 'them'} now, or check out without.`,
+          { title: `${missing.length} area${missing.length === 1 ? '' : 's'} with no photo`, danger: true, confirmLabel: 'Check out anyway' }
+        );
+        if (!proceed) return;
+        acknowledgePhotoCheck(check.id);
+      }
     }
 
     const at = new Date().toISOString();
@@ -1074,6 +1147,43 @@ export default function JobDetailPage() {
               ) : (
                 <p className="visit-photo-count">{photos.length} photo{photos.length === 1 ? '' : 's'} added</p>
               )}
+
+              {/* Same comparison check-out runs, on demand, so the missing
+                  room turns up while the cleaner is still upstairs rather
+                  than at the front door with their coat on. */}
+              {canCheckPhotos && (
+                <button
+                  type="button"
+                  className="visit-btn-secondary"
+                  onClick={handleManualPhotoCheck}
+                  disabled={checkingPhotos || checkingOut}
+                  style={{ marginTop: 10 }}
+                >
+                  {checkingPhotos ? 'Checking photos...' : 'Check photos against the checklist'}
+                </button>
+              )}
+
+              {photoCheck && (
+                <div className="visit-checklist" style={{ marginTop: 10 }}>
+                  {photoCheck.areas.map((a) => (
+                    <div
+                      key={a.area}
+                      className="visit-checklist-item"
+                      style={{ display: 'flex', alignItems: 'flex-start', gap: 8, color: a.covered ? 'inherit' : 'var(--wf-overdue)' }}
+                    >
+                      <span aria-hidden="true" style={{ fontWeight: 700, flexShrink: 0 }}>{a.covered ? '✓' : '✗'}</span>
+                      <span>
+                        <span style={{ fontWeight: a.covered ? 400 : 600 }}>{a.area}</span>
+                        {!a.covered && <span style={{ color: 'var(--muted)' }}> — no photo yet</span>}
+                        {a.covered && a.note && <span style={{ color: 'var(--muted)' }}> — {a.note}</span>}
+                      </span>
+                    </div>
+                  ))}
+                  {photoCheck.summary && (
+                    <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '8px 0 0' }}>{photoCheck.summary}</p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Collapsed, so a long room-by-room reference can't push the
@@ -1230,8 +1340,8 @@ export default function JobDetailPage() {
             >
               {showExtensionForm ? 'Cancel' : 'More time'}
             </button>
-            <button type="button" className="visit-btn-primary" onClick={handleCheckOut} disabled={checkingOut}>
-              {checkingOut ? 'Checking out...' : 'Check out'}
+            <button type="button" className="visit-btn-primary" onClick={handleCheckOut} disabled={checkingOut || checkingPhotos}>
+              {checkingOut ? 'Checking out...' : checkingPhotos ? 'Checking photos...' : 'Check out'}
             </button>
           </div>
         )}

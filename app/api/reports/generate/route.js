@@ -54,6 +54,28 @@ export async function POST(request) {
 
   const taskList = (tasks || []).map((t) => `- [${t.completed ? 'x' : ' '}] ${t.description}`).join('\n') || '(no to-do list recorded)';
 
+  // What the check-out photo check found (api/jobs/photo-check), if it ran.
+  // A room that was never photographed is worth a line in the report, and
+  // the report should not claim to have seen one.
+  const { data: photoCheck } = await supabaseAdmin
+    .from('job_photo_checks')
+    .select('result, missing_count, proceeded_anyway')
+    .eq('job_id', jobId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  let photoCheckText = '';
+  if (photoCheck?.result?.areas?.length) {
+    const covered = photoCheck.result.areas.filter((a) => a.covered).map((a) => a.area);
+    const missing = photoCheck.result.areas.filter((a) => !a.covered).map((a) => a.area);
+    photoCheckText = `\nAt check-out the photos were compared with the property checklist. `
+      + `Areas with a photo: ${covered.join(', ') || 'none'}. `
+      + `Areas with no photo: ${missing.join(', ') || 'none'}.`
+      + (missing.length > 0 && photoCheck.proceeded_anyway ? ' The cleaner was told and checked out regardless.' : '')
+      + '\n';
+  }
+
   const promptText = `You are writing a professional property cleaning report for a cleaning company's internal records.
 
 Property: ${job.properties?.address || 'Unknown address'}
@@ -66,7 +88,7 @@ Cleaner/admin notes about this job (may be typed or transcribed from speech, so 
 ${notes?.trim() || '(no notes provided)'}
 
 ${imageBlocks.length} photo(s) from the job are attached below.
-
+${photoCheckText}
 ${template.promptInstructions}
 
 Be concise, specific, and professional. Do not invent details that aren't supported by the notes or visible in the photos - if there isn't much to say for a section, keep it brief rather than padding it out.

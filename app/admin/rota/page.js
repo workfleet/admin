@@ -211,6 +211,7 @@ export default function AdminRota() {
   const [jobCheckins, setJobCheckins] = useState([]);
   const [jobCheckinClaims, setJobCheckinClaims] = useState(() => new Map());
   const [jobPhotos, setJobPhotos] = useState([]);
+  const [jobPhotoCheck, setJobPhotoCheck] = useState(null);
 
   const [editDate, setEditDate] = useState('');
   const [editHour, setEditHour] = useState('');
@@ -353,7 +354,7 @@ export default function AdminRota() {
 
   useEffect(() => {
     if (selectedJob) loadPhotos(selectedJob.id);
-    else setJobPhotos([]);
+    else { setJobPhotos([]); setJobPhotoCheck(null); }
   }, [selectedJob?.id]);
 
   useEffect(() => {
@@ -477,6 +478,17 @@ export default function AdminRota() {
     );
 
     setJobPhotos(withUrls);
+
+    // What the check-out photo check said, if one ran (api/jobs/photo-check).
+    // The most recent one is the one that mattered at the door.
+    const { data: check } = await supabase
+      .from('job_photo_checks')
+      .select('id, result, missing_count, proceeded_anyway, created_at, photo_count')
+      .eq('job_id', jobId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setJobPhotoCheck(check || null);
   };
 
   const addTask = async (e) => {
@@ -1724,6 +1736,27 @@ export default function AdminRota() {
                   />
                 ))}
               </div>
+              {jobPhotoCheck?.result?.areas?.length > 0 && (
+                <div style={{ marginTop: 10, fontSize: 13 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                    Photo check at check-out
+                    <span style={{ color: 'var(--muted)', fontWeight: 400 }}>
+                      {' · '}{jobPhotoCheck.result.areas.length - jobPhotoCheck.missing_count} of {jobPhotoCheck.result.areas.length} areas photographed
+                      {jobPhotoCheck.missing_count > 0 && jobPhotoCheck.proceeded_anyway ? ' · checked out anyway' : ''}
+                    </span>
+                  </div>
+                  {jobPhotoCheck.result.areas.map((a) => (
+                    <div key={a.area} style={{ display: 'flex', gap: 6, padding: '2px 0', color: a.covered ? 'inherit' : 'var(--wf-overdue)' }}>
+                      <span aria-hidden="true" style={{ fontWeight: 700 }}>{a.covered ? '✓' : '✗'}</span>
+                      <span>
+                        {a.area}
+                        {!a.covered && <span style={{ color: 'var(--muted)' }}> — no photo</span>}
+                        {a.covered && a.note && <span style={{ color: 'var(--muted)' }}> — {a.note}</span>}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
