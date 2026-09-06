@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Download, Folder, Package, KeyRound, LifeBuoy, Banknote, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Download, Folder, Package, KeyRound, LifeBuoy, Banknote, Bell, Menu, X } from 'lucide-react';
 import { signOutAndClearPresence } from '../../lib/signOut';
 import { getSessionAndProfile } from '../../lib/authGate';
 import PresenceIndicator from '../components/PresenceIndicator';
@@ -34,6 +34,7 @@ const NAV_ITEMS = [
   { href: '/admin/data-reports', label: 'Data Reports', icon: Download },
   { href: '/admin/requests', label: 'Requests', icon: MessageSquareWarning },
   { href: '/admin/messages', label: 'Messages', icon: MessageCircle },
+  { href: '/admin/notifications', label: 'Notifications', icon: Bell },
   { href: '/admin/help', label: 'Help', icon: HelpCircle },
 ];
 

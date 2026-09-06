@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Users } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
+import { notify } from '../../lib/notify';
 
 const HEARTBEAT_INTERVAL_MS = 20000;
 const REFRESH_INTERVAL_MS = 20000;
@@ -37,9 +38,18 @@ export default function PresenceIndicator({ iconColor = 'var(--muted)' }) {
     let refreshTimer;
     let userId;
 
+    let beats = 0;
     const sendHeartbeat = async () => {
       if (!userId) return;
       await supabase.from('user_presence').upsert({ profile_id: userId, last_seen_at: new Date().toISOString() });
+
+      // Every third beat (about a minute), ask the server to push any bell
+      // entries nobody has pushed yet - see flushPendingPushes in api/notify.
+      // Piggybacked here because this component is mounted in every portal
+      // whenever anyone is signed in, so as long as one person has the app
+      // open, everyone's phones stay current.
+      beats += 1;
+      if (beats % 3 === 1) notify({ type: 'flush' });
     };
 
     const refreshOnlineList = async () => {

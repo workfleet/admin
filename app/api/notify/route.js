@@ -50,6 +50,16 @@ async function clientEmails(clientId) {
 async function pushToUserIds(userIds, payload) {
   if (userIds.length === 0) return;
 
+  // A hand-written push for an event almost always has a bell row written
+  // by trigger for the same people a moment earlier. Marking those rows
+  // pushed stops the sweep below sending a plainer copy of the same news.
+  await supabaseAdmin
+    .from('notifications')
+    .update({ pushed_at: new Date().toISOString() })
+    .in('user_id', userIds)
+    .is('pushed_at', null)
+    .gt('created_at', new Date(Date.now() - 2 * 60000).toISOString());
+
   const { data: subs } = await supabaseAdmin
     .from('push_subscriptions')
     .select('endpoint, p256dh, auth')
@@ -60,6 +70,63 @@ async function pushToUserIds(userIds, payload) {
   if (gone.length > 0) {
     await supabaseAdmin.from('push_subscriptions').delete().in('endpoint', gone);
   }
+}
+
+const BELL_URL_BY_ROLE = {
+  admin: '/admin/notifications',
+  supervisor: '/admin/notifications',
+  cleaner: '/cleaner/notifications',
+  client: '/client',
+};
+
+// The bell is the source of truth for push (0086). Any notification row a
+// trigger has written and nothing has pushed yet goes to that person's
+// phone here, with the same words. Runs at the end of every request this
+// route handles and on a timer from any open app, so a kit request raised
+// at 6am reaches the office whether or not anything else happens first.
+//
+// Rows are claimed with one update before anything is sent, so two sweeps
+// running at once cannot both push the same row.
+async function flushPendingPushes() {
+  const since = new Date(Date.now() - 24 * 3600000).toISOString();
+  const { data: pending } = await supabaseAdmin
+    .from('notifications')
+    .select('id, user_id, message, profiles(role)')
+    .is('pushed_at', null)
+    .gt('created_at', since)
+    .order('created_at', { ascending: true })
+    .limit(200);
+  if (!pending || pending.length === 0) return 0;
+
+  const { data: claimed } = await supabaseAdmin
+    .from('notifications')
+    .update({ pushed_at: new Date().toISOString() })
+    .in('id', pending.map((n) => n.id))
+    .is('pushed_at', null)
+    .select('id');
+  const claimedIds = new Set((claimed || []).map((n) => n.id));
+
+  let sent = 0;
+  for (const n of pending) {
+    if (!claimedIds.has(n.id)) continue;
+    const { data: subs } = await supabaseAdmin
+      .from('push_subscriptions')
+      .select('endpoint, p256dh, auth')
+      .eq('user_id', n.user_id);
+    if (!subs || subs.length === 0) continue;
+
+    const { gone } = await sendPushToSubscriptions(subs, {
+      title: 'CrewConnect',
+      body: n.message,
+      tag: `bell-${n.id}`,
+      url: BELL_URL_BY_ROLE[n.profiles?.role] || '/',
+    });
+    if (gone.length > 0) {
+      await supabaseAdmin.from('push_subscriptions').delete().in('endpoint', gone);
+    }
+    sent += 1;
+  }
+  return sent;
 }
 
 // Cover offers go to every active cleaner except the person who
@@ -179,6 +246,14 @@ export async function POST(request) {
 
   const payload = await request.json();
 
+  // Nothing to say, just "push whatever is waiting". Called on a timer by
+  // any open app (see PresenceIndicator) so trigger-written bell rows reach
+  // phones without waiting for the next event.
+  if (payload.type === 'flush') {
+    const sent = await flushPendingPushes();
+    return NextResponse.json({ ok: true, sent });
+  }
+
   if (payload.type === 'shift_cover_needed') {
     await pushCoverOffer(payload);
   } else if (payload.type === 'shift_cover_filled') {
@@ -259,6 +334,11 @@ export async function POST(request) {
     });
     return NextResponse.json({ pushed: true });
   }
+
+  // Whatever this event's trigger put in the bell for anyone else - and
+  // anything older still waiting - goes out now, before the email step,
+  // which returns early when email is not configured.
+  await flushPendingPushes();
 
   if (!process.env.RESEND_API_KEY) return NextResponse.json({ skipped: 'no_api_key' });
 
