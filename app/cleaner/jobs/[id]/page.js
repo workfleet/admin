@@ -722,10 +722,12 @@ export default function JobDetailPage() {
     const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', userId).single();
     notify({
       type: 'shift_cover_needed',
+      offerId: data.id,
       cleanerName: profile?.full_name || 'A cleaner',
       releasedByCleanerId: userId,
       address: job.properties?.address,
       scheduledAt: job.scheduled_at,
+      durationMinutes: job.duration_minutes,
       reason: coverReason.trim() || null,
     });
   };

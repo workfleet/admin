@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { resend, EMAIL_FROM } from '../../../lib/resend';
 import { supabaseAdmin } from '../../../lib/supabaseAdmin';
 import { sendPushToSubscriptions } from '../../../lib/webPush';
+import { rankCandidates, isGoodMatch, topReason } from '../../../lib/coverRanking';
 
 // Any signed-in user may trigger a notification (a client sending a
 // message needs to notify admin), but we still require a valid session
@@ -71,6 +72,51 @@ async function pushActiveCleaners(excludeUserId, push) {
   await pushToUserIds(ids, push);
 }
 
+// A cover offer, sent to the people who can actually take it. Before 0084
+// this went to every active cleaner, including anyone on approved leave or
+// already booked at that hour; now rank_cover_candidates() says who is
+// eligible, and the ones it rates a good fit are told why - "you've worked
+// here before" gets a shift picked up in a way "first to accept" does not.
+// The offer itself stays open to everyone in the app, exactly as before;
+// only the push is targeted. If the ranking is unavailable (the migration
+// not yet run, say) it falls back to the old fan-out rather than to silence.
+async function pushCoverOffer(payload) {
+  const when = formatShiftTime(payload.scheduledAt);
+  const generic = {
+    title: 'Shift needs cover',
+    body: `${payload.address || 'A shift'} on ${when} - first to accept takes it.`,
+    tag: 'shift-cover',
+    url: '/cleaner',
+  };
+
+  if (!payload.offerId) {
+    await pushActiveCleaners(payload.releasedByCleanerId, generic);
+    return;
+  }
+
+  const { data: rows, error } = await supabaseAdmin.rpc('rank_cover_candidates', { target_offer_id: payload.offerId });
+  if (error || !rows) {
+    await pushActiveCleaners(payload.releasedByCleanerId, generic);
+    return;
+  }
+
+  const ranked = rankCandidates(rows, { jobMinutes: payload.durationMinutes || 60 })
+    .filter((c) => c.eligible && c.cleaner_id !== payload.releasedByCleanerId);
+
+  const good = ranked.filter((c) => isGoodMatch(c));
+  const rest = ranked.filter((c) => !isGoodMatch(c));
+
+  for (const c of good) {
+    const reason = topReason(c);
+    await pushToUserIds([c.cleaner_id], {
+      ...generic,
+      title: 'Shift needs cover - good match for you',
+      body: `${payload.address || 'A shift'} on ${when}.${reason ? ` ${reason}.` : ''} First to accept takes it.`,
+    });
+  }
+  await pushToUserIds(rest.map((c) => c.cleaner_id), generic);
+}
+
 async function pushAdminsAndSupervisors(cleanerName) {
   const { data: staff } = await supabaseAdmin.from('profiles').select('id').in('role', ['admin', 'supervisor']);
   await pushToUserIds((staff || []).map((s) => s.id), {
@@ -103,12 +149,7 @@ export async function POST(request) {
   const payload = await request.json();
 
   if (payload.type === 'shift_cover_needed') {
-    await pushActiveCleaners(payload.releasedByCleanerId, {
-      title: 'Shift needs cover',
-      body: `${payload.address || 'A shift'} on ${formatShiftTime(payload.scheduledAt)} - first to accept takes it.`,
-      tag: 'shift-cover',
-      url: '/cleaner',
-    });
+    await pushCoverOffer(payload);
   } else if (payload.type === 'shift_cover_filled') {
     if (payload.releasedByCleanerId) {
       await pushToUserIds([payload.releasedByCleanerId], {

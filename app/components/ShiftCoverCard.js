@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabaseClient';
 import { notify } from '../../lib/notify';
 import { useConfirm } from './ConfirmProvider';
 import { useToast } from './ToastProvider';
+import { rankCandidates, isGoodMatch } from '../../lib/coverRanking';
 
 // Why a claim didn't go through. The database decides — these just put
 // its answer in plain English, so nobody is left guessing why the button
@@ -30,6 +31,10 @@ export default function ShiftCoverCard({ userId, onChange }) {
   const [offers, setOffers] = useState([]);
   const [declinedIds, setDeclinedIds] = useState([]);
   const [busyId, setBusyId] = useState(null);
+  // How well each open offer fits this cleaner, from rank_cover_candidates
+  // (0084) - which, for a cleaner, returns only their own row. Used to put
+  // the shift they have done before at the top and say why.
+  const [fits, setFits] = useState({});
 
   useEffect(() => {
     if (!userId) return;
@@ -52,10 +57,21 @@ export default function ShiftCoverCard({ userId, onChange }) {
 
     // Drop anything whose job didn't come back with it — an offer whose
     // shift has since been deleted has nothing to show and nothing to claim.
-    setOffers(
-      (offerRows || []).filter((o) => o.jobs && (!o.expires_at || new Date(o.expires_at) > new Date()))
-    );
+    const live = (offerRows || []).filter((o) => o.jobs && (!o.expires_at || new Date(o.expires_at) > new Date()));
+    setOffers(live);
     setDeclinedIds((responseRows || []).map((r) => r.offer_id));
+
+    // Best effort: an offer with no fit row simply shows without a badge.
+    const fitRows = await Promise.all(
+      live
+        .filter((o) => o.released_by !== userId)
+        .map(async (o) => {
+          const { data } = await supabase.rpc('rank_cover_candidates', { target_offer_id: o.id });
+          const [own] = rankCandidates(data || [], { jobMinutes: o.jobs?.duration_minutes || 60 });
+          return [o.id, own || null];
+        })
+    );
+    setFits(Object.fromEntries(fitRows));
   };
 
   const accept = async (offer) => {
@@ -121,7 +137,12 @@ export default function ShiftCoverCard({ userId, onChange }) {
   };
 
   const mine = offers.filter((o) => o.released_by === userId);
-  const available = offers.filter((o) => o.released_by !== userId && !declinedIds.includes(o.id));
+  // Best fit for this cleaner first; the rest keep their newest-first order.
+  const available = offers
+    .filter((o) => o.released_by !== userId && !declinedIds.includes(o.id))
+    .map((o, index) => ({ offer: o, index, score: fits[o.id]?.score ?? -1 }))
+    .sort((a, b) => (b.score !== a.score ? b.score - a.score : a.index - b.index))
+    .map((x) => x.offer);
 
   if (mine.length === 0 && available.length === 0) return null;
 
@@ -173,6 +194,24 @@ export default function ShiftCoverCard({ userId, onChange }) {
                   {offer.reason && (
                     <div style={{ fontSize: 12, color: 'var(--muted)', fontStyle: 'italic', marginTop: 2 }}>
                       "{offer.reason}"
+                    </div>
+                  )}
+                  {fits[offer.id] && (
+                    <div style={{ fontSize: 12, marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                      {isGoodMatch(fits[offer.id]) && (
+                        <span className="badge completed" style={{ fontSize: 11 }}>Good match for you</span>
+                      )}
+                      {!fits[offer.id].eligible && fits[offer.id].ineligible_reason && (
+                        <span style={{ color: 'var(--wf-overdue)' }}>You're {fits[offer.id].ineligible_reason}</span>
+                      )}
+                      {fits[offer.id].eligible && fits[offer.id].reasons
+                        .filter((r) => r.points > 0 && r.key !== 'hours')
+                        .slice(0, 2)
+                        .map((r) => (
+                          <span key={r.key} style={{ color: 'var(--muted)' }}>
+                            {r.text.replace('their other job', 'your other job').replace('their usual area', 'your usual area')}
+                          </span>
+                        ))}
                     </div>
                   )}
                 </div>

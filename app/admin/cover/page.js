@@ -9,6 +9,7 @@ import { notify } from '../../../lib/notify';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
 import BackButton from '../../components/BackButton';
+import { rankCandidates, isGoodMatch } from '../../../lib/coverRanking';
 
 const formatWhen = (value) =>
   new Date(value).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -30,6 +31,10 @@ export default function AdminCover() {
   const [saving, setSaving] = useState(false);
   const [assigningOfferId, setAssigningOfferId] = useState(null);
   const [assignCleanerId, setAssignCleanerId] = useState('');
+  // Ranked candidates per open offer (rank_cover_candidates, 0084), loaded
+  // when the admin opens Assign on it.
+  const [candidates, setCandidates] = useState({});
+  const [candidatesLoading, setCandidatesLoading] = useState(null);
 
   useEffect(() => {
     load();
@@ -71,6 +76,23 @@ export default function AdminCover() {
 
   const assigneesFor = (jobId) => assignments.filter((a) => a.job_id === jobId);
 
+  const loadCandidates = async (offer) => {
+    setCandidatesLoading(offer.id);
+    const { data } = await supabase.rpc('rank_cover_candidates', { target_offer_id: offer.id });
+    setCandidates((prev) => ({
+      ...prev,
+      [offer.id]: rankCandidates(data || [], { jobMinutes: offer.jobs?.duration_minutes || 60 }),
+    }));
+    setCandidatesLoading(null);
+  };
+
+  const toggleAssign = (offer) => {
+    const opening = assigningOfferId !== offer.id;
+    setAssigningOfferId(opening ? offer.id : null);
+    setAssignCleanerId('');
+    if (opening && !candidates[offer.id]) loadCandidates(offer);
+  };
+
   const openCoverRequest = async (e) => {
     e.preventDefault();
     if (!openForm.job_id) return;
@@ -101,9 +123,11 @@ export default function AdminCover() {
 
     notify({
       type: 'shift_cover_needed',
+      offerId: data.id,
       jobId: data.job_id,
       address: data.jobs?.properties?.address,
       scheduledAt: data.jobs?.scheduled_at,
+      durationMinutes: data.jobs?.duration_minutes,
       reason: data.reason,
     });
   };
@@ -129,8 +153,8 @@ export default function AdminCover() {
   // it — same end state as claim_shift_offer(), done through the admin
   // policies since the RPC deliberately only lets a cleaner claim for
   // themselves.
-  const assignCover = async (offer) => {
-    if (!assignCleanerId) return;
+  const assignCover = async (offer, chosenId = assignCleanerId) => {
+    if (!chosenId) return;
     setSaving(true);
 
     if (offer.releaser?.id) {
@@ -143,7 +167,7 @@ export default function AdminCover() {
 
     const { error: assignError } = await supabase
       .from('job_assignments')
-      .insert({ job_id: offer.job_id, cleaner_id: assignCleanerId });
+      .insert({ job_id: offer.job_id, cleaner_id: chosenId });
 
     if (assignError) {
       setSaving(false);
@@ -153,13 +177,13 @@ export default function AdminCover() {
 
     const { error } = await supabase
       .from('shift_offers')
-      .update({ status: 'filled', filled_by: assignCleanerId, filled_at: new Date().toISOString() })
+      .update({ status: 'filled', filled_by: chosenId, filled_at: new Date().toISOString() })
       .eq('id', offer.id);
 
     setSaving(false);
     if (error) { toast.error('Assigned, but the cover request stayed open — refresh and close it.'); return; }
 
-    const cleaner = cleaners.find((c) => c.id === assignCleanerId);
+    const cleaner = cleaners.find((c) => c.id === chosenId);
     setOffers((prev) =>
       prev.map((o) => (o.id === offer.id ? { ...o, status: 'filled', filler: { full_name: cleaner?.full_name }, filled_at: new Date().toISOString() } : o))
     );
@@ -169,7 +193,7 @@ export default function AdminCover() {
 
     notify({
       type: 'shift_assigned',
-      cleanerId: assignCleanerId,
+      cleanerId: chosenId,
       address: offer.jobs?.properties?.address,
       scheduledAt: offer.jobs?.scheduled_at,
     });
@@ -188,7 +212,7 @@ export default function AdminCover() {
         <div>
           <h1>Shift Cover</h1>
           <p className="page-subtitle">
-            Shifts that need someone — offered to every free cleaner, first to accept takes it
+            Shifts that need someone — the best matches are told first, and anyone free can take it
           </p>
         </div>
         <button
@@ -271,10 +295,8 @@ export default function AdminCover() {
                 <button
                   type="button"
                   className="btn-secondary"
-                  onClick={() => {
-                    setAssigningOfferId(assigningOfferId === offer.id ? null : offer.id);
-                    setAssignCleanerId('');
-                  }}
+                  onClick={() => toggleAssign(offer)}
+                  title="See who is the best fit for this shift and put someone on it"
                 >
                   {assigningOfferId === offer.id ? 'Close' : 'Assign'}
                 </button>
@@ -291,8 +313,60 @@ export default function AdminCover() {
 
             {assigningOfferId === offer.id && (
               <div style={{ background: 'var(--wf-ash)', borderRadius: 10, padding: 12 }}>
+                {/* Best fits first, with the reasons, so the 6am decision is
+                    "Bea has done this site nine times and is free" rather
+                    than a scroll through an alphabetical list. */}
+                <div style={{ marginBottom: 12 }}>
+                  <div className="field-label" style={{ marginBottom: 6 }}>Best matches</div>
+                  {candidatesLoading === offer.id && <p className="empty-state" style={{ margin: 0 }}>Working out who fits...</p>}
+                  {candidatesLoading !== offer.id && candidates[offer.id] && (() => {
+                    const ranked = candidates[offer.id];
+                    const eligible = ranked.filter((c) => c.eligible).slice(0, 5);
+                    const ineligible = ranked.filter((c) => !c.eligible);
+                    if (eligible.length === 0) {
+                      return <p className="empty-state" style={{ margin: 0 }}>Nobody is free for this one - everyone is either on it, away, or booked at that time.</p>;
+                    }
+                    return (
+                      <>
+                        {eligible.map((c, i) => (
+                          <div key={c.cleaner_id} className="task-row" style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: 13.5, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                {c.full_name}
+                                {i === 0 && isGoodMatch(c) && (
+                                  <span className="badge completed" style={{ fontSize: 11 }}>Best fit</span>
+                                )}
+                                {c.declined && (
+                                  <span className="badge missed" style={{ fontSize: 11 }}>Said no</span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                                {c.reasons.length > 0 ? c.reasons.map((r) => r.text).join(' · ') : 'No history to go on yet'}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              className="btn-compact"
+                              onClick={() => assignCover(offer, c.cleaner_id)}
+                              disabled={saving}
+                              style={{ flexShrink: 0 }}
+                              title={`Put ${c.full_name} on this shift and close the request`}
+                            >
+                              Assign
+                            </button>
+                          </div>
+                        ))}
+                        {ineligible.length > 0 && (
+                          <p style={{ fontSize: 12, color: 'var(--muted)', margin: '8px 0 0' }}>
+                            Not free: {ineligible.map((c) => `${c.full_name} (${c.ineligible_reason})`).join(', ')}
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
                 <div className="field">
-                  <label className="field-label">Assign directly</label>
+                  <label className="field-label">Or choose anyone</label>
                   <select value={assignCleanerId} onChange={(e) => setAssignCleanerId(e.target.value)}>
                     <option value="">Choose a cleaner...</option>
                     {cleaners
