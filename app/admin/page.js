@@ -713,6 +713,9 @@ export default function AdminDashboard() {
                 <strong className="dash-person-hours">{(r.minutes / 60).toFixed(1)}h</strong>
               </div>
             ))}
+            {/* These figures are live and keep moving. The payroll page is
+                where a period gets checked, locked, and handed to QuickBooks. */}
+            <Link href="/admin/payroll" className="dash-panel-link dash-panel-foot">Close payroll &rarr;</Link>
           </div>
         )}
 

@@ -48,8 +48,8 @@ const HELP_SECTIONS = [
     body: 'Key Register lists every key, fob and access code per site, who is holding each one, and the full handover history. Issue a key to a staff member and they are asked to sign for it in the app; record it back in when they return it. Removing a staff account is blocked while they still have keys signed out. Never type an actual alarm code or key-safe number in here — the register records who was given it, not the code itself.',
   },
   {
-    title: 'Payroll — Hours Worked',
-    body: 'Your Dashboard has a Payroll section that totals completed job hours per cleaner for This Week, Last Week, This Month or Last Month — use it when running payroll.',
+    title: 'Payroll — closing a pay period',
+    body: 'The Dashboard\'s Staff hours panel shows live totals, but those keep changing as claims are approved and short shifts confirmed. When you run payroll, open Payroll instead: it names the next period, lists anything still undecided in it (pending missed clock-in claims, short shifts, unfinished jobs), and only lets you close once that list is empty. Closing locks the figures, tells each cleaner what went out, and gives you a CSV of exactly what was sent for QuickBooks. If something changes on a closed period later, it appears as an adjustment on the next run rather than rewriting the old one. Set the weekly/monthly schedule at the bottom of the Payroll page.',
   },
 ];
 

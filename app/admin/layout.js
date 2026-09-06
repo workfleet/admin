@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Download, Folder, Package, KeyRound, LifeBuoy, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Download, Folder, Package, KeyRound, LifeBuoy, Banknote, Menu, X } from 'lucide-react';
 import { signOutAndClearPresence } from '../../lib/signOut';
 import { getSessionAndProfile } from '../../lib/authGate';
 import PresenceIndicator from '../components/PresenceIndicator';
@@ -22,6 +22,9 @@ const NAV_ITEMS = [
   { href: '/admin/quotes', label: 'Quotes', icon: PoundSterling },
   { href: '/admin/cleaners', label: 'Cleaners', icon: Users, adminOnly: true },
   { href: '/admin/onboarding', label: 'Onboarding', icon: ClipboardList, adminOnly: true },
+  // Payroll figures have been admin-only since supervisors arrived (0035);
+  // the page checks the role again itself.
+  { href: '/admin/payroll', label: 'Payroll', icon: Banknote, adminOnly: true },
   { href: '/admin/templates', label: 'Templates', icon: ListChecks },
   { href: '/admin/documents', label: 'Documents', icon: Folder },
   { href: '/admin/inventory', label: 'Inventory', icon: Package },

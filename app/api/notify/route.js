@@ -149,6 +149,19 @@ export async function POST(request) {
       tag: `missed-clockin-decided-${payload.jobId || 'unknown'}`,
       url: '/cleaner/hours',
     });
+  } else if (payload.type === 'payroll_closed') {
+    // One push per cleaner, because each one carries that person's own
+    // figure - the point of telling them is that they check it. The in-app
+    // notification with the same figure is written by close_payroll_period().
+    for (const cleaner of payload.cleaners || []) {
+      if (!cleaner?.id) continue;
+      await pushToUserIds([cleaner.id], {
+        title: 'Hours sent to payroll',
+        body: `${payload.periodLabel || 'Your latest pay period'}: ${cleaner.hoursLabel || 'your hours'} went to payroll. Check them on My Hours.`,
+        tag: `payroll-closed-${payload.periodLabel || 'latest'}`,
+        url: '/cleaner/hours',
+      });
+    }
   } else if (payload.type === 'short_shift_checkout') {
     // Somebody has closed a shift well before its booked time. Admin and
     // supervisor both, and promptly: while the cleaner may still be near the

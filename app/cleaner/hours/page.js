@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Clock, CalendarDays, ChevronDown, ChevronRight, Users, AlertTriangle } from 'lucide-react';
+import { Clock, CalendarDays, ChevronDown, ChevronRight, Users, AlertTriangle, Lock } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import {
@@ -13,7 +13,55 @@ import {
   formatHours,
 } from '../../../lib/hoursWorked';
 import { unpaidMissedJobs } from '../../../lib/missedClockin';
+import { periodLabel, monthLabelIfWhole, parseLocalDate } from '../../../lib/payroll';
 import BackButton from '../../components/BackButton';
+
+// The periods the office has closed that this cleaner was paid in, newest
+// first, with the hours that went out under their name - lines plus any
+// adjustments carried on that run. This is what turns "my payslip is wrong"
+// into a question asked while it can still be fixed.
+function groupPayroll(lineRows, adjustmentRows) {
+  const periods = new Map();
+  const periodFor = (p) => {
+    if (!periods.has(p.id)) {
+      periods.set(p.id, {
+        id: p.id,
+        start: p.period_start,
+        end: p.period_end,
+        closedAt: new Date(p.closed_at),
+        minutes: 0,
+        jobs: 0,
+        adjustments: [],
+      });
+    }
+    return periods.get(p.id);
+  };
+
+  lineRows.forEach((row) => {
+    if (!row.payroll_periods) return;
+    const period = periodFor(row.payroll_periods);
+    period.minutes += Number(row.minutes);
+    period.jobs += 1;
+  });
+
+  const pending = [];
+  adjustmentRows.forEach((row) => {
+    if (row.included_in_period_id && row.period) {
+      const period = periodFor(row.period);
+      period.minutes += Number(row.minutes);
+      period.adjustments.push(row);
+    } else if (!row.included_in_period_id) {
+      pending.push(row);
+    }
+  });
+
+  const sent = [...periods.values()].sort((a, b) => b.start.localeCompare(a.start));
+  return { sent, pending };
+}
+
+function payrollPeriodName(period) {
+  return monthLabelIfWhole(period) || periodLabel(period, { withYear: false });
+}
 
 // Months are keyed off the cleaner's own clock, not UTC - a 1am job on the
 // 1st belongs to the month they actually worked it.
@@ -62,6 +110,7 @@ export default function CleanerHours() {
   // someone opens to check a payslip, so it's the one place a shortfall has
   // to be visible rather than merely absent.
   const [missed, setMissed] = useState([]);
+  const [payroll, setPayroll] = useState({ sent: [], pending: [] });
 
   useEffect(() => {
     load();
@@ -90,10 +139,23 @@ export default function CleanerHours() {
         && monthKey(new Date(j.scheduled_at)) === thisMonth)
       .reduce((sum, j) => sum + jobShareHours(j, assigneeCounts), 0);
 
-    const { data: claimRows } = await supabase
-      .from('missed_clockin_claims')
-      .select('job_id, status')
-      .eq('cleaner_id', session.user.id);
+    const [{ data: claimRows }, { data: payrollLines }, { data: payrollAdjustments }] = await Promise.all([
+      supabase
+        .from('missed_clockin_claims')
+        .select('job_id, status')
+        .eq('cleaner_id', session.user.id),
+      supabase
+        .from('payroll_period_lines')
+        .select('minutes, payroll_periods(id, period_start, period_end, closed_at)')
+        .eq('cleaner_id', session.user.id),
+      supabase
+        .from('payroll_adjustments')
+        .select('id, minutes, reason, job_address, job_date, included_in_period_id, period:payroll_periods!payroll_adjustments_included_in_period_id_fkey(id, period_start, period_end, closed_at)')
+        .eq('cleaner_id', session.user.id)
+        .order('created_at', { ascending: false }),
+    ]);
+
+    setPayroll(groupPayroll(payrollLines || [], payrollAdjustments || []));
 
     setMissed(unpaidMissedJobs(jobs, claimRows || []).map((job) => ({
       id: job.id,
@@ -175,6 +237,65 @@ export default function CleanerHours() {
           </Link>
         </p>
       </div>
+
+      {/* What the office has actually sent. Once a period is here it is
+          locked: a change to it does not alter the figure shown, it arrives
+          as an adjustment on the next run, and that is spelled out so nobody
+          watches a total move and wonders why. */}
+      {(payroll.sent.length > 0 || payroll.pending.length > 0) && (
+        <div className="card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <Lock size={16} />
+            <strong style={{ fontSize: 14 }}>Sent to payroll</strong>
+          </div>
+          {payroll.sent.length === 0 ? (
+            <p style={{ fontSize: 13, margin: 0, color: 'var(--muted)' }}>Nothing sent yet.</p>
+          ) : (
+            <p style={{ fontSize: 13, margin: 0, color: 'var(--muted)' }}>
+              These periods are locked. If a figure looks wrong, message the office — any change goes on the next run.
+            </p>
+          )}
+          <div style={{ marginTop: 8 }}>
+            {payroll.sent.slice(0, 6).map((period) => (
+              <div key={period.id} className="task-row" style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 13, fontWeight: 600 }}>{payrollPeriodName(period)}</span>
+                  <span style={{ display: 'block', fontSize: 12.5, color: 'var(--muted)' }}>
+                    Sent {period.closedAt.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                    {period.jobs > 0 ? ` · ${period.jobs} job${period.jobs === 1 ? '' : 's'}` : ''}
+                    {period.adjustments.length > 0
+                      ? ` · includes ${period.adjustments.length} adjustment${period.adjustments.length === 1 ? '' : 's'}`
+                      : ''}
+                  </span>
+                </span>
+                <span style={{ fontFamily: 'var(--wf-data)', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  {formatHours(period.minutes / 60)}
+                </span>
+              </div>
+            ))}
+          </div>
+          {payroll.pending.length > 0 && (
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--hairline)' }}>
+              <span style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>On your next run</span>
+              {payroll.pending.map((adj) => {
+                const minutes = Number(adj.minutes);
+                return (
+                  <div key={adj.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12.5, padding: '3px 0' }}>
+                    <span style={{ flex: 1, minWidth: 0, color: 'var(--muted)' }}>
+                      {adj.job_address || 'Job'}
+                      {adj.job_date ? `, ${parseLocalDate(adj.job_date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` : ''}
+                      {' — '}{adj.reason}
+                    </span>
+                    <span style={{ fontFamily: 'var(--wf-data)', fontWeight: 600, whiteSpace: 'nowrap', color: minutes < 0 ? 'var(--wf-overdue)' : 'inherit' }}>
+                      {minutes < 0 ? '-' : '+'}{formatHours(Math.abs(minutes) / 60)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Overdue red, not verified green: nothing here has been proven yet,
           and --wf-verified is reserved for things that have been. */}
