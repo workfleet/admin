@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Download, Folder, Package, KeyRound, LifeBuoy, Banknote, Bell, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Download, Folder, Package, KeyRound, LifeBuoy, Banknote, Video, Bell, Menu, X } from 'lucide-react';
 import { signOutAndClearPresence } from '../../lib/signOut';
 import { getSessionAndProfile } from '../../lib/authGate';
 import PresenceIndicator from '../components/PresenceIndicator';
@@ -27,6 +27,7 @@ const NAV_ITEMS = [
   { href: '/admin/payroll', label: 'Payroll', icon: Banknote, adminOnly: true },
   { href: '/admin/templates', label: 'Templates', icon: ListChecks },
   { href: '/admin/documents', label: 'Documents', icon: Folder },
+  { href: '/admin/training', label: 'Training', icon: Video },
   { href: '/admin/inventory', label: 'Inventory', icon: Package },
   { href: '/admin/keys', label: 'Key Register', icon: KeyRound },
   { href: '/admin/tasks', label: 'Team Tasks', icon: ListTodo },

@@ -207,7 +207,7 @@ export default function CleanerMessages() {
         </div>
       )}
 
-      {conversations.length === 0 && <p className="empty-state">No chats yet.</p>}
+      {conversations.length === 0 && <p className="empty-state">No chats yet. Use + New Chat to message the office or someone on your team.</p>}
 
       {conversations.map((c) => (
         <div key={c.id} className="card" onClick={() => openConversation(c.id)} style={{ cursor: 'pointer' }}>

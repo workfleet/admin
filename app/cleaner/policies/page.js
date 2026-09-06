@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { FileText, Download } from 'lucide-react';
+import { FileText, Download, PlayCircle, ChevronRight } from 'lucide-react';
 import { POLICY_SECTIONS } from '../../../lib/companyPolicies';
 import { supabase } from '../../../lib/supabaseClient';
 import BackButton from '../../components/BackButton';
@@ -63,11 +63,27 @@ const HELP_SECTIONS = [
 export default function CleanerHelp() {
   const [section, setSection] = useState('guide');
   const [documents, setDocuments] = useState(null);
+  // The videos answer the same questions as the prose below them, so the
+  // link only appears once there is actually something to watch - an empty
+  // training page reads as a broken feature rather than as one not filmed yet.
+  const [videoCount, setVideoCount] = useState(0);
   const sections = section === 'guide' ? HELP_SECTIONS : section === 'policies' ? POLICY_SECTIONS : null;
 
   useEffect(() => {
     if (section === 'documents' && documents === null) loadDocuments();
   }, [section]);
+
+  useEffect(() => {
+    countVideos();
+  }, []);
+
+  const countVideos = async () => {
+    const { count } = await supabase
+      .from('training_videos')
+      .select('id', { count: 'exact', head: true })
+      .not('storage_path', 'is', null);
+    setVideoCount(count || 0);
+  };
 
   const loadDocuments = async () => {
     const { data } = await supabase
@@ -113,6 +129,40 @@ export default function CleanerHelp() {
           Documents
         </button>
       </div>
+
+      {section === 'guide' && videoCount > 0 && (
+        <Link
+          href="/cleaner/training"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            background: 'var(--wf-graphite)',
+            borderRadius: 'var(--wf-radius)',
+            padding: 16,
+            marginBottom: 12,
+            color: 'var(--wf-white)',
+            textDecoration: 'none',
+          }}
+        >
+          <PlayCircle size={26} color="var(--wf-coral)" style={{ flexShrink: 0 }} />
+          <span style={{ flex: 1 }}>
+            <span style={{ display: 'block', fontWeight: 600, fontSize: 15 }}>Watch the how-to videos</span>
+            <span
+              style={{
+                display: 'block',
+                fontFamily: 'var(--wf-data)',
+                fontSize: 12.5,
+                color: 'rgba(255,255,255,0.65)',
+                marginTop: 2,
+              }}
+            >
+              {videoCount} short {videoCount === 1 ? 'video' : 'videos'}, about a minute each
+            </span>
+          </span>
+          <ChevronRight size={18} color="rgba(255,255,255,0.65)" style={{ flexShrink: 0 }} />
+        </Link>
+      )}
 
       {sections && sections.map((s) => (
         <div key={s.title} className="card" style={{ marginBottom: 12 }}>
