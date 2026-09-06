@@ -39,6 +39,12 @@ export default function AdminMessages() {
 
   useEffect(() => {
     loadAll();
+    // New messages appear while the page is open, without a reload. One
+    // round of queries every half-minute, only while the tab is on screen.
+    const timer = setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') loadAll();
+    }, 30000);
+    return () => clearInterval(timer);
   }, []);
 
   const loadAll = async () => {
@@ -159,10 +165,10 @@ export default function AdminMessages() {
       setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, messages: [...c.messages, data], lastMessage: data } : c)).sort((a, b) => new Date(b.lastMessage?.created_at || 0) - new Date(a.lastMessage?.created_at || 0)));
       setConvReplyText('');
 
-      const conv = conversations.find((c) => c.id === id);
-      if (conv?.type === 'direct' && conv.otherProfileId) {
-        notify({ type: 'direct_message', toProfileId: conv.otherProfileId, body: data.body });
-      }
+      // Push to everyone else in the conversation, group or direct; the
+      // bell entry is written by trigger (0085). Email still goes for a
+      // one-to-one message only - the server decides which this is.
+      notify({ type: 'chat_message', conversationId: id, body: data.body });
     }
   };
 

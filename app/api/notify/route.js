@@ -117,6 +117,37 @@ async function pushCoverOffer(payload) {
   await pushToUserIds(rest.map((c) => c.cleaner_id), generic);
 }
 
+// A chat message, to everyone else in the conversation. Recipients and the
+// sender's name come from the database, not the payload, so a message can
+// only ever notify the people who are actually in the room. Each role gets
+// the link to its own Messages page. The in-app notification for the same
+// message is written by trigger (0085).
+async function pushChatMessage(payload, senderId) {
+  if (!payload.conversationId) return;
+
+  const [{ data: sender }, { data: conversation }, { data: participants }] = await Promise.all([
+    supabaseAdmin.from('profiles').select('full_name').eq('id', senderId).single(),
+    supabaseAdmin.from('conversations').select('type, name').eq('id', payload.conversationId).single(),
+    supabaseAdmin
+      .from('conversation_participants')
+      .select('profile_id, profiles(role)')
+      .eq('conversation_id', payload.conversationId)
+      .neq('profile_id', senderId),
+  ]);
+  if (!participants || participants.length === 0) return;
+
+  const isGroup = conversation?.type === 'group';
+  const snippet = String(payload.body || '').replace(/\s+/g, ' ').slice(0, 120);
+  const title = `${sender?.full_name || 'New message'}${isGroup ? ` in ${conversation?.name || 'Team Chat'}` : ''}`;
+  const tag = `chat-${payload.conversationId}`;
+
+  const office = participants.filter((p) => ['admin', 'supervisor'].includes(p.profiles?.role)).map((p) => p.profile_id);
+  const cleaners = participants.filter((p) => p.profiles?.role === 'cleaner').map((p) => p.profile_id);
+
+  await pushToUserIds(office, { title, body: snippet, tag, url: '/admin/messages' });
+  await pushToUserIds(cleaners, { title, body: snippet, tag, url: '/cleaner/messages' });
+}
+
 async function pushAdminsAndSupervisors(cleanerName) {
   const { data: staff } = await supabaseAdmin.from('profiles').select('id').in('role', ['admin', 'supervisor']);
   await pushToUserIds((staff || []).map((s) => s.id), {
@@ -190,6 +221,8 @@ export async function POST(request) {
       tag: `missed-clockin-decided-${payload.jobId || 'unknown'}`,
       url: '/cleaner/hours',
     });
+  } else if (payload.type === 'chat_message') {
+    await pushChatMessage(payload, user.id);
   } else if (payload.type === 'payroll_closed') {
     // One push per cleaner, because each one carries that person's own
     // figure - the point of telling them is that they check it. The in-app
@@ -265,7 +298,21 @@ export async function POST(request) {
       if (to.length === 0) return NextResponse.json({ skipped: 'no_email' });
       subject = 'New message from CrewConnect Cleaning';
       text = payload.body;
-    } else if (payload.type === 'direct_message') {
+    } else if (payload.type === 'chat_message' || payload.type === 'direct_message') {
+      // Email only for a one-to-one message. A group post has already pushed
+      // and gone in the bell; emailing a whole room for every line would get
+      // the emails switched off. The recipient is looked up from the
+      // conversation, not trusted from the payload.
+      if (!payload.toProfileId && payload.conversationId) {
+        const { data: others } = await supabaseAdmin
+          .from('conversation_participants')
+          .select('profile_id, conversations!inner(type)')
+          .eq('conversation_id', payload.conversationId)
+          .neq('profile_id', user.id);
+        const direct = others?.length === 1 && others[0].conversations?.type === 'direct';
+        if (!direct) return NextResponse.json({ skipped: 'group_message' });
+        payload.toProfileId = others[0].profile_id;
+      }
       const email = await emailForUserId(payload.toProfileId);
       if (!email) return NextResponse.json({ skipped: 'no_email' });
       const { data: senderProfile } = await supabaseAdmin.from('profiles').select('full_name').eq('id', user.id).single();

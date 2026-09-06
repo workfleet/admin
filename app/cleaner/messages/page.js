@@ -21,6 +21,13 @@ export default function CleanerMessages() {
 
   useEffect(() => {
     load();
+    // A reply that lands while this page is open should appear without a
+    // reload. Polling rather than a live channel: it is one query every
+    // half-minute, only while the tab is actually on screen.
+    const timer = setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') load();
+    }, 30000);
+    return () => clearInterval(timer);
   }, []);
 
   const load = async () => {
@@ -99,10 +106,10 @@ export default function CleanerMessages() {
       );
       setNewMessage('');
 
-      const conv = conversations.find((c) => c.id === activeId);
-      if (conv?.type === 'direct' && conv.otherProfileId) {
-        notify({ type: 'direct_message', toProfileId: conv.otherProfileId, body: data.body });
-      }
+      // Push to everyone else in the conversation, group or direct; the
+      // bell entry is written by trigger (0085). Email still goes for a
+      // one-to-one message only - the server decides which this is.
+      notify({ type: 'chat_message', conversationId: activeId, body: data.body });
     }
   };
 
