@@ -147,7 +147,20 @@ async function pushActiveCleaners(excludeUserId, push) {
 // The offer itself stays open to everyone in the app, exactly as before;
 // only the push is targeted. If the ranking is unavailable (the migration
 // not yet run, say) it falls back to the old fan-out rather than to silence.
-async function pushCoverOffer(payload) {
+async function pushCoverOffer(payload, callerId) {
+  // Only the person who released the shift, or the office, may fan an
+  // offer out - otherwise any login could push every cleaner about any
+  // open offer as often as it liked.
+  if (payload.offerId) {
+    const [{ data: offer }, { data: caller }] = await Promise.all([
+      supabaseAdmin.from('shift_offers').select('released_by, opened_by').eq('id', payload.offerId).single(),
+      supabaseAdmin.from('profiles').select('role').eq('id', callerId).single(),
+    ]);
+    const office = ['admin', 'supervisor'].includes(caller?.role);
+    const own = offer && (offer.released_by === callerId || offer.opened_by === callerId);
+    if (!office && !own) return;
+  }
+
   const when = formatShiftTime(payload.scheduledAt);
   const generic = {
     title: 'Shift needs cover',
@@ -198,18 +211,23 @@ async function pushChatMessage(payload, senderId) {
     supabaseAdmin
       .from('conversation_participants')
       .select('profile_id, profiles(role)')
-      .eq('conversation_id', payload.conversationId)
-      .neq('profile_id', senderId),
+      .eq('conversation_id', payload.conversationId),
   ]);
   if (!participants || participants.length === 0) return;
+
+  // Only someone in the room can ring it. Without this, any login could
+  // push a message to the members of any conversation whose id it guessed.
+  if (!participants.some((p) => p.profile_id === senderId)) return;
+  const recipients = participants.filter((p) => p.profile_id !== senderId);
+  if (recipients.length === 0) return;
 
   const isGroup = conversation?.type === 'group';
   const snippet = String(payload.body || '').replace(/\s+/g, ' ').slice(0, 120);
   const title = `${sender?.full_name || 'New message'}${isGroup ? ` in ${conversation?.name || 'Team Chat'}` : ''}`;
   const tag = `chat-${payload.conversationId}`;
 
-  const office = participants.filter((p) => ['admin', 'supervisor'].includes(p.profiles?.role)).map((p) => p.profile_id);
-  const cleaners = participants.filter((p) => p.profiles?.role === 'cleaner').map((p) => p.profile_id);
+  const office = recipients.filter((p) => ['admin', 'supervisor'].includes(p.profiles?.role)).map((p) => p.profile_id);
+  const cleaners = recipients.filter((p) => p.profiles?.role === 'cleaner').map((p) => p.profile_id);
 
   await pushToUserIds(office, { title, body: snippet, tag, url: '/admin/messages' });
   await pushToUserIds(cleaners, { title, body: snippet, tag, url: '/cleaner/messages' });
@@ -255,7 +273,7 @@ export async function POST(request) {
   }
 
   if (payload.type === 'shift_cover_needed') {
-    await pushCoverOffer(payload);
+    await pushCoverOffer(payload, user.id);
   } else if (payload.type === 'shift_cover_filled') {
     if (payload.releasedByCleanerId) {
       await pushToUserIds([payload.releasedByCleanerId], {
