@@ -6,6 +6,7 @@ import { Download } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { toCSV, downloadCSV } from '../../../lib/csv';
+import { privateOf } from '../../../lib/profilePrivate';
 import BackButton from '../../components/BackButton';
 
 function getWeekRange(weekOffset) {
@@ -64,7 +65,7 @@ async function loadClients() {
 async function loadStaff() {
   const { data } = await supabase
     .from('profiles')
-    .select('id, full_name, role, active, created_at, holiday_adjustment_hours')
+    .select('id, full_name, role, active, created_at, profile_private(holiday_adjustment_hours)')
     .neq('role', 'client')
     .order('full_name');
 
@@ -78,7 +79,7 @@ async function loadStaff() {
     ],
     rows: (data || []).map((p) => ({
       name: p.full_name || 'Unknown', role: p.role, active: p.active ? 'Yes' : 'No',
-      joined: new Date(p.created_at).toLocaleDateString(), holiday_adjustment: p.holiday_adjustment_hours ?? 0,
+      joined: new Date(p.created_at).toLocaleDateString(), holiday_adjustment: privateOf(p)?.holiday_adjustment_hours ?? 0,
     })),
   };
 }

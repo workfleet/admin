@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '../../../../../lib/supabaseAdmin';
+import { flattenPrivate } from '../../../../../lib/profilePrivate';
 
 async function requireAdmin(request) {
   const authHeader = request.headers.get('authorization') || '';
@@ -58,9 +59,9 @@ export async function POST(request) {
 
   const { data: profile } = await supabaseAdmin
     .from('profiles')
-    .select('id, full_name, role, created_at, active, holiday_adjustment_hours')
+    .select('id, full_name, role, created_at, active, profile_private(holiday_adjustment_hours, deactivated_at)')
     .eq('id', created.user.id)
     .single();
 
-  return NextResponse.json(profile);
+  return NextResponse.json(flattenPrivate(profile));
 }

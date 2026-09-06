@@ -90,7 +90,7 @@ export default function CleanerRota() {
         .from('time_off_requests')
         .select('id, type, start_date, end_date, hours, reason, status, admin_note, created_at')
         .order('start_date', { ascending: false }),
-      supabase.from('profiles').select('holiday_adjustment_hours').eq('id', session.user.id).single(),
+      supabase.from('profile_private').select('holiday_adjustment_hours').eq('profile_id', session.user.id).maybeSingle(),
     ]);
 
     const jobsData = (assignmentRows || [])

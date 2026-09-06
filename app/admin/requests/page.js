@@ -117,7 +117,9 @@ export default function AdminRequests() {
         .from('time_off_requests')
         .select('id, type, start_date, end_date, hours, reason, status, admin_note, created_at, cleaner_id, decided_by, profiles!time_off_requests_cleaner_id_fkey(full_name), decider:profiles!time_off_requests_decided_by_fkey(full_name)')
         .order('created_at', { ascending: false }),
-      supabase.from('profiles').select('id, holiday_adjustment_hours').eq('role', 'cleaner'),
+      // Adjustments live on profile_private (0088); aliased so the balance
+      // maths below still keys on `id`.
+      supabase.from('profile_private').select('id:profile_id, holiday_adjustment_hours, profiles!inner(role)').eq('profiles.role', 'cleaner'),
       supabase.from('job_assignments').select('cleaner_id, jobs(id, status, duration_minutes)'),
       supabase
         .from('time_extension_requests')

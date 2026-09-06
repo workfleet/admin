@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '../../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../../lib/authGate';
+import { flattenPrivate } from '../../../../lib/profilePrivate';
 import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 import { claimFor, describeClockRecord, indexClaims, lateMinutes } from '../../../../lib/clockIn';
@@ -97,9 +98,10 @@ export default function CleanerProfile() {
 
     const { data: cleanerData } = await supabase
       .from('profiles')
-      .select('id, full_name, role, created_at, active, holiday_adjustment_hours, deactivated_at')
+      .select('id, full_name, role, created_at, active, profile_private(holiday_adjustment_hours, deactivated_at)')
       .eq('id', id)
-      .single();
+      .single()
+      .then((res) => ({ ...res, data: flattenPrivate(res.data) }));
 
     if (!cleanerData) { router.push('/admin/cleaners'); return; }
 
@@ -353,8 +355,8 @@ export default function CleanerProfile() {
     if (isNaN(value)) return;
 
     const { data } = await supabase
-      .from('profiles').update({ holiday_adjustment_hours: value }).eq('id', id)
-      .select('id, holiday_adjustment_hours').single();
+      .from('profile_private').update({ holiday_adjustment_hours: value, updated_at: new Date().toISOString() }).eq('profile_id', id)
+      .select('profile_id, holiday_adjustment_hours').single();
 
     if (data) setCleaner((c) => ({ ...c, holiday_adjustment_hours: data.holiday_adjustment_hours }));
     setEditingAdjustment(false);

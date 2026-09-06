@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
+import { flattenPrivate } from '../../../lib/profilePrivate';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
 import BackButton from '../../components/BackButton';
@@ -81,12 +82,12 @@ export default function AdminCleaners() {
     if (ownProfile?.role !== 'admin') { router.push('/admin'); return; }
 
     const [{ data: cleanersData }, { data: assignmentsData }, { data: timeOffData }] = await Promise.all([
-      supabase.from('profiles').select('id, full_name, role, created_at, active, holiday_adjustment_hours').in('role', ['cleaner', 'supervisor']).order('created_at'),
+      supabase.from('profiles').select('id, full_name, role, created_at, active, profile_private(holiday_adjustment_hours, deactivated_at)').in('role', ['cleaner', 'supervisor']).order('created_at'),
       supabase.from('job_assignments').select('cleaner_id, jobs(id, status, duration_minutes)'),
       supabase.from('time_off_requests').select('cleaner_id, type, status, hours'),
     ]);
 
-    setCleaners(cleanersData || []);
+    setCleaners((cleanersData || []).map(flattenPrivate));
     setJobs(assignmentsData || []);
     setTimeOffRequests(timeOffData || []);
     setLoading(false);
@@ -102,8 +103,8 @@ export default function AdminCleaners() {
     if (isNaN(value)) return;
 
     const { data } = await supabase
-      .from('profiles').update({ holiday_adjustment_hours: value }).eq('id', cleanerId)
-      .select('id, holiday_adjustment_hours').single();
+      .from('profile_private').update({ holiday_adjustment_hours: value, updated_at: new Date().toISOString() }).eq('profile_id', cleanerId)
+      .select('profile_id, holiday_adjustment_hours').single();
 
     if (data) {
       setCleaners((prev) => prev.map((c) => (c.id === cleanerId ? { ...c, holiday_adjustment_hours: data.holiday_adjustment_hours } : c)));

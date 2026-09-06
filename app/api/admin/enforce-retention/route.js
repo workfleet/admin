@@ -47,12 +47,14 @@ async function runRetentionSweep(request) {
   // since jobs/checkins/ratings reference profiles.id with no cascade
   // (see the comment in api/admin/cleaners/[id]/remove) - deleting the
   // row would either destroy that operational history or fail outright.
-  const { data: expiredCleaners } = await supabaseAdmin
-    .from('profiles')
-    .select('id')
-    .eq('role', 'cleaner')
-    .eq('active', false)
+  // deactivated_at moved to profile_private (0088).
+  const { data: expiredRows } = await supabaseAdmin
+    .from('profile_private')
+    .select('profile_id, profiles!inner(role, active)')
+    .eq('profiles.role', 'cleaner')
+    .eq('profiles.active', false)
     .lt('deactivated_at', cutoffIso);
+  const expiredCleaners = (expiredRows || []).map((r) => ({ id: r.profile_id }));
 
   for (const cleaner of expiredCleaners || []) {
     const { data: submissions } = await supabaseAdmin
