@@ -16,6 +16,7 @@ import Logo from '../components/Logo';
 // supervisors here and enforced again on those two pages themselves.
 const NAV_ITEMS = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/admin/notifications', label: 'Notifications', icon: Bell },
   { href: '/admin/rota', label: 'Rota', icon: Calendar },
   { href: '/admin/cover', label: 'Shift Cover', icon: LifeBuoy },
   { href: '/admin/clients', label: 'Clients', icon: Building2 },
@@ -35,7 +36,6 @@ const NAV_ITEMS = [
   { href: '/admin/data-reports', label: 'Data Reports', icon: Download },
   { href: '/admin/requests', label: 'Requests', icon: MessageSquareWarning },
   { href: '/admin/messages', label: 'Messages', icon: MessageCircle },
-  { href: '/admin/notifications', label: 'Notifications', icon: Bell },
   { href: '/admin/help', label: 'Help', icon: HelpCircle },
 ];
 
