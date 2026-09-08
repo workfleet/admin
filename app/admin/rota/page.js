@@ -14,6 +14,7 @@ import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
 import BackButton from '../../components/BackButton';
 import { groupOverlappingJobs, assignLanes, abbreviateName } from '../../../lib/jobOverlap';
+import { findTightTurnarounds, describeTurnaround } from '../../../lib/travelTime';
 
 // Full 24hr range with scroll (CrewConnect crews run early mornings through
 // overnight), defaulting the scroll position to business hours on load.
@@ -591,6 +592,43 @@ export default function AdminRota() {
     ) || null;
   };
 
+  // Not a clash on the clock, but a gap the cleaner cannot cross in time:
+  // 09:00-11:00 one side of town and 11:00 the other. Same day-window query
+  // as findConflict, with the pins, then the pure check in lib/travelTime.
+  // `property` is the job being placed; `excludeJobId` skips itself when an
+  // existing job is being reassigned.
+  const findTravelConflict = async (cleanerId, start, durationMinutes, property, excludeJobId) => {
+    if (!cleanerId || !property || property.lat == null || property.lng == null) return null;
+
+    const dayStart = new Date(start);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = addDays(dayStart, 1);
+
+    const { data } = await supabase
+      .from('job_assignments')
+      .select('jobs!inner(id, scheduled_at, duration_minutes, properties(address, lat, lng))')
+      .eq('cleaner_id', cleanerId)
+      .gte('jobs.scheduled_at', dayStart.toISOString())
+      .lt('jobs.scheduled_at', dayEnd.toISOString());
+
+    const name = cleaners.find((c) => c.id === cleanerId)?.full_name || 'This cleaner';
+    const assignment = [{ cleaner_id: cleanerId, profiles: { full_name: name } }];
+    const others = (data || [])
+      .map((row) => row.jobs)
+      .filter((j) => j && j.id !== excludeJobId)
+      .map((j) => ({ ...j, job_assignments: assignment }));
+    const candidate = {
+      id: excludeJobId || 'new',
+      scheduled_at: new Date(start).toISOString(),
+      duration_minutes: durationMinutes,
+      properties: property,
+      job_assignments: assignment,
+    };
+
+    const tight = findTightTurnarounds([...others, candidate]);
+    return tight.find((t) => t.from.id === candidate.id || t.to.id === candidate.id) || null;
+  };
+
   // Separate from findConflict (double-booking against other jobs) - this
   // checks the job's date against the cleaner's own approved time off, so
   // scheduling someone during their holiday gets caught instead of only
@@ -633,6 +671,15 @@ export default function AdminRota() {
       if (!proceed) return;
     }
     if (!(await confirmTimeOffConflict(cleanerId, new Date(job.scheduled_at)))) return;
+
+    const tight = await findTravelConflict(cleanerId, new Date(job.scheduled_at), job.duration_minutes || 120, job.properties, jobId);
+    if (tight) {
+      const proceed = await confirm(
+        `${describeTurnaround(tight)} Assign anyway?`,
+        { title: 'Not enough time to get there', confirmLabel: 'Assign anyway' }
+      );
+      if (!proceed) return;
+    }
 
     const { error } = await supabase.from('job_assignments').insert({ job_id: jobId, cleaner_id: cleanerId });
     if (error) { toast.error('Could not assign this cleaner.'); return; }
@@ -731,18 +778,31 @@ export default function AdminRota() {
 
     // One combined confirmation across every occurrence x assigned
     // cleaner, rather than a popup per occurrence.
+    // The property this job is going on, for the travel check: an existing
+    // one carries its pin; a new address carries whatever the lookup found.
+    const existingProperty = properties.find((p) => p.client_id === clientId && p.address === propertyAddress.trim());
+    const targetProperty = existingProperty || { address: propertyAddress.trim(), lat: propertyCoords?.lat ?? null, lng: propertyCoords?.lng ?? null };
+
     let conflictCount = 0;
     let timeOffConflictCount = 0;
+    let travelConflictCount = 0;
+    let firstTravelConflict = null;
     for (const cid of formCleanerIds) {
       for (const d of occurrenceDates) {
         if (await findConflict(cid, d, duration, null)) conflictCount++;
         if (await findTimeOffConflict(cid, d)) timeOffConflictCount++;
+        const tight = await findTravelConflict(cid, d, duration, targetProperty, null);
+        if (tight) { travelConflictCount++; firstTravelConflict = firstTravelConflict || tight; }
       }
     }
-    if (conflictCount > 0 || timeOffConflictCount > 0) {
+    if (conflictCount > 0 || timeOffConflictCount > 0 || travelConflictCount > 0) {
       const parts = [];
       if (conflictCount > 0) parts.push(`${conflictCount} double-booking${conflictCount === 1 ? '' : 's'}`);
       if (timeOffConflictCount > 0) parts.push(`${timeOffConflictCount} clash${timeOffConflictCount === 1 ? '' : 'es'} with approved time off`);
+      if (travelConflictCount > 0) {
+        parts.push(`${travelConflictCount} turnaround${travelConflictCount === 1 ? '' : 's'} with no time to travel`
+          + (firstTravelConflict ? ` (e.g. ${describeTurnaround(firstTravelConflict)})` : ''));
+      }
       const proceed = await confirm(
         `This will create ${occurrenceDates.length} job${occurrenceDates.length === 1 ? '' : 's'}, including ${parts.join(' and ')}. Create anyway?`,
         { title: 'Scheduling conflicts', confirmLabel: 'Create anyway' }
@@ -1172,6 +1232,14 @@ export default function AdminRota() {
     missed: jobs.filter((j) => j.status === 'missed').length,
   }), [jobs]);
 
+  // Gaps this week that nobody can drive in time. Only future jobs: a tight
+  // turnaround last Tuesday is history, and either happened or did not.
+  const tightTurnarounds = useMemo(
+    () => findTightTurnarounds(jobs.filter((j) => j.status === 'scheduled' && new Date(j.scheduled_at) > new Date())),
+    [jobs]
+  );
+  const [showTurnarounds, setShowTurnarounds] = useState(false);
+
   // Vertical offset of the current-time line, or null when "now" is outside
   // the hours the grid draws (or before the clock has started on the client).
   const nowOffset = (() => {
@@ -1435,7 +1503,42 @@ export default function AdminRota() {
           <div className="stat-label">Missed</div>
           <div className="stat-sublabel">this week</div>
         </div>
+        <div
+          className={`stat-card stat-requests${tightTurnarounds.length > 0 ? ' is-alert' : ''}`}
+          onClick={() => tightTurnarounds.length > 0 && setShowTurnarounds((v) => !v)}
+          style={{ cursor: tightTurnarounds.length > 0 ? 'pointer' : 'default' }}
+          title={tightTurnarounds.length > 0 ? 'Show the gaps nobody can drive in time' : 'Every gap between one cleaner\'s jobs leaves time to get there'}
+        >
+          <div className="stat-number">{tightTurnarounds.length}</div>
+          <div className="stat-label">Tight travel</div>
+          <div className="stat-sublabel">{tightTurnarounds.length > 0 ? 'tap to see' : 'no gaps too short'}</div>
+        </div>
       </div>
+
+      {/* Straight-line distance stretched for roads at an urban average, plus a
+          few minutes to park. An estimate - but one that is right about which
+          gaps are impossible, which is the question worth asking before the
+          day rather than after the late check-in. */}
+      {showTurnarounds && tightTurnarounds.length > 0 && (
+        <div className="card" style={{ marginBottom: 12, borderLeft: '3px solid var(--wf-overdue)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+            <strong style={{ fontSize: 14 }}>Not enough time to get there</strong>
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>Estimated from the property pins. Tap one to open the job.</span>
+          </div>
+          {tightTurnarounds.map((t) => (
+            <button
+              key={`${t.cleanerId}-${t.from.id}-${t.to.id}`}
+              type="button"
+              className="task-row"
+              onClick={() => setSelectedJob(t.to)}
+              style={{ width: '100%', textAlign: 'left', background: 'transparent', border: 'none', borderBottom: '1px solid var(--hairline)', color: 'inherit', cursor: 'pointer', fontSize: 13, padding: '8px 0' }}
+            >
+              <span style={{ fontWeight: 600 }}>{new Date(t.to.scheduled_at).toLocaleDateString(undefined, { weekday: 'short' })}</span>
+              {' · '}{describeTurnaround(t)}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="calendar">
         {/* The day headings live inside the scroller and stick to its top.
@@ -1534,7 +1637,8 @@ export default function AdminRota() {
         <span className="calendar-foot-hint">
           Drag a job to a new day or time. On a touchscreen, press and hold it first.
           Jobs that clash are grouped into one block with each start time listed - and
-          turn red when it's the same cleaner twice over.
+          turn red when it's the same cleaner twice over. Tight travel counts the gaps
+          between one cleaner&apos;s jobs that are shorter than the drive.
         </span>
         <Link href="/admin/rota/history" className="calendar-foot-link">Job history &rarr;</Link>
       </div>
