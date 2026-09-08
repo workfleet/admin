@@ -938,6 +938,15 @@ export default function AdminQuotes() {
                       <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>
                         Profit {formatPrice(breakdown.profit)} ({(breakdown.marginPct * 100).toFixed(1)}%) — {breakdown.marginWarning}
                       </p>
+                      {breakdown.settingsFallbacks?.length > 0 && (
+                        <p style={{ fontSize: 13, margin: '6px 0 0', fontWeight: 600 }}>
+                          Priced on built-in defaults for{' '}
+                          {breakdown.settingsFallbacks
+                            .map((k) => (PRICING_FIELDS.find((f) => f.key === k)?.label || k).replace(/\s*\(.*\)$/, '').toLowerCase())
+                            .join(', ')}
+                          {' '}— these could not be read from Pricing Settings.
+                        </p>
+                      )}
                       {quotedBreakdown && (
                         <p style={{ fontSize: 13, margin: '6px 0 0', fontWeight: 600 }}>
                           Quoting {formatPrice(quotedBreakdown.finalPrice)} instead — profit{' '}
