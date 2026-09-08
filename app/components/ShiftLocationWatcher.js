@@ -60,7 +60,7 @@ export default function ShiftLocationWatcher() {
 
       const { data } = await supabase
         .from('checkins')
-        .select('id, job_id, checked_in_at, jobs(scheduled_at, duration_minutes, properties(address, lat, lng))')
+        .select('id, job_id, checked_in_at, jobs(scheduled_at, duration_minutes, properties(address, lat, lng, geofence_radius_m))')
         .eq('cleaner_id', session.user.id)
         .is('checked_out_at', null);
 

@@ -5,7 +5,12 @@ import { useRouter, useParams } from 'next/navigation';
 import { FileText, Download, Trash2 } from 'lucide-react';
 import { supabase } from '../../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../../lib/authGate';
+import dynamic from 'next/dynamic';
 import AddressAutocomplete from '../../../components/AddressAutocomplete';
+import { GEOFENCE_RADIUS_METERS } from '../../../../lib/geo';
+
+// Leaflet touches window at load; same pattern as the cleaner's job screen.
+const PropertyMap = dynamic(() => import('../../../components/PropertyMap'), { ssr: false });
 import { INDUSTRY_OPTIONS } from '../../../../lib/clientIndustries';
 import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
@@ -30,6 +35,12 @@ export default function ClientDetail() {
   const [newAddress, setNewAddress] = useState('');
   const [newAddressCoords, setNewAddressCoords] = useState(null);
   const [newNotes, setNewNotes] = useState('');
+
+  // Correcting a property's pin and radius (0089). `start` is where the map
+  // opens and stays put while dragging; `lat`/`lng` follow the marker.
+  const [locationEditId, setLocationEditId] = useState(null);
+  const [locationDraft, setLocationDraft] = useState(null);
+  const [savingLocation, setSavingLocation] = useState(false);
 
   const [expandedPropertyId, setExpandedPropertyId] = useState(null);
   const [checklistItems, setChecklistItems] = useState({}); // propertyId -> items[]
@@ -78,7 +89,7 @@ export default function ClientDetail() {
 
     const { data: propertiesData } = await supabase
       .from('properties')
-      .select('id, client_id, address, notes, client_access_notes, lat, lng')
+      .select('id, client_id, address, notes, client_access_notes, lat, lng, geofence_radius_m')
       .eq('client_id', id)
       .order('address');
 
@@ -416,6 +427,42 @@ export default function ClientDetail() {
     setIsAddingProperty(false);
   };
 
+  const startEditLocation = (p) => {
+    if (locationEditId === p.id) { setLocationEditId(null); setLocationDraft(null); return; }
+    setLocationEditId(p.id);
+    setLocationDraft({
+      start: { lat: p.lat ?? null, lng: p.lng ?? null },
+      lat: p.lat ?? null,
+      lng: p.lng ?? null,
+      radius: p.geofence_radius_m ?? '',
+      search: '',
+    });
+  };
+
+  // Saves the pin and radius together. A blank radius means "the default",
+  // stored as null so a later change to the default reaches this property.
+  const saveLocation = async (propertyId) => {
+    if (!locationDraft || locationDraft.lat == null || locationDraft.lng == null) return;
+    const radiusValue = locationDraft.radius === '' ? null : Number(locationDraft.radius);
+    if (radiusValue != null && (!Number.isFinite(radiusValue) || radiusValue < 25 || radiusValue > 2000)) {
+      toast.error('Radius must be between 25 and 2000 metres, or left blank for the default.');
+      return;
+    }
+    setSavingLocation(true);
+    const { data, error } = await supabase
+      .from('properties')
+      .update({ lat: locationDraft.lat, lng: locationDraft.lng, geofence_radius_m: radiusValue })
+      .eq('id', propertyId)
+      .select('id, lat, lng, geofence_radius_m')
+      .single();
+    setSavingLocation(false);
+    if (error || !data) { toast.error("Couldn't save the location."); return; }
+    setProperties((prev) => prev.map((p) => (p.id === propertyId ? { ...p, ...data } : p)));
+    setLocationEditId(null);
+    setLocationDraft(null);
+    toast.success('Location saved - check-in will be measured from the new pin.');
+  };
+
   const deleteProperty = async (propertyId) => {
     if (!(await confirm('Delete this property?', { danger: true }))) return;
     const { error } = await supabase.from('properties').delete().eq('id', propertyId);
@@ -691,9 +738,83 @@ export default function ClientDetail() {
                   <button className="btn-secondary" onClick={() => toggleChecklist(p.id)} title="Show or hide the room-by-room checklist for this property">
                     {expandedPropertyId === p.id ? 'Close' : 'Checklist'}
                   </button>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => startEditLocation(p)}
+                    title={p.lat == null ? 'This property has no map pin yet - set one' : 'Move the map pin or change how close a cleaner must be to check in'}
+                  >
+                    {locationEditId === p.id ? 'Close' : p.lat == null ? 'Set pin' : 'Location'}
+                  </button>
                   <button className="btn-secondary" onClick={() => deleteProperty(p.id)} title="Delete this property">Remove</button>
                 </div>
               </div>
+
+              {p.lat == null && locationEditId !== p.id && (
+                <p style={{ fontSize: 12, color: 'var(--wf-overdue)', margin: '4px 0 0' }}>
+                  No map pin - check-in is not location-checked here.
+                </p>
+              )}
+
+              {locationEditId === p.id && locationDraft && (
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--hairline)' }}>
+                  {locationDraft.start.lat == null ? (
+                    <>
+                      <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '0 0 8px' }}>
+                        This property has no pin yet. Find the address to place one, then drag it onto the front door.
+                      </p>
+                      <AddressAutocomplete
+                        value={locationDraft.search}
+                        onChange={(text) => setLocationDraft((d) => ({ ...d, search: text }))}
+                        onSelect={({ lat, lng }) => setLocationDraft((d) => ({ ...d, start: { lat, lng }, lat, lng }))}
+                        placeholder="Search the address to place a pin..."
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '0 0 8px' }}>
+                        Drag the pin, or tap the map, to put it on the front door. The circle is how close a cleaner has to be to check in.
+                      </p>
+                      <div style={{ height: 280, borderRadius: 10, overflow: 'hidden', marginBottom: 10 }}>
+                        <PropertyMap
+                          lat={locationDraft.start.lat}
+                          lng={locationDraft.start.lng}
+                          height={280}
+                          showDirections={false}
+                          editable
+                          radius={Number(locationDraft.radius) > 0 ? Number(locationDraft.radius) : GEOFENCE_RADIUS_METERS}
+                          onMove={({ lat, lng }) => setLocationDraft((d) => ({ ...d, lat, lng }))}
+                        />
+                      </div>
+                    </>
+                  )}
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                    <label style={{ fontSize: 13, flex: '0 0 auto' }}>
+                      <span style={{ display: 'block', color: 'var(--muted)', marginBottom: 4 }}>Check-in radius (metres)</span>
+                      <input
+                        type="number"
+                        min={25}
+                        max={2000}
+                        step={5}
+                        value={locationDraft.radius}
+                        onChange={(e) => setLocationDraft((d) => ({ ...d, radius: e.target.value }))}
+                        placeholder={`${GEOFENCE_RADIUS_METERS} (default)`}
+                        style={{ width: 160 }}
+                      />
+                    </label>
+                    <span style={{ fontSize: 12, color: 'var(--muted)', flex: 1, minWidth: 180 }}>
+                      Widen it for a school, a farm, or anywhere the door is far from where phones get a fix.
+                    </span>
+                    <button
+                      className="btn-primary"
+                      onClick={() => saveLocation(p.id)}
+                      disabled={savingLocation || locationDraft.lat == null}
+                      title="Save the pin and radius for this property"
+                    >
+                      {savingLocation ? 'Saving...' : 'Save location'}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {expandedPropertyId === p.id && (
                 <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--hairline)' }}>

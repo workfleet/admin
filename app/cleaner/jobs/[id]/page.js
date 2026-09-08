@@ -7,7 +7,7 @@ import { ChevronLeft, Camera, Lock, Check, ChevronDown } from 'lucide-react';
 import { supabase } from '../../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../../lib/authGate';
 import { notify } from '../../../../lib/notify';
-import { distanceMeters, GEOFENCE_RADIUS_METERS } from '../../../../lib/geo';
+import { distanceMeters, geofenceRadiusFor } from '../../../../lib/geo';
 import {
   INSIDE_PERSIST_INTERVAL_MS,
   autoCheckoutTimestamp,
@@ -87,6 +87,10 @@ export default function JobDetailPage() {
   const [requestReason, setRequestReason] = useState('');
   const [submittingExtension, setSubmittingExtension] = useState(false);
   const [checkInError, setCheckInError] = useState('');
+  // Set when check-in was refused for distance: the fix that was refused,
+  // kept so "I'm at the property" can check in from exactly that reading
+  // and propose it as the pin (0089).
+  const [farAway, setFarAway] = useState(null);
   const [checkingIn, setCheckingIn] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
   const [resuming, setResuming] = useState(false);
@@ -188,7 +192,7 @@ export default function JobDetailPage() {
 
     const { data: jobData } = await supabase
       .from('jobs')
-      .select('id, scheduled_at, status, duration_minutes, property_id, properties(address, notes, client_access_notes, lat, lng, clients(name))')
+      .select('id, scheduled_at, status, duration_minutes, property_id, properties(address, notes, client_access_notes, lat, lng, geofence_radius_m, clients(name))')
       .eq('id', id)
       .single();
 
@@ -333,10 +337,27 @@ export default function JobDetailPage() {
     new Promise((resolve) => {
       if (!navigator.geolocation) return resolve({ lat: null, lng: null });
       navigator.geolocation.getCurrentPosition(
-        (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        () => resolve({ lat: null, lng: null })
+        (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy ?? null }),
+        () => resolve({ lat: null, lng: null, accuracy: null })
       );
     });
+
+  // Tell the office where this cleaner actually stood, so the pin can be
+  // moved for every visit after. Best effort and silent: the check-in has
+  // already happened, and a second open proposal for the same property from
+  // the same person is refused by the database, which is fine.
+  const proposePin = async ({ lat, lng, accuracy, distance }) => {
+    if (lat == null || lng == null || !job?.property_id) return;
+    await supabase.from('property_location_proposals').insert({
+      property_id: job.property_id,
+      job_id: id,
+      cleaner_id: userId,
+      lat,
+      lng,
+      accuracy_m: accuracy ?? null,
+      distance_from_pin_m: distance ?? null,
+    });
+  };
 
   // jobs.status is no longer set from here - with multiple cleaners
   // possibly assigned to the same job, a database trigger derives it from
@@ -345,8 +366,10 @@ export default function JobDetailPage() {
   // each check-in/out rather than guessed at client-side.
   const handleCheckIn = async () => {
     setCheckInError('');
+    setFarAway(null);
     setCheckingIn(true);
-    const { lat, lng } = await getLocation();
+    const fix = await getLocation();
+    const { lat, lng } = fix;
 
     // Only enforce the geofence when both the property and this check-in
     // have real coordinates - properties added before geolocation existed
@@ -354,15 +377,36 @@ export default function JobDetailPage() {
     // no-verification behaviour rather than blocking someone from working.
     const propertyLat = job.properties?.lat;
     const propertyLng = job.properties?.lng;
+    let distance = null;
     if (propertyLat != null && propertyLng != null && lat != null && lng != null) {
-      const distance = distanceMeters(lat, lng, propertyLat, propertyLng);
-      if (distance > GEOFENCE_RADIUS_METERS) {
+      distance = distanceMeters(lat, lng, propertyLat, propertyLng);
+      if (distance > geofenceRadiusFor(job.properties)) {
         setCheckInError(`You're too far from this property to check in (about ${Math.round(distance)}m away). Move closer and try again.`);
+        // Or, if they are at the door and the pin is what's wrong, the
+        // button under this message lets them say so.
+        setFarAway({ ...fix, distance });
         setCheckingIn(false);
         return;
       }
     }
 
+    await recordCheckIn(fix, { outsideGeofence: false, distance });
+  };
+
+  // "I'm at the property." The pin is wrong, not the cleaner - the address
+  // lookup that placed it often knows the street and not the house. The
+  // check-in goes ahead from the refused reading, marked as outside the
+  // fence so the record is honest, and the reading is proposed to the
+  // office as the new pin.
+  const handleCheckInHere = async () => {
+    if (!farAway) return;
+    setCheckInError('');
+    setCheckingIn(true);
+    await recordCheckIn(farAway, { outsideGeofence: true, distance: farAway.distance });
+    setFarAway(null);
+  };
+
+  const recordCheckIn = async ({ lat, lng, accuracy }, { outsideGeofence, distance }) => {
     // The id is decided here rather than by the database, so that a check-in
     // taken with no signal still has something for a later check-out to point
     // at, and so replaying it can collide harmlessly instead of writing the
@@ -372,7 +416,11 @@ export default function JobDetailPage() {
 
     const { data, error } = await supabase
       .from('checkins')
-      .insert({ id: checkinId, job_id: id, cleaner_id: userId, checked_in_at: at, lat, lng })
+      .insert({
+        id: checkinId, job_id: id, cleaner_id: userId, checked_in_at: at, lat, lng,
+        outside_geofence: outsideGeofence,
+        distance_m: distance == null ? null : Math.round(distance),
+      })
       .select()
       .single();
 
@@ -400,6 +448,15 @@ export default function JobDetailPage() {
     setCheckin(data);
     const { data: jobRow } = await supabase.from('jobs').select('status').eq('id', id).single();
     if (jobRow) setJob((j) => ({ ...j, status: jobRow.status }));
+
+    // Two reasons to tell the office where this reading was: they were let
+    // in from outside the fence, or the property has no pin at all and this
+    // is the first real position anyone has for it.
+    const hasPin = job.properties?.lat != null && job.properties?.lng != null;
+    if (outsideGeofence || (!hasPin && lat != null)) {
+      proposePin({ lat, lng, accuracy, distance: outsideGeofence ? distance : null });
+      if (outsideGeofence) toast.success("Checked in. The office has been asked to move the pin to where you're standing.");
+    }
   };
 
   // Ask the server to compare this job's uploaded photos with the property
@@ -545,7 +602,7 @@ export default function JobDetailPage() {
     const propertyLng = job.properties?.lng;
     if (propertyLat != null && propertyLng != null && lat != null && lng != null) {
       const distance = distanceMeters(lat, lng, propertyLat, propertyLng);
-      if (distance > GEOFENCE_RADIUS_METERS) {
+      if (distance > geofenceRadiusFor(job.properties)) {
         setCheckInError(`You're too far from this property to check back in (about ${Math.round(distance)}m away). Move closer and try again.`);
         setResuming(false);
         return;
@@ -1304,8 +1361,18 @@ export default function JobDetailPage() {
         {beforeCheckIn && (
           <>
             {checkInError && <p className="visit-action-error">{checkInError}</p>}
+            {farAway && !checkingIn && (
+              <div style={{ background: 'var(--wf-ash)', borderRadius: 10, padding: 12, marginBottom: 8 }}>
+                <p style={{ fontSize: 13, margin: '0 0 8px' }}>
+                  Standing at the property? The map pin may be in the wrong place. Check in from here and the office will be asked to move it.
+                </p>
+                <button type="button" className="visit-btn-secondary" onClick={handleCheckInHere} style={{ width: '100%' }}>
+                  I&apos;m at the property — check in here
+                </button>
+              </div>
+            )}
             <button type="button" className="visit-btn-primary" onClick={handleCheckIn} disabled={checkingIn}>
-              {checkingIn ? 'Checking location...' : 'Check in'}
+              {checkingIn ? 'Checking location...' : farAway ? 'Try again' : 'Check in'}
             </button>
             <p className="visit-action-help">
               {jobTimePassed

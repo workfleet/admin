@@ -98,6 +98,10 @@ export default function AdminRequests() {
   // emergency alert log
   const [emergencies, setEmergencies] = useState([]);
   const [emergencyFilter, setEmergencyFilter] = useState('all'); // open | acknowledged | all
+  // Cleaners saying a property's pin is in the wrong place (0089).
+  const [pinProposals, setPinProposals] = useState([]);
+  const [pinFilter, setPinFilter] = useState('pending'); // pending | decided | all
+  const [decidingPinId, setDecidingPinId] = useState(null);
   const [respondingEmergencyId, setRespondingEmergencyId] = useState(null);
 
   useEffect(() => {
@@ -108,7 +112,7 @@ export default function AdminRequests() {
     const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
-    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, { data: assignmentsData }, { data: extensionsData }, { data: reschedulesData }, { data: clientRequestsData }, { data: pausesData }, { data: emergenciesData }, { data: missedClockinData }, { data: missedShiftData }, { data: shortShiftData }] = await Promise.all([
+    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, { data: assignmentsData }, { data: extensionsData }, { data: reschedulesData }, { data: clientRequestsData }, { data: pausesData }, { data: emergenciesData }, { data: missedClockinData }, { data: missedShiftData }, { data: shortShiftData }, { data: pinProposalData }] = await Promise.all([
       supabase
         .from('staff_requests')
         .select('id, type, description, status, created_at, resolved_at, resolution_note, resolved_by, cleaner_id, profiles!staff_requests_cleaner_id_fkey(full_name), resolver:profiles!staff_requests_resolved_by_fkey(full_name), jobs(scheduled_at, properties(address))')
@@ -162,6 +166,11 @@ export default function AdminRequests() {
         .select('id, scheduled_at, duration_minutes, status, properties(address, clients(name)), job_assignments(cleaner_id, profiles(full_name)), checkins(checked_in_at, checked_out_at)')
         .eq('hours_review_needed', true)
         .order('scheduled_at', { ascending: false }),
+      supabase
+        .from('property_location_proposals')
+        .select('id, property_id, job_id, lat, lng, accuracy_m, distance_from_pin_m, status, created_at, decided_at, cleaner:profiles!property_location_proposals_cleaner_id_fkey(full_name), decider:profiles!property_location_proposals_decided_by_fkey(full_name), properties(address, lat, lng, clients(name))')
+        .order('created_at', { ascending: false })
+        .limit(100),
     ]);
 
     // A job's duration is split evenly across everyone assigned to it.
@@ -187,6 +196,7 @@ export default function AdminRequests() {
     setPauses(pausesData || []);
     setEmergencies(emergenciesData || []);
     setMissedClockins(missedClockinData || []);
+    setPinProposals(pinProposalData || []);
 
     // A shift somebody has already asked about belongs in the claims list
     // below, where the admin can see the times they declared. Showing it in
@@ -614,6 +624,41 @@ export default function AdminRequests() {
     await load();
   };
 
+  // Moving a pin is a decision about every future visit to that property,
+  // made from one cleaner's phone reading - so it goes through the definer
+  // function that writes the proposal's own coordinates, never the
+  // client's, and closes any other open proposal for the same property.
+  const decidePin = async (proposal, decision) => {
+    if (decision === 'approved') {
+      const ok = await confirm(
+        `Move the pin for ${proposal.properties?.address || 'this property'} to where ${proposal.cleaner?.full_name || 'the cleaner'} checked in? `
+        + 'Check-in for every future visit will be measured from there.',
+        { title: 'Move the property pin', confirmLabel: 'Move pin' }
+      );
+      if (!ok) return;
+    }
+    setDecidingPinId(proposal.id);
+    const { data: outcome, error } = await supabase.rpc('decide_location_proposal', {
+      target_proposal_id: proposal.id,
+      decision,
+    });
+    setDecidingPinId(null);
+    if (error || outcome !== 'ok') {
+      toast.error(outcome === 'already_decided' ? 'Someone else has already dealt with this one.' : 'Could not save that. Please try again.');
+      await load();
+      return;
+    }
+    toast.success(decision === 'approved' ? 'Pin moved - check-in there will use the new position.' : 'Pin kept as it was.');
+    await load();
+  };
+
+  const filteredPins = pinProposals.filter((p) => {
+    if (pinFilter === 'all') return true;
+    if (pinFilter === 'pending') return p.status === 'pending';
+    return p.status !== 'pending';
+  });
+  const pendingPinCount = pinProposals.filter((p) => p.status === 'pending').length;
+
   const filteredMissedClockins = missedClockins.filter((c) => {
     if (missedClockinFilter === 'all') return true;
     if (missedClockinFilter === 'pending') return c.status === 'pending';
@@ -691,8 +736,71 @@ export default function AdminRequests() {
           <button className={section === 'emergencies' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('emergencies')}>
             Emergency Log ({openEmergencyCount})
           </button>
+          <button className={section === 'pins' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('pins')}>
+            Property Pins ({pendingPinCount})
+          </button>
         </div>
       </div>
+
+      {section === 'pins' && (
+        <>
+          <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
+            A cleaner checked in from outside the geofence and says the pin is wrong, or checked in at a property with no pin.
+            Accepting moves the property&apos;s pin to where they stood; every visit after uses it.
+          </p>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <button className={pinFilter === 'pending' ? 'btn-primary' : 'btn-secondary'} onClick={() => setPinFilter('pending')}>Pending</button>
+            <button className={pinFilter === 'decided' ? 'btn-primary' : 'btn-secondary'} onClick={() => setPinFilter('decided')}>Decided</button>
+            <button className={pinFilter === 'all' ? 'btn-primary' : 'btn-secondary'} onClick={() => setPinFilter('all')}>All</button>
+          </div>
+
+          {filteredPins.length === 0 && <p className="empty-state">Nothing here.</p>}
+
+          <div className="job-list">
+            {filteredPins.map((p) => (
+              <div key={p.id} className="card job-card" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                  <div>
+                    <h2>{p.properties?.address || 'Property removed'}</h2>
+                    {p.properties?.clients?.name && <p style={{ fontSize: 13, color: 'var(--muted)', margin: '2px 0 4px' }}>{p.properties.clients.name}</p>}
+                    <p style={{ fontSize: 14, margin: '4px 0', fontWeight: 600 }}>
+                      {p.cleaner?.full_name || 'A cleaner'}
+                      {p.distance_from_pin_m == null
+                        ? ' checked in at a property with no pin'
+                        : ` was about ${Math.round(p.distance_from_pin_m)}m from the current pin`}
+                    </p>
+                    <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '0 0 4px' }}>
+                      Their position: {Number(p.lat).toFixed(5)}, {Number(p.lng).toFixed(5)}
+                      {p.accuracy_m != null && ` (phone accuracy ±${Math.round(p.accuracy_m)}m)`}
+                      {' · '}
+                      <a href={`https://www.google.com/maps?q=${p.lat},${p.lng}`} target="_blank" rel="noreferrer" style={{ color: 'var(--brand-link)', fontWeight: 600, textDecoration: 'none' }}>
+                        View on map
+                      </a>
+                    </p>
+                    <p className="job-time">{new Date(p.created_at).toLocaleString()}</p>
+                    <span className={`badge ${p.status === 'approved' ? 'completed' : p.status === 'declined' ? 'missed' : 'scheduled'}`}>{p.status}</span>
+                    {p.status !== 'pending' && (
+                      <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 4 }}>
+                        Decided by {p.decider?.full_name || 'Unknown'}
+                      </p>
+                    )}
+                  </div>
+                  {p.status === 'pending' && (
+                    <div style={{ display: 'flex', gap: 8, height: 'fit-content' }}>
+                      <button className="btn-secondary" onClick={() => decidePin(p, 'declined')} disabled={decidingPinId === p.id} title="Keep the pin where it is">
+                        Keep pin
+                      </button>
+                      <button className="btn-primary" onClick={() => decidePin(p, 'approved')} disabled={decidingPinId === p.id} title="Move the property's pin to where the cleaner stood">
+                        {decidingPinId === p.id ? 'Saving...' : 'Move pin here'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {section === 'requests' && (
         <>

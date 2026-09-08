@@ -38,6 +38,19 @@ describe('classifyFix', () => {
     expect(classifyFix(metresNorth(110), property)).toBe('near');
   });
 
+  it('honours a property with its own, wider radius', () => {
+    // A 300 m site: 250 m out is still inside, 500 m is the uncertain band
+    // (the "left" line is double the radius), 700 m is gone.
+    const wide = { ...property, geofence_radius_m: 300 };
+    expect(classifyFix(metresNorth(250), wide)).toBe('inside');
+    expect(classifyFix(metresNorth(500), wide)).toBe('near');
+    expect(classifyFix(metresNorth(700), wide)).toBe('outside');
+    // And a small custom radius never shrinks the 150 m "left" line.
+    const tight = { ...property, geofence_radius_m: 30 };
+    expect(classifyFix(metresNorth(50), tight)).toBe('near');
+    expect(classifyFix(metresNorth(160), tight)).toBe('outside');
+  });
+
   it('discards a fix too vague to mean anything', () => {
     // A 500m-accurate fix from the middle of the property still cannot show
     // someone left, so it must not be allowed to.
