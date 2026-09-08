@@ -32,6 +32,7 @@ export async function GET(request, { params }) {
   const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(id);
 
   const [
+    { data: details },
     { data: onboarding },
     { data: certifications },
     { data: checkins },
@@ -44,6 +45,7 @@ export async function GET(request, { params }) {
     { data: notifications },
     { data: participants },
   ] = await Promise.all([
+    supabaseAdmin.from('staff_details').select('*').eq('profile_id', id).maybeSingle(),
     supabaseAdmin.from('staff_onboarding_submissions').select('*').eq('profile_id', id),
     supabaseAdmin.from('staff_certifications').select('*').eq('staff_id', id),
     supabaseAdmin.from('checkins').select('*').eq('cleaner_id', id),
@@ -81,6 +83,7 @@ export async function GET(request, { params }) {
       created_at: authUser?.user?.created_at || null,
       last_sign_in_at: authUser?.user?.last_sign_in_at || null,
     },
+    personal_details: details || null,
     onboarding_submission: onboardingWithLink,
     certifications,
     checkins,

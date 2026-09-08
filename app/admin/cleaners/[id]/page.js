@@ -8,6 +8,7 @@ import { flattenPrivate } from '../../../../lib/profilePrivate';
 import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 import { claimFor, describeClockRecord, indexClaims, lateMinutes } from '../../../../lib/clockIn';
+import { STAFF_DETAIL_FIELDS, detailsToForm, formToDetails, formatDateOnly, missingEssentials } from '../../../../lib/staffDetails';
 import BackButton from '../../../components/BackButton';
 
 const HOLIDAY_ACCRUAL_RATE = 0.1207; // UK statutory: 5.6 weeks / 46.4 working weeks
@@ -64,6 +65,11 @@ export default function CleanerProfile() {
 
   const [docUrl, setDocUrl] = useState(null);
   const [docLoading, setDocLoading] = useState(false);
+
+  const [details, setDetails] = useState(null);
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [detailsForm, setDetailsForm] = useState(() => detailsToForm(null));
+  const [savingDetails, setSavingDetails] = useState(false);
 
   const [removing, setRemoving] = useState(false);
   const [removedEmail, setRemovedEmail] = useState(null);
@@ -137,6 +143,16 @@ export default function CleanerProfile() {
       .eq('profile_id', id)
       .maybeSingle();
 
+    // The living record of their details (staff_details, 0092) - present
+    // for anyone who has filled it in or been filled in by the office,
+    // whichever way they joined. Queried on its own rather than embedded
+    // on profiles so that nothing else on this page depends on it.
+    const { data: detailsData } = await supabase
+      .from('staff_details')
+      .select('phone, address, date_of_birth, ni_number, emergency_contact_name, emergency_contact_phone, start_date, updated_at')
+      .eq('profile_id', id)
+      .maybeSingle();
+
     const { data: remindersData } = await supabase
       .from('reminders')
       .select('id, due_date, recurs_yearly, notes')
@@ -183,8 +199,37 @@ export default function CleanerProfile() {
     setReliability(computeReliability(pastJobs, completedJobIds, checkinsData || [], photoRows || [], ratingRows || []));
     setTimeOffRequests(timeOffData || []);
     setSubmission(submissionData || null);
+    setDetails(detailsData || null);
+    setDetailsForm(detailsToForm(detailsData));
     setReminders(remindersData || []);
     setLoading(false);
+  };
+
+  const startEditDetails = () => {
+    setDetailsForm(detailsToForm(details));
+    setEditingDetails(true);
+  };
+
+  const saveDetails = async (e) => {
+    e.preventDefault();
+    setSavingDetails(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data, error } = await supabase
+      .from('staff_details')
+      .upsert({
+        profile_id: id,
+        ...formToDetails(detailsForm),
+        updated_at: new Date().toISOString(),
+        updated_by: session.user.id,
+      }, { onConflict: 'profile_id' })
+      .select('phone, address, date_of_birth, ni_number, emergency_contact_name, emergency_contact_phone, start_date, updated_at')
+      .single();
+    setSavingDetails(false);
+
+    if (error || !data) { toast.error("Couldn't save their details. Please try again."); return; }
+    setDetails(data);
+    setEditingDetails(false);
+    toast.success('Details saved.');
   };
 
   const addReminder = async (e) => {
@@ -424,22 +469,87 @@ export default function CleanerProfile() {
         )}
       </div>
 
-      {submission && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <h2>Contact & Onboarding Details</h2>
-          <div style={{ fontSize: 14, color: 'var(--muted)', lineHeight: 1.9 }}>
-            {(submission.email || submission.phone) && (
-              <div>{[submission.email, submission.phone].filter(Boolean).join(' · ')}</div>
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="page-header-row" style={{ marginBottom: 8 }}>
+          <h2 style={{ margin: 0 }}>Personal Details</h2>
+          <button
+            className="btn-secondary"
+            onClick={() => (editingDetails ? setEditingDetails(false) : startEditDetails())}
+            title="Edit their phone, address, date of birth, NI number and emergency contact - they can also keep these up to date themselves from My Profile"
+          >
+            {editingDetails ? 'Cancel' : (details ? 'Edit' : 'Add Details')}
+          </button>
+        </div>
+
+        {editingDetails ? (
+          <form onSubmit={saveDetails}>
+            {STAFF_DETAIL_FIELDS.map((f) => (
+              <div className="field" key={f.key}>
+                <label className="field-label">{f.label}</label>
+                <input
+                  type={f.type}
+                  value={detailsForm[f.key]}
+                  onChange={(e) => setDetailsForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                  placeholder={f.placeholder}
+                  autoComplete={f.autoComplete || 'off'}
+                />
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+              <button type="button" className="btn-secondary" onClick={() => setEditingDetails(false)}>Cancel</button>
+              <button type="submit" className="btn-primary" disabled={savingDetails} title="Save these details against this person">
+                {savingDetails ? 'Saving...' : 'Save Details'}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <>
+            {!details && (
+              <p className="empty-state" style={{ marginBottom: 8 }}>
+                No details on file yet. Add them here, or ask {cleaner.full_name ? cleaner.full_name.split(' ')[0] : 'them'} to fill in My Profile in their app.
+              </p>
             )}
-            {submission.address && <div>{submission.address}</div>}
-            {submission.date_of_birth && <div>DOB: {new Date(submission.date_of_birth).toLocaleDateString()}</div>}
-            {submission.ni_number && <div>NI number: {submission.ni_number}</div>}
-            {(submission.emergency_contact_name || submission.emergency_contact_phone) && (
-              <div>
-                Emergency contact: {[submission.emergency_contact_name, submission.emergency_contact_phone].filter(Boolean).join(' · ')}
+            {details && missingEssentials(details).length > 0 && (
+              <p style={{ fontSize: 12.5, color: 'var(--wf-graphite)', margin: '0 0 8px' }}>
+                Still missing: {missingEssentials(details).join(', ')}.
+              </p>
+            )}
+            {details && (
+              <div style={{ fontSize: 14, color: 'var(--muted)', lineHeight: 1.9 }}>
+                {details.phone && <div>Phone: <a href={`tel:${details.phone.replace(/\s+/g, '')}`} style={{ color: 'var(--ink)' }}>{details.phone}</a></div>}
+                {details.address && <div>Address: <span style={{ color: 'var(--ink)' }}>{details.address}</span></div>}
+                {details.date_of_birth && <div>Date of birth: <span style={{ color: 'var(--ink)' }}>{formatDateOnly(details.date_of_birth)}</span></div>}
+                {details.ni_number && <div>NI number: <span style={{ color: 'var(--ink)' }}>{details.ni_number}</span></div>}
+                {(details.emergency_contact_name || details.emergency_contact_phone) && (
+                  <div>
+                    Emergency contact:{' '}
+                    <span style={{ color: 'var(--ink)' }}>{details.emergency_contact_name}</span>
+                    {details.emergency_contact_phone && (
+                      <>
+                        {details.emergency_contact_name ? ' · ' : ''}
+                        <a href={`tel:${details.emergency_contact_phone.replace(/\s+/g, '')}`} style={{ color: 'var(--ink)' }}>{details.emergency_contact_phone}</a>
+                      </>
+                    )}
+                  </div>
+                )}
+                {details.start_date && <div>Started: <span style={{ color: 'var(--ink)' }}>{formatDateOnly(details.start_date)}</span></div>}
+                {details.updated_at && (
+                  <div style={{ fontSize: 12, marginTop: 2 }}>Last updated {new Date(details.updated_at).toLocaleDateString()}</div>
+                )}
               </div>
             )}
-            <div>Contract signed {new Date(submission.signed_at).toLocaleDateString()}</div>
+          </>
+        )}
+      </div>
+
+      {submission && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h2>Onboarding Record</h2>
+          <div style={{ fontSize: 14, color: 'var(--muted)', lineHeight: 1.9 }}>
+            <div>Contract signed {new Date(submission.signed_at).toLocaleDateString()}{submission.email ? ` as ${submission.email}` : ''}</div>
+            <div style={{ fontSize: 12.5 }}>
+              What they gave us on the day is kept as signed. Their current details are in the card above.
+            </div>
           </div>
           {submission.id_document_path && (
             <div style={{ marginTop: 10 }}>

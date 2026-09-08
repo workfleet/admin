@@ -84,6 +84,11 @@ async function runRetentionSweep(request) {
         .eq('id', submission.id);
     }
 
+    // Their living details (staff_details, 0092) go the same way - the row
+    // is deleted outright, since unlike the submission there is no signed
+    // record to keep a redacted shell of.
+    await supabaseAdmin.from('staff_details').delete().eq('profile_id', cleaner.id);
+
     await supabaseAdmin.from('profiles').update({ full_name: 'Former staff member' }).eq('id', cleaner.id);
     cleanersProcessed.push(cleaner.id);
   }

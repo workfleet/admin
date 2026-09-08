@@ -86,6 +86,22 @@ export async function POST(request, { params }) {
     return NextResponse.json({ error: 'insert_failed' }, { status: 500 });
   }
 
+  // The submission above is the record of what they signed and stays as it
+  // is. Their living details (staff_details, 0092) start out as a copy of
+  // it, and from here on are kept current from My Profile and the office.
+  // Not fatal if it fails: the submission is in and the office can fill the
+  // card in by hand.
+  await supabaseAdmin.from('staff_details').upsert({
+    profile_id: created.user.id,
+    phone: formData.get('phone')?.toString().trim() || null,
+    address: formData.get('address')?.toString().trim() || null,
+    date_of_birth: formData.get('date_of_birth')?.toString() || null,
+    ni_number: formData.get('ni_number')?.toString().replace(/\s+/g, '').toUpperCase() || null,
+    emergency_contact_name: formData.get('emergency_contact_name')?.toString().trim() || null,
+    emergency_contact_phone: formData.get('emergency_contact_phone')?.toString().trim() || null,
+    updated_by: created.user.id,
+  }, { onConflict: 'profile_id' });
+
   await supabaseAdmin.from('staff_invites').update({ status: 'submitted' }).eq('id', invite.id);
 
   return NextResponse.json({ ok: true });
