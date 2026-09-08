@@ -30,8 +30,11 @@ create or replace function client_assigned_cleaner_ids() returns setof uuid as $
   where pr.id = auth.uid()
 $$ language sql security definer stable set search_path = public;
 
-revoke execute on function client_assigned_cleaner_ids() from public, anon;
-grant execute on function client_assigned_cleaner_ids() to authenticated;
+-- A policy calls this for every reader of profiles, so every role that can
+-- read the table needs EXECUTE - anon included, as with is_admin() and the
+-- other helpers. For anon auth.uid() is null and the set is empty.
+revoke execute on function client_assigned_cleaner_ids() from public;
+grant execute on function client_assigned_cleaner_ids() to anon, authenticated;
 
 do $$
 declare p record;
