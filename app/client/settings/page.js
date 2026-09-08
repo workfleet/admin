@@ -15,6 +15,8 @@ export default function ClientSettings() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [billingAddress, setBillingAddress] = useState('');
+  const [arrivalAlerts, setArrivalAlerts] = useState(true);
+  const [savingAlerts, setSavingAlerts] = useState(false);
   const [savingDetails, setSavingDetails] = useState(false);
   const [detailsSaved, setDetailsSaved] = useState(false);
 
@@ -36,7 +38,7 @@ export default function ClientSettings() {
     setClientId(profile.client_id);
 
     const [{ data: clientRow }, { data: propertiesData }] = await Promise.all([
-      supabase.from('clients').select('contact_name, email, phone, billing_address').eq('id', profile.client_id).single(),
+      supabase.from('clients').select('contact_name, email, phone, billing_address, arrival_alerts').eq('id', profile.client_id).single(),
       supabase.from('properties').select('id, address, client_access_notes').eq('client_id', profile.client_id).order('address'),
     ]);
 
@@ -44,6 +46,7 @@ export default function ClientSettings() {
     setEmail(clientRow?.email || '');
     setPhone(clientRow?.phone || '');
     setBillingAddress(clientRow?.billing_address || '');
+    setArrivalAlerts(clientRow?.arrival_alerts !== false);
 
     setProperties(propertiesData || []);
     const drafts = {};
@@ -51,6 +54,16 @@ export default function ClientSettings() {
     setAccessNotesDraft(drafts);
 
     setLoading(false);
+  };
+
+  // Saved the moment it is toggled - a switch that needs a separate Save
+  // button gets left in the wrong position.
+  const toggleArrivalAlerts = async (value) => {
+    setArrivalAlerts(value);
+    setSavingAlerts(true);
+    const { error } = await supabase.from('clients').update({ arrival_alerts: value }).eq('id', clientId);
+    setSavingAlerts(false);
+    if (error) setArrivalAlerts(!value);
   };
 
   const saveDetails = async (e) => {
@@ -123,6 +136,26 @@ export default function ClientSettings() {
             {detailsSaved && <span style={{ fontSize: 13, color: 'var(--wf-verified-ink)' }}>Saved</span>}
           </div>
         </form>
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h2>Visit Alerts</h2>
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', fontSize: 14 }}>
+          <input
+            type="checkbox"
+            checked={arrivalAlerts}
+            onChange={(e) => toggleArrivalAlerts(e.target.checked)}
+            disabled={savingAlerts}
+            style={{ marginTop: 3, width: 'auto' }}
+          />
+          <span>
+            Tell me when my cleaner arrives and when they finish.
+            <span style={{ display: 'block', fontSize: 12.5, color: 'var(--muted)', marginTop: 2 }}>
+              An email when they arrive, and a notification on this device for both if you turn notifications on using the bell at the top.
+              Your dashboard shows the live status either way.
+            </span>
+          </span>
+        </label>
       </div>
 
       <div className="card">

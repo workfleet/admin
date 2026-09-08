@@ -391,6 +391,32 @@ export async function POST(request) {
       if (to.length === 0) return NextResponse.json({ skipped: 'no_email' });
       subject = `New message from ${payload.clientName}`;
       text = payload.body;
+    } else if (payload.type === 'cleaner_arrived') {
+      // Sent by the cleaner's own check-in. Everything about who gets it is
+      // looked up from the job, and only someone on the job can send it.
+      // The bell entry and push for the same arrival come from the checkins
+      // trigger (0090); this is the email, arrival only.
+      const { data: assignment } = await supabaseAdmin
+        .from('job_assignments').select('id').eq('job_id', payload.jobId).eq('cleaner_id', user.id).maybeSingle();
+      if (!assignment) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+
+      const { data: jobRow } = await supabaseAdmin
+        .from('jobs')
+        .select('scheduled_at, properties(address, client_id, clients(name, arrival_alerts))')
+        .eq('id', payload.jobId)
+        .single();
+      const client = jobRow?.properties?.clients;
+      if (!client?.arrival_alerts) return NextResponse.json({ skipped: 'alerts_off' });
+
+      to = await clientEmails(jobRow.properties.client_id);
+      if (to.length === 0) return NextResponse.json({ skipped: 'no_email' });
+
+      const { data: sender } = await supabaseAdmin.from('profiles').select('full_name').eq('id', user.id).single();
+      const who = sender?.full_name || 'Your cleaner';
+      subject = `${who} has arrived`;
+      text = `${who} has arrived at ${jobRow.properties.address} (${formatShiftTime(new Date().toISOString())}).\n\n`
+        + 'You can follow the visit, see photos afterwards, and rate it in your CrewConnect portal.\n\n'
+        + 'To stop these emails, turn off Visit Alerts under Settings in the portal.';
     } else if (payload.type === 'admin_reply') {
       to = await clientEmails(payload.clientId);
       if (to.length === 0) return NextResponse.json({ skipped: 'no_email' });

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { siteStatusFor } from '../../../../lib/siteStatus';
 import { useParams, useRouter } from 'next/navigation';
 import { CheckCircle2, Circle, Star } from 'lucide-react';
 import { supabase } from '../../../../lib/supabaseClient';
@@ -34,6 +35,12 @@ export default function ClientJobDetail() {
 
   useEffect(() => {
     load();
+    // While a visit is live, the status line follows the cleaner's check-in
+    // without the client having to reload.
+    const timer = setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') load();
+    }, 60000);
+    return () => clearInterval(timer);
   }, [id]);
 
   const load = async () => {
@@ -44,7 +51,7 @@ export default function ClientJobDetail() {
     setClientId(profile?.client_id || null);
 
     const [{ data: jobData }, { data: taskData }, { data: photoData }, { data: checkinData }, { data: ratingData }, { data: rescheduleData }] = await Promise.all([
-      supabase.from('jobs').select('id, scheduled_at, status, properties(address), job_assignments(profiles(full_name))').eq('id', id).single(),
+      supabase.from('jobs').select('id, scheduled_at, status, duration_minutes, properties(address), job_assignments(profiles(full_name))').eq('id', id).single(),
       supabase.from('tasks').select('*').eq('job_id', id),
       supabase.from('photos').select('*').eq('job_id', id).order('created_at', { ascending: false }),
       supabase.from('checkins').select('*, profiles(full_name)').eq('job_id', id),
@@ -124,6 +131,19 @@ export default function ClientJobDetail() {
           {new Date(job.scheduled_at).toLocaleString()} — {staffNames.length > 0 ? staffNames.join(', ') : 'Unassigned'}
         </p>
         <span className={`badge ${job.status}`}>{job.status.replace('_', ' ')}</span>
+        {(() => {
+          const status = siteStatusFor(job, checkins);
+          const colour = status.state === 'on_site' ? 'var(--wf-verified)'
+            : status.state === 'finished' ? 'var(--wf-steel)'
+            : status.state === 'late' || status.state === 'past' || status.state === 'missed' ? 'var(--wf-overdue)'
+            : 'var(--wf-azure)';
+          return (
+            <p style={{ margin: '10px 0 0', fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="dash-glance-dot" style={{ background: colour, flexShrink: 0 }} />
+              <strong>{status.label}</strong>{status.detail ? <span style={{ color: 'var(--muted)' }}> · {status.detail}</span> : null}
+            </p>
+          );
+        })()}
       </div>
 
       {report && (

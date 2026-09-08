@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { LayoutDashboard, History, MessageCircle, FileText, HelpCircle, Settings, Phone, LogOut, Menu, X } from 'lucide-react';
+import EnablePush from '../components/EnablePush';
 import { getSessionAndProfile } from '../../lib/authGate';
 import { signOutAndClearPresence } from '../../lib/signOut';
 
@@ -68,9 +69,14 @@ export default function ClientLayout({ children }) {
           <div className="sidebar-logo">CC</div>
           <div className="sidebar-brand-name">CrewConnect</div>
         </div>
-        <button type="button" className="client-topbar-menu-btn" onClick={() => setDrawerOpen(true)} aria-label="Open menu" title="Open the menu">
-          <Menu size={20} />
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {/* Arrival and departure alerts reach the phone only once the
+              client has enabled notifications here (0090). */}
+          <EnablePush iconColor="white" />
+          <button type="button" className="client-topbar-menu-btn" onClick={() => setDrawerOpen(true)} aria-label="Open menu" title="Open the menu">
+            <Menu size={20} />
+          </button>
+        </div>
       </div>
 
       {drawerOpen && <div className="client-drawer-overlay" onClick={() => setDrawerOpen(false)} />}

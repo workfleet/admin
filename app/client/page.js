@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { siteStatusFor, visitsToShow } from '../../lib/siteStatus';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { CalendarClock, CheckCircle2, MessageSquareWarning, Star } from 'lucide-react';
@@ -14,6 +15,8 @@ export default function ClientDashboard() {
   const [clientName, setClientName] = useState('');
 
   const [upcoming, setUpcoming] = useState([]);
+  const [todayVisits, setTodayVisits] = useState([]);
+  const [updates, setUpdates] = useState([]);
   const [recent, setRecent] = useState([]);
   const [lastMessage, setLastMessage] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -35,6 +38,13 @@ export default function ClientDashboard() {
 
   useEffect(() => {
     load();
+    // "Is anyone at my house?" should answer itself. One reload a minute
+    // while the tab is on screen keeps the visit line and the updates
+    // current without a live channel.
+    const timer = setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') load();
+    }, 60000);
+    return () => clearInterval(timer);
   }, []);
 
   const load = async () => {
@@ -62,7 +72,7 @@ export default function ClientDashboard() {
       { data: pauses },
     ] = await Promise.all([
       supabase.from('jobs')
-        .select('id, scheduled_at, status, properties(address), job_assignments(profiles(full_name))')
+        .select('id, scheduled_at, status, duration_minutes, properties(address), job_assignments(profiles(full_name)), checkins(id, cleaner_id, checked_in_at, checked_out_at, profiles(full_name))')
         .order('scheduled_at', { ascending: false }),
       supabase.from('client_messages')
         .select('id, sender, body, created_at, read_by_client')
@@ -91,6 +101,22 @@ export default function ClientDashboard() {
 
     setUpcoming(upcomingJobs);
     setRecent(recentJobs);
+
+    // Today's visits, live. The check-in rows come back on each job, so
+    // the status line is computed from what the cleaner's phone last said.
+    const byJob = {};
+    allJobs.forEach((j) => { byJob[j.id] = j.checkins || []; });
+    setTodayVisits(visitsToShow(allJobs, byJob).map((j) => ({ job: j, status: siteStatusFor(j, j.checkins || []) })));
+
+    // What the app has told this client lately - arrivals, departures,
+    // replies - the same bell entries that reach their phone.
+    const { data: notes } = await supabase
+      .from('notifications')
+      .select('id, message, created_at')
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: false })
+      .limit(5);
+    setUpdates(notes || []);
     setCleansThisMonth(completedThisMonth);
     setMyRequests(requests || []);
     setMyPauses(pauses || []);
@@ -295,6 +321,56 @@ export default function ClientDashboard() {
           </div>
         )}
       </div>
+
+      {/* Live, from the cleaner's own check-in: on site since when, finished
+          at what time, or not arrived yet. Refreshes on its own. */}
+      {(todayVisits.length > 0 || updates.length > 0) && (
+        <div className="dash-grid-2">
+          <div className="card">
+            <div className="dash-panel-header">
+              <h2>Today</h2>
+              <span style={{ fontSize: 12, color: 'var(--muted)' }}>Live</span>
+            </div>
+            {todayVisits.length === 0 && <p className="empty-state">No visit booked for today.</p>}
+            {todayVisits.map(({ job, status }) => (
+              <Link key={job.id} href={`/client/jobs/${job.id}`} className="dash-row">
+                <div>
+                  <div className="dash-row-title">{job.properties?.address}</div>
+                  <div className="dash-row-subtitle">
+                    <span
+                      className="dash-glance-dot"
+                      style={{
+                        display: 'inline-block', marginRight: 6, verticalAlign: 'middle',
+                        background: status.state === 'on_site' ? 'var(--wf-verified)'
+                          : status.state === 'finished' ? 'var(--wf-steel)'
+                          : status.state === 'late' || status.state === 'past' || status.state === 'missed' ? 'var(--wf-overdue)'
+                          : 'var(--wf-azure)',
+                      }}
+                    />
+                    <strong>{status.label}</strong>{status.detail ? ` · ${status.detail}` : ''}
+                  </div>
+                </div>
+                <span className={`badge ${job.status}`}>{job.status.replace('_', ' ')}</span>
+              </Link>
+            ))}
+          </div>
+
+          <div className="card">
+            <div className="dash-panel-header">
+              <h2>Recent Updates</h2>
+            </div>
+            {updates.length === 0 && <p className="empty-state">Arrivals, departures and replies will show here.</p>}
+            {updates.map((n) => (
+              <div key={n.id} className="dash-row dash-row-quiet">
+                <div>
+                  <div style={{ fontSize: 13.5 }}>{n.message}</div>
+                  <div className="dash-row-subtitle">{new Date(n.created_at).toLocaleString()}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="dash-grid-2">
         <div className="card">

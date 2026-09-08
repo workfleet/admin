@@ -449,6 +449,10 @@ export default function JobDetailPage() {
     const { data: jobRow } = await supabase.from('jobs').select('status').eq('id', id).single();
     if (jobRow) setJob((j) => ({ ...j, status: jobRow.status }));
 
+    // The client's arrival email (0090). Their bell entry and push come
+    // from the database the moment the row above was written.
+    notify({ type: 'cleaner_arrived', jobId: id });
+
     // Two reasons to tell the office where this reading was: they were let
     // in from outside the fence, or the property has no pin at all and this
     // is the first real position anyone has for it.
