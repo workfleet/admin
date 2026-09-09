@@ -3,6 +3,10 @@ import Anthropic from '@anthropic-ai/sdk';
 import { supabaseAdmin } from '../../../../lib/supabaseAdmin';
 import { REPORT_TEMPLATES, DEFAULT_TEMPLATE } from '../../../../lib/reportTemplates';
 
+// A report with eight photos attached can run past the platform's default
+// ten-second function limit; sixty is the most the current plan allows.
+export const maxDuration = 60;
+
 const IMAGE_MEDIA_TYPES = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp' };
 
 async function requireAdmin(request) {

@@ -4,6 +4,11 @@ import { supabaseAdmin } from '../../../../lib/supabaseAdmin';
 import { areasForJob, runPhotoCheck, missingAreas, MAX_PHOTOS_CHECKED } from '../../../../lib/photoCheck';
 
 export const runtime = 'nodejs';
+// Up to twelve photos through the model can take longer than the platform's
+// default ten seconds, at which point the function is killed mid-call and
+// the cleaner's check-out carries on as if no check had run. Sixty is the
+// most the current plan allows.
+export const maxDuration = 60;
 
 const IMAGE_MEDIA_TYPES = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp' };
 
