@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { flattenPrivate } from '../../../lib/profilePrivate';
+import { missingEssentials } from '../../../lib/staffDetails';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
 import BackButton from '../../components/BackButton';
@@ -52,6 +53,7 @@ export default function AdminCleaners() {
   const [cleaners, setCleaners] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [timeOffRequests, setTimeOffRequests] = useState([]);
+  const [detailsById, setDetailsById] = useState({});
   const [loading, setLoading] = useState(true);
 
   const [editingAdjustmentId, setEditingAdjustmentId] = useState(null);
@@ -81,15 +83,22 @@ export default function AdminCleaners() {
     const { data: ownProfile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
     if (ownProfile?.role !== 'admin') { router.push('/admin'); return; }
 
-    const [{ data: cleanersData }, { data: assignmentsData }, { data: timeOffData }] = await Promise.all([
+    const [{ data: cleanersData }, { data: assignmentsData }, { data: timeOffData }, { data: detailsData }] = await Promise.all([
       supabase.from('profiles').select('id, full_name, role, created_at, active, profile_private(holiday_adjustment_hours, deactivated_at)').in('role', ['cleaner', 'supervisor']).order('created_at'),
       supabase.from('job_assignments').select('cleaner_id, jobs(id, status, duration_minutes)'),
       supabase.from('time_off_requests').select('cleaner_id, type, status, hours'),
+      // Enough of each person's details (staff_details, 0092) to show a
+      // phone number on the card and flag who has not filled theirs in.
+      supabase.from('staff_details').select('profile_id, phone, address, emergency_contact_name, emergency_contact_phone'),
     ]);
+
+    const byId = {};
+    (detailsData || []).forEach((d) => { byId[d.profile_id] = d; });
 
     setCleaners((cleanersData || []).map(flattenPrivate));
     setJobs(assignmentsData || []);
     setTimeOffRequests(timeOffData || []);
+    setDetailsById(byId);
     setLoading(false);
   };
 
@@ -263,6 +272,8 @@ export default function AdminCleaners() {
           const remaining = accrued - used;
           const isEditingAdjustment = editingAdjustmentId === c.id;
           const cJobCount = jobCount(c.id, jobs);
+          const cDetails = detailsById[c.id] || null;
+          const missing = c.active === false ? [] : missingEssentials(cDetails);
 
           return (
             <div
@@ -282,7 +293,13 @@ export default function AdminCleaners() {
                   <p className="job-time">
                     Joined {new Date(c.created_at).toLocaleDateString()}
                     {' · '}{cJobCount} job{cJobCount === 1 ? '' : 's'} assigned
+                    {cDetails?.phone && <>{' · '}{cDetails.phone}</>}
                   </p>
+                  {missing.length > 0 && (
+                    <p className="job-time" style={{ color: 'var(--wf-graphite)' }} title="Open their page to add these, or ask them to fill in My Profile">
+                      {cDetails ? `Details missing: ${missing.join(', ')}` : 'No personal details on file'}
+                    </p>
+                  )}
                   <p className="job-time">
                     Holiday: {remaining.toFixed(1)} of {accrued.toFixed(1)} hours remaining
                     {' '}(12.07% of {worked.toFixed(1)}h worked
