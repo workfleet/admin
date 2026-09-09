@@ -175,6 +175,30 @@ export default function AdminKeys() {
     toast.success('Key retired.');
   };
 
+  // Gone from the register altogether. Only for a key already retired, so
+  // it is a deliberate second step, and the handover history goes with it
+  // (key_holdings cascades) - the confirm says so.
+  const deleteKey = async (key) => {
+    if (key.active || openHoldingFor(key.id)) return;
+    const history = historyFor(key.id);
+    const ok = await confirm(
+      `Delete "${key.label}" from the register? `
+      + (history.length > 0
+        ? `Its ${history.length} handover record${history.length === 1 ? '' : 's'} go${history.length === 1 ? 'es' : ''} with it. `
+        : '')
+      + 'This cannot be undone. Retired keys can stay on the record indefinitely if you would rather keep the trail.',
+      { title: 'Delete key', danger: true, confirmLabel: 'Delete key' }
+    );
+    if (!ok) return;
+
+    const { error } = await supabase.from('site_keys').delete().eq('id', key.id);
+    if (error) { toast.error("Couldn't delete that key."); return; }
+
+    setKeys((prev) => prev.filter((k) => k.id !== key.id));
+    setHoldings((prev) => prev.filter((h) => h.key_id !== key.id));
+    toast.success('Key deleted.');
+  };
+
   if (loading) return <div className="page-inner">Loading...</div>;
 
   const activeKeys = keys.filter((k) => k.active);
@@ -377,6 +401,17 @@ export default function AdminKeys() {
                           style={{ padding: '8px 10px' }}
                         >
                           <Archive size={16} />
+                        </button>
+                      )}
+                      {!key.active && !holding && (
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => deleteKey(key)}
+                          title="Delete this retired key from the register for good, along with its handover history"
+                          style={{ color: 'var(--wf-overdue)' }}
+                        >
+                          Delete
                         </button>
                       )}
                     </div>
