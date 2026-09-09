@@ -841,6 +841,54 @@ export default function AdminRequests() {
   }
   const amendedCount = hoursRows.filter((r) => r.paid_minutes != null).length;
 
+  // Eleven queues is too many for one row of buttons. They fall into four
+  // kinds of decision, so the nav is two rows: the kind, then the queue.
+  // A group's count is everything waiting in it, so nothing is hidden by
+  // being one level down.
+  const TAB_GROUPS = [
+    {
+      key: 'staff',
+      label: 'Staff',
+      tabs: [
+        { key: 'requests', label: 'Kit & Issues', count: openCount },
+        { key: 'timeoff', label: 'Time Off', count: pendingCount },
+      ],
+    },
+    {
+      key: 'hours',
+      label: 'Hours',
+      tabs: [
+        { key: 'extensions', label: 'Time Extensions', count: pendingExtensionCount },
+        { key: 'shortShifts', label: 'Hours to Check', count: shortShifts.length },
+        // Both halves of the same problem: shifts somebody has asked about,
+        // and shifts nobody has. The second kind is the one that reaches pay
+        // day unpaid, so it has to be in the count.
+        { key: 'missedClockins', label: 'Missed Clock-ins', count: pendingMissedClockinCount + undecidedMissedCount },
+        { key: 'hours', label: 'Amend Hours', title: 'Change what one person is paid for one job - arrived late, left early, one of two never came' },
+      ],
+    },
+    {
+      key: 'clients',
+      label: 'Clients',
+      tabs: [
+        { key: 'reschedules', label: 'Reschedules', count: pendingRescheduleCount },
+        { key: 'clientRequests', label: 'Client Requests', count: openClientRequestCount },
+        { key: 'pauses', label: 'Pause Requests', count: pendingPauseCount },
+      ],
+    },
+    {
+      key: 'sites',
+      label: 'Safety & Sites',
+      tabs: [
+        { key: 'emergencies', label: 'Emergency Log', count: openEmergencyCount },
+        { key: 'pins', label: 'Property Pins', count: pendingPinCount },
+      ],
+    },
+  ];
+  const activeGroup = TAB_GROUPS.find((g) => g.tabs.some((t) => t.key === section)) || TAB_GROUPS[0];
+  // Opening a group lands on the first queue with something in it.
+  const openGroup = (g) => setSection((g.tabs.find((t) => t.count > 0) || g.tabs[0]).key);
+
   const filteredReschedules = reschedules.filter((r) => {
     if (rescheduleFilter === 'all') return true;
     if (rescheduleFilter === 'pending') return r.status === 'pending';
@@ -878,45 +926,38 @@ export default function AdminRequests() {
       <div className="page-header-row">
         <div>
           <h1>Requests</h1>
-          <p className="page-subtitle">Kit top-ups, issues, time off, and extra time requested by staff</p>
+          <p className="page-subtitle">Everything waiting on a decision from the office - staff, hours, clients and sites</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className={section === 'requests' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('requests')}>
-            Kit &amp; Issues ({openCount})
-          </button>
-          <button className={section === 'timeoff' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('timeoff')}>
-            Time Off ({pendingCount})
-          </button>
-          <button className={section === 'extensions' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('extensions')}>
-            Time Extensions ({pendingExtensionCount})
-          </button>
-          <button className={section === 'shortShifts' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('shortShifts')}>
-            Hours to Check ({shortShifts.length})
-          </button>
-          <button className={section === 'missedClockins' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('missedClockins')}>
-            {/* Both halves of the same problem: shifts somebody has asked
-                about, and shifts nobody has. The second kind is the one that
-                reaches pay day unpaid, so it has to be in the count. */}
-            Missed Clock-ins ({pendingMissedClockinCount + undecidedMissedCount})
-          </button>
-          <button className={section === 'hours' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('hours')} title="Change what one person is paid for one job - arrived late, left early, one of two never came">
-            Amend Hours
-          </button>
-          <button className={section === 'reschedules' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('reschedules')}>
-            Reschedules ({pendingRescheduleCount})
-          </button>
-          <button className={section === 'clientRequests' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('clientRequests')}>
-            Client Requests ({openClientRequestCount})
-          </button>
-          <button className={section === 'pauses' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('pauses')}>
-            Pause Requests ({pendingPauseCount})
-          </button>
-          <button className={section === 'emergencies' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('emergencies')}>
-            Emergency Log ({openEmergencyCount})
-          </button>
-          <button className={section === 'pins' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('pins')}>
-            Property Pins ({pendingPinCount})
-          </button>
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {TAB_GROUPS.map((g) => {
+            const total = g.tabs.reduce((n, t) => n + (t.count || 0), 0);
+            return (
+              <button
+                key={g.key}
+                className={activeGroup.key === g.key ? 'btn-primary' : 'btn-secondary'}
+                onClick={() => openGroup(g)}
+                title={g.tabs.map((t) => t.label).join(' · ')}
+              >
+                {g.label}{total > 0 ? ` (${total})` : ''}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+          {activeGroup.tabs.map((t) => (
+            <button
+              key={t.key}
+              className={section === t.key ? 'btn-primary' : 'btn-secondary'}
+              onClick={() => setSection(t.key)}
+              style={{ padding: '4px 12px', fontSize: 12.5 }}
+              title={t.title}
+            >
+              {t.label}{t.count != null ? ` (${t.count})` : ''}
+            </button>
+          ))}
         </div>
       </div>
 
