@@ -61,6 +61,9 @@ export default function AdminCleaners() {
   const [adjustmentInput, setAdjustmentInput] = useState('');
 
   const [showAddForm, setShowAddForm] = useState(false);
+  // Removed and deactivated staff keep every record they ever had, but they
+  // are not the team, so they are out of the list unless asked for.
+  const [showFormer, setShowFormer] = useState(false);
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -173,6 +176,11 @@ export default function AdminCleaners() {
 
   const assigneeCounts = useMemo(() => buildAssigneeCounts(jobs), [jobs]);
 
+  // Removed accounts are deactivated (see api/admin/cleaners/[id]/remove),
+  // so one flag covers both.
+  const current = cleaners.filter((c) => c.active !== false);
+  const former = cleaners.filter((c) => c.active === false);
+
   if (loading) return <div className="page-inner">Loading...</div>;
 
   return (
@@ -182,17 +190,29 @@ export default function AdminCleaners() {
         <div>
           <h1>Cleaners</h1>
           <p className="page-subtitle">
-            {cleaners.filter((c) => c.role !== 'supervisor').length} cleaner{cleaners.filter((c) => c.role !== 'supervisor').length === 1 ? '' : 's'}
-            {' · '}{cleaners.filter((c) => c.role === 'supervisor').length} supervisor{cleaners.filter((c) => c.role === 'supervisor').length === 1 ? '' : 's'}
+            {current.filter((c) => c.role !== 'supervisor').length} cleaner{current.filter((c) => c.role !== 'supervisor').length === 1 ? '' : 's'}
+            {' · '}{current.filter((c) => c.role === 'supervisor').length} supervisor{current.filter((c) => c.role === 'supervisor').length === 1 ? '' : 's'}
+            {former.length > 0 && <>{' · '}{former.length} former</>}
           </p>
         </div>
-        <button
-          className="btn-primary"
-          onClick={() => { setShowAddForm((s) => !s); setJustCreated(null); setCreateError(''); }}
-          title="Create a staff account directly, without sending an onboarding invite"
-        >
-          {showAddForm ? 'Cancel' : '+ Add Staff'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {former.length > 0 && (
+            <button
+              className="btn-secondary"
+              onClick={() => setShowFormer((s) => !s)}
+              title="Removed and deactivated staff - their shifts, hours and records are all still here"
+            >
+              {showFormer ? 'Hide former staff' : `Show former staff (${former.length})`}
+            </button>
+          )}
+          <button
+            className="btn-primary"
+            onClick={() => { setShowAddForm((s) => !s); setJustCreated(null); setCreateError(''); }}
+            title="Create a staff account directly, without sending an onboarding invite"
+          >
+            {showAddForm ? 'Cancel' : '+ Add Staff'}
+          </button>
+        </div>
       </div>
 
       {showAddForm && (
@@ -265,8 +285,14 @@ export default function AdminCleaners() {
 
       {cleaners.length === 0 && <p className="empty-state">No staff yet.</p>}
 
+      {showFormer && former.length > 0 && (
+        <p className="empty-state" style={{ marginTop: 0 }}>
+          Former staff are listed after the current team. Reactivate brings someone back; nothing about them was deleted.
+        </p>
+      )}
+
       <div className="job-list">
-        {cleaners.map((c) => {
+        {[...current, ...(showFormer ? former : [])].map((c) => {
           const worked = hoursWorked(c.id, jobs, assigneeCounts);
           const accrued = worked * HOLIDAY_ACCRUAL_RATE + (c.holiday_adjustment_hours || 0);
           const used = holidayHoursUsed(c.id, timeOffRequests);
