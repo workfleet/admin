@@ -137,6 +137,14 @@ describe('unpaidMissedJobs', () => {
     expect(unpaidMissedJobs([missedA], claims, now).map((j) => j.id)).toEqual(['a']);
   });
 
+  it('drops a shift the office has already accounted for', () => {
+    // The client cancelled, or they were off sick: someone has recorded why
+    // it is unpaid (0093). Prompting them to claim it would be asking them
+    // to dispute a decision they may well agree with.
+    const outcomes = [{ job_id: 'a', outcome: 'client_cancelled' }];
+    expect(unpaidMissedJobs([missedA, missedB], [], now, outcomes).map((j) => j.id)).toEqual(['b']);
+  });
+
   it('drops a shift that was approved', () => {
     // An approved claim has already flipped the job to 'completed', so it is
     // counted - listing it as unpaid would be telling someone their hours

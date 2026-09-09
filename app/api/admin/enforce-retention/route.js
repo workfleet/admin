@@ -88,6 +88,9 @@ async function runRetentionSweep(request) {
     // is deleted outright, since unlike the submission there is no signed
     // record to keep a redacted shell of.
     await supabaseAdmin.from('staff_details').delete().eq('profile_id', cleaner.id);
+    // Sickness absences are health data, so the recorded reasons go too
+    // (missed_shift_outcomes, 0093). The job stays 'missed'.
+    await supabaseAdmin.from('missed_shift_outcomes').delete().eq('cleaner_id', cleaner.id);
 
     await supabaseAdmin.from('profiles').update({ full_name: 'Former staff member' }).eq('id', cleaner.id);
     cleanersProcessed.push(cleaner.id);

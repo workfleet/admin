@@ -9,6 +9,7 @@ import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 import { claimFor, describeClockRecord, indexClaims, lateMinutes } from '../../../../lib/clockIn';
 import { STAFF_DETAIL_FIELDS, detailsToForm, formToDetails, formatDateOnly, missingEssentials } from '../../../../lib/staffDetails';
+import { countsAgainstCleaner, outcomeLabel } from '../../../../lib/missedShiftOutcomes';
 import BackButton from '../../../components/BackButton';
 
 const HOLIDAY_ACCRUAL_RATE = 0.1207; // UK statutory: 5.6 weeks / 46.4 working weeks
@@ -81,6 +82,9 @@ export default function CleanerProfile() {
   const [newCertNotes, setNewCertNotes] = useState('');
 
   const [reliability, setReliability] = useState(null);
+  // Why each missed shift went unpaid (0093), by job - so a client's
+  // cancellation is named as such in the history and kept out of the score.
+  const [missedOutcomes, setMissedOutcomes] = useState({});
 
   const [reminders, setReminders] = useState([]);
   const [isAddingReminder, setIsAddingReminder] = useState(false);
@@ -179,7 +183,18 @@ export default function CleanerProfile() {
       .select('job_id, cleaner_id, status, raised_by_admin')
       .eq('cleaner_id', id);
 
-    const pastJobs = jobsData.filter((j) => j.status === 'completed' || j.status === 'missed');
+    const { data: outcomeRows } = await supabase
+      .from('missed_shift_outcomes')
+      .select('job_id, outcome')
+      .eq('cleaner_id', id);
+    const outcomeByJob = {};
+    (outcomeRows || []).forEach((o) => { outcomeByJob[o.job_id] = o.outcome; });
+
+    // A missed shift counts against completion unless the office has
+    // recorded a reason that is not theirs - a cancellation, sickness,
+    // being turned away. A no-show, or nothing recorded, still counts.
+    const pastJobs = jobsData.filter((j) => j.status === 'completed'
+      || (j.status === 'missed' && countsAgainstCleaner(outcomeByJob[j.id])));
     const completedJobIds = jobsData.filter((j) => j.status === 'completed').map((j) => j.id);
 
     const [{ data: photoRows }, { data: ratingRows }] = await Promise.all([
@@ -193,6 +208,7 @@ export default function CleanerProfile() {
 
     setCleaner(cleanerData);
     setJobs(jobsData);
+    setMissedOutcomes(outcomeByJob);
     setCheckins(checkinsData || []);
     setClaimIndex(indexClaims(claimRows || []));
     setCertifications(certsData || []);
@@ -726,7 +742,12 @@ export default function CleanerProfile() {
               <div style={{ fontSize: 14 }}>{job.properties?.address}</div>
               <div style={{ fontSize: 12, color: 'var(--muted)' }}>{new Date(job.scheduled_at).toLocaleString()}</div>
             </div>
-            <span className={`badge ${job.status}`}>{job.status.replace('_', ' ')}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {job.status === 'missed' && missedOutcomes[job.id] && (
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>{outcomeLabel(missedOutcomes[job.id])}</span>
+              )}
+              <span className={`badge ${job.status}`}>{job.status.replace('_', ' ')}</span>
+            </span>
           </div>
         ))}
       </div>

@@ -139,10 +139,16 @@ export default function CleanerHours() {
         && monthKey(new Date(j.scheduled_at)) === thisMonth)
       .reduce((sum, j) => sum + jobShareHours(j, assigneeCounts), 0);
 
-    const [{ data: claimRows }, { data: payrollLines }, { data: payrollAdjustments }] = await Promise.all([
+    const [{ data: claimRows }, { data: outcomeRows }, { data: payrollLines }, { data: payrollAdjustments }] = await Promise.all([
       supabase
         .from('missed_clockin_claims')
         .select('job_id, status')
+        .eq('cleaner_id', session.user.id),
+      // Missed shifts the office has already accounted for (0093) - not
+      // worth prompting them to claim a visit the client called off.
+      supabase
+        .from('missed_shift_outcomes')
+        .select('job_id, outcome')
         .eq('cleaner_id', session.user.id),
       supabase
         .from('payroll_period_lines')
@@ -157,7 +163,7 @@ export default function CleanerHours() {
 
     setPayroll(groupPayroll(payrollLines || [], payrollAdjustments || []));
 
-    setMissed(unpaidMissedJobs(jobs, claimRows || []).map((job) => ({
+    setMissed(unpaidMissedJobs(jobs, claimRows || [], new Date(), outcomeRows || []).map((job) => ({
       id: job.id,
       date: new Date(job.scheduled_at),
       address: job.properties?.address || 'Job',

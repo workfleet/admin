@@ -9,6 +9,7 @@ import { getSessionAndProfile } from '../../../lib/authGate';
 import { formatHours } from '../../../lib/hoursWorked';
 import { toCSV, downloadCSV } from '../../../lib/csv';
 import { notify } from '../../../lib/notify';
+import { MISSED_SHIFT_OUTCOMES, isJobWideOutcome } from '../../../lib/missedShiftOutcomes';
 import {
   DEFAULT_PAYROLL_SETTINGS,
   WEEKDAY_NAMES,
@@ -30,8 +31,16 @@ const REVIEW_KINDS = {
   pending_claim: { title: 'Missed clock-in claims to decide', href: '/admin/requests', linkLabel: 'Open Requests' },
   short_shift: { title: 'Short shifts to confirm or correct', href: '/admin/requests', linkLabel: 'Open Requests' },
   unfinished: { title: 'Jobs not finished', href: '/admin/rota', linkLabel: 'Open Rota' },
-  missed_shift: { title: 'Shifts nobody clocked into', href: '/admin/requests', linkLabel: 'Open Requests' },
+  // Since 0093 these hold the close until each person on the shift has an
+  // outcome. Decided right here rather than on Requests: the admin is
+  // looking at the hours, and the answer is one click per person.
+  missed_shift: { title: 'Shifts nobody clocked into - what happened?', href: '/admin/requests', linkLabel: 'Open Requests' },
 };
+
+// Missed shifts that have been accounted for (0093). Not a hold-up - listed
+// so what was recorded is in view at the moment of closing, with a way back
+// if it was the wrong call.
+const RECORDED_KIND = 'missed_recorded';
 
 const CLOSE_ERRORS = {
   blocked: 'Something in this period still needs a decision - see the list above.',
@@ -190,6 +199,10 @@ export default function AdminPayroll() {
   const [note, setNote] = useState('');
   const [closing, setClosing] = useState(false);
   const [expanded, setExpanded] = useState(null);
+  // What the admin has picked for each undecided missed shift, keyed by
+  // job and person, until they press Record.
+  const [outcomeDraft, setOutcomeDraft] = useState({});
+  const [decidingKey, setDecidingKey] = useState(null);
 
   useEffect(() => {
     load();
@@ -276,9 +289,82 @@ export default function AdminPayroll() {
     await load();
   };
 
+  const itemKey = (item) => `${item.job_id}:${item.cleaner_id || ''}`;
+
+  // Unpaid, with a reason. A cancellation is about the job, so it is written
+  // for everyone still undecided on that shift; the rest are about the one
+  // person. Goes straight to the table - the period is not closed yet, so
+  // there is nothing to adjust, and Undo below removes it again.
+  const recordOutcome = async (item) => {
+    const outcome = outcomeDraft[itemKey(item)];
+    if (!outcome) { toast.error('Pick what happened first.'); return; }
+    const { data: { session } } = await supabase.auth.getSession();
+
+    const targets = isJobWideOutcome(outcome)
+      ? blockers.filter((r) => r.kind === 'missed_shift' && r.job_id === item.job_id && r.cleaner_id)
+      : [item];
+    if (targets.length === 0) return;
+
+    setDecidingKey(itemKey(item));
+    const { error } = await supabase
+      .from('missed_shift_outcomes')
+      .upsert(
+        targets.map((t) => ({ job_id: t.job_id, cleaner_id: t.cleaner_id, outcome, decided_by: session.user.id, decided_at: new Date().toISOString() })),
+        { onConflict: 'job_id,cleaner_id' }
+      );
+    setDecidingKey(null);
+
+    if (error) { toast.error('Could not record that. Please try again.'); return; }
+    toast.success(targets.length > 1 ? `Recorded for ${targets.length} people.` : 'Recorded.');
+    await loadReview();
+  };
+
+  // The paid route: the same confirmation Requests offers, from here. Pays
+  // everyone assigned to the job the booked hours - the confirm says so.
+  const confirmWorked = async (item) => {
+    const onJob = blockers.filter((r) => r.kind === 'missed_shift' && r.job_id === item.job_id);
+    const names = onJob.map((r) => r.cleaner_name).filter(Boolean);
+    const proceed = await confirm(
+      `Record ${names.length > 0 ? names.join(' and ') : 'everyone assigned'} as having worked `
+      + `${item.job_address || 'this shift'} on ${new Date(item.scheduled_at).toLocaleDateString()}? `
+      + 'This pays the shift as booked and accrues holiday on it.',
+      { title: 'Confirm the shift was worked', confirmLabel: 'Yes, they worked it' }
+    );
+    if (!proceed) return;
+
+    setDecidingKey(itemKey(item));
+    const { data: outcome, error } = await supabase.rpc('admin_confirm_missed_shift', { target_job_id: item.job_id, note: null });
+    setDecidingKey(null);
+
+    if (error || outcome !== 'ok') {
+      toast.error(outcome === 'not_missed'
+        ? 'That shift is no longer missed - someone may have just clocked in.'
+        : 'Could not record that. Please try again.');
+      await loadReview();
+      return;
+    }
+    toast.success('Recorded as worked - the hours now count towards pay and holiday.');
+    await loadReview();
+  };
+
+  const undoOutcome = async (item) => {
+    setDecidingKey(itemKey(item));
+    const { error } = await supabase
+      .from('missed_shift_outcomes')
+      .delete()
+      .eq('job_id', item.job_id)
+      .eq('cleaner_id', item.cleaner_id);
+    setDecidingKey(null);
+    if (error) { toast.error('Could not undo that. Please try again.'); return; }
+    await loadReview();
+  };
+
   const pendingAdjustments = adjustments.filter((a) => !a.included_in_period_id);
   const blockers = review.filter((r) => r.blocking);
-  const warnings = review.filter((r) => !r.blocking);
+  const recorded = review.filter((r) => r.kind === RECORDED_KIND);
+  // Before 0093 is applied the database still returns missed shifts as
+  // non-blocking; they are shown the old way below rather than lost.
+  const warnings = review.filter((r) => !r.blocking && r.kind !== RECORDED_KIND);
   const ended = next ? periodHasEnded(next) : false;
   const previewRows = summarise(preview, pendingAdjustments);
   const canClose = ended && blockers.length === 0 && !reviewLoading && !closing;
@@ -388,15 +474,83 @@ export default function AdminPayroll() {
                       {g.linkLabel} &rarr;
                     </Link>
                   </div>
+                  {g.kind === 'missed_shift' && (
+                    <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '4px 0 2px' }}>
+                      Say what happened to each person. Only &ldquo;they worked it&rdquo; pays; every reason is recorded as unpaid.
+                    </p>
+                  )}
                   {g.items.map((item, i) => (
-                    <div key={`${item.kind}-${item.job_id}-${item.cleaner_id || i}`} style={{ fontSize: 12.5, padding: '4px 0', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                      <span style={{ flex: 1, minWidth: 0 }}>
-                        {item.cleaner_name ? `${item.cleaner_name} · ` : ''}{item.job_address || 'Job'}
-                        <span style={{ color: 'var(--muted)' }}> — {item.detail}</span>
-                      </span>
-                      <span style={{ whiteSpace: 'nowrap', color: 'var(--muted)' }}>{shortDay(item.scheduled_at)}</span>
+                    <div key={`${item.kind}-${item.job_id}-${item.cleaner_id || i}`} style={{ fontSize: 12.5, padding: '4px 0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          {item.cleaner_name ? `${item.cleaner_name} · ` : ''}{item.job_address || 'Job'}
+                          <span style={{ color: 'var(--muted)' }}> — {item.detail}</span>
+                        </span>
+                        <span style={{ whiteSpace: 'nowrap', color: 'var(--muted)' }}>{shortDay(item.scheduled_at)}</span>
+                      </div>
+                      {g.kind === 'missed_shift' && item.cleaner_id && (
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
+                          <select
+                            value={outcomeDraft[itemKey(item)] || ''}
+                            onChange={(e) => setOutcomeDraft((prev) => ({ ...prev, [itemKey(item)]: e.target.value }))}
+                            style={{ width: 'auto', fontSize: 12.5, padding: '4px 8px', marginBottom: 0 }}
+                            title={MISSED_SHIFT_OUTCOMES.find((o) => o.key === outcomeDraft[itemKey(item)])?.hint || 'Why this shift is unpaid'}
+                          >
+                            <option value="">What happened?</option>
+                            {MISSED_SHIFT_OUTCOMES.map((o) => (
+                              <option key={o.key} value={o.key}>{o.label}</option>
+                            ))}
+                          </select>
+                          <button
+                            className="btn-secondary"
+                            onClick={() => recordOutcome(item)}
+                            disabled={decidingKey === itemKey(item)}
+                            style={{ padding: '4px 10px', fontSize: 12 }}
+                            title="Record this reason - the shift stays unpaid"
+                          >
+                            Record
+                          </button>
+                          <span style={{ color: 'var(--muted)' }}>or</span>
+                          <button
+                            className="btn-primary"
+                            onClick={() => confirmWorked(item)}
+                            disabled={decidingKey === itemKey(item)}
+                            style={{ padding: '4px 10px', fontSize: 12 }}
+                            title="Record the shift as worked - pays everyone on it the booked hours"
+                          >
+                            They worked it
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!reviewLoading && recorded.length > 0 && (
+            <div style={{ marginTop: 12, padding: 14, borderRadius: 10, background: 'var(--wf-ash)' }}>
+              <strong style={{ fontSize: 13 }}>Missed shifts accounted for ({recorded.length})</strong>
+              <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '4px 0 8px' }}>
+                Unpaid, with the reason recorded. Undo one if it was the wrong call - it goes back to the list above.
+              </p>
+              {recorded.map((item, i) => (
+                <div key={`${item.job_id}-${item.cleaner_id || i}`} style={{ fontSize: 12.5, padding: '3px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    {item.cleaner_name ? `${item.cleaner_name} · ` : ''}{item.job_address || 'Job'}
+                    <span style={{ color: 'var(--muted)' }}> — {item.detail}</span>
+                  </span>
+                  <span style={{ whiteSpace: 'nowrap', color: 'var(--muted)' }}>{shortDay(item.scheduled_at)}</span>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => undoOutcome(item)}
+                    disabled={decidingKey === itemKey(item)}
+                    style={{ padding: '2px 8px', fontSize: 11.5 }}
+                    title="Remove this reason so the shift is back to needing a decision"
+                  >
+                    Undo
+                  </button>
                 </div>
               ))}
             </div>

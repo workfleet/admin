@@ -7,6 +7,7 @@ import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
 import { formatHours } from '../../../lib/hoursWorked';
 import { isClaimableMissedJob } from '../../../lib/missedClockin';
+import { outcomeLabel } from '../../../lib/missedShiftOutcomes';
 import { describeShortfall, shiftShortfall } from '../../../lib/shortShift';
 import { respondToEmergencyAlert } from '../../../lib/emergencyRespond';
 import { useConfirm } from '../../components/ConfirmProvider';
@@ -85,6 +86,10 @@ export default function AdminRequests() {
   // and frequently already knows the answer, so they can confirm these
   // directly rather than waiting to be asked by the person who lost the hours.
   const [missedShifts, setMissedShifts] = useState([]);
+  // What payroll has already recorded against these (0093), by job then
+  // person - shown so nobody confirms as worked a shift the office has
+  // already put down as cancelled without seeing that first.
+  const [missedOutcomes, setMissedOutcomes] = useState({});
   const [confirmingShiftId, setConfirmingShiftId] = useState(null);
   const [confirmShiftNote, setConfirmShiftNote] = useState('');
 
@@ -204,10 +209,22 @@ export default function AdminRequests() {
     const alreadyClaimed = new Set(
       (missedClockinData || []).filter((c) => c.status === 'pending').map((c) => c.job_id)
     );
-    setMissedShifts(
-      (missedShiftData || [])
-        .filter((j) => isClaimableMissedJob(j) && !alreadyClaimed.has(j.id))
-    );
+    const visibleMissed = (missedShiftData || [])
+      .filter((j) => isClaimableMissedJob(j) && !alreadyClaimed.has(j.id));
+    setMissedShifts(visibleMissed);
+
+    const { data: outcomeRows } = visibleMissed.length > 0
+      ? await supabase
+        .from('missed_shift_outcomes')
+        .select('job_id, cleaner_id, outcome')
+        .in('job_id', visibleMissed.map((j) => j.id))
+      : { data: [] };
+    const outcomesByJob = {};
+    (outcomeRows || []).forEach((o) => {
+      if (!outcomesByJob[o.job_id]) outcomesByJob[o.job_id] = {};
+      outcomesByJob[o.job_id][o.cleaner_id] = o.outcome;
+    });
+    setMissedOutcomes(outcomesByJob);
     setShortShifts(
       (shortShiftData || []).map((j) => ({ ...j, shortfall: shiftShortfall(j, j.checkins) }))
     );
@@ -1164,6 +1181,15 @@ export default function AdminRequests() {
                           <p style={{ fontSize: 13.5, color: 'var(--muted)', margin: '0 0 4px' }}>
                             {names.length > 0 ? names.join(', ') : 'Nobody assigned'}
                           </p>
+                          {missedOutcomes[job.id] && (
+                            <p style={{ fontSize: 13, margin: '0 0 4px' }}>
+                              Recorded on Payroll as unpaid:{' '}
+                              {(job.job_assignments || [])
+                                .filter((a) => missedOutcomes[job.id][a.cleaner_id])
+                                .map((a) => `${a.profiles?.full_name || 'Cleaner'} - ${outcomeLabel(missedOutcomes[job.id][a.cleaner_id]).toLowerCase()}`)
+                                .join(', ')}
+                            </p>
+                          )}
                           {/* Says who gets paid what, because confirming pays
                               everyone assigned - the hours model splits a job
                               across its team and cannot express one of two
