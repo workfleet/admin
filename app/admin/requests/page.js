@@ -93,6 +93,12 @@ export default function AdminRequests() {
   // The reason picked for each person on a missed shift, until Record.
   const [outcomeDraft, setOutcomeDraft] = useState({});
   const [decidingKey, setDecidingKey] = useState(null);
+  // The record: every missed shift that has been accounted for, per person,
+  // with who recorded it and when. Once everyone on a shift has a reason it
+  // leaves the queue above and lives here.
+  const [absences, setAbsences] = useState([]);
+  const [absenceRange, setAbsenceRange] = useState('90'); // 90 | all
+  const [absenceCleaner, setAbsenceCleaner] = useState('all');
   const [confirmingShiftId, setConfirmingShiftId] = useState(null);
 
   // Amend Hours: one line per person per completed job since the last
@@ -245,6 +251,13 @@ export default function AdminRequests() {
       outcomesByJob[o.job_id][o.cleaner_id] = o.outcome;
     });
     setMissedOutcomes(outcomesByJob);
+
+    // Two foreign keys to profiles on this table, so both embeds are named.
+    const { data: absenceRows } = await supabase
+      .from('missed_shift_outcomes')
+      .select('id, job_id, cleaner_id, outcome, note, decided_at, cleaner:profiles!missed_shift_outcomes_cleaner_id_fkey(full_name), decider:profiles!missed_shift_outcomes_decided_by_fkey(full_name), jobs(scheduled_at, duration_minutes, properties(address, clients(name)))')
+      .order('decided_at', { ascending: false });
+    setAbsences((absenceRows || []).filter((r) => r.jobs));
     setShortShifts(
       (shortShiftData || []).map((j) => ({ ...j, shortfall: shiftShortfall(j, j.checkins) }))
     );
@@ -819,9 +832,19 @@ export default function AdminRequests() {
   const pendingMissedClockinCount = missedClockins.filter((c) => c.status === 'pending').length;
   // A missed shift is still open while anyone on it has no reason recorded
   // and nobody has confirmed it was worked.
-  const undecidedMissedCount = missedShifts.filter((j) =>
+  const openMissedShifts = missedShifts.filter((j) =>
     (j.job_assignments || []).some((a) => !missedOutcomes[j.id]?.[a.cleaner_id])
-  ).length;
+  );
+  const undecidedMissedCount = openMissedShifts.length;
+
+  const absenceCutoff = Date.now() - 90 * 86400000;
+  const visibleAbsences = absences
+    .filter((r) => absenceRange === 'all' || new Date(r.jobs.scheduled_at).getTime() >= absenceCutoff)
+    .filter((r) => absenceCleaner === 'all' || r.cleaner_id === absenceCleaner)
+    .sort((a, b) => new Date(b.jobs.scheduled_at) - new Date(a.jobs.scheduled_at));
+  const absenceCleaners = [...new Map(absences.map((r) => [r.cleaner_id, r.cleaner?.full_name || 'Unknown'])).entries()]
+    .sort((a, b) => a[1].localeCompare(b[1]));
+  const absenceTotals = visibleAbsences.reduce((acc, r) => { acc[r.outcome] = (acc[r.outcome] || 0) + 1; return acc; }, {});
 
   const hoursAssigneeCounts = {};
   hoursRows.forEach((r) => { hoursAssigneeCounts[r.job_id] = (hoursAssigneeCounts[r.job_id] || 0) + 1; });
@@ -897,6 +920,7 @@ export default function AdminRequests() {
         // day unpaid, so it has to be in the count.
         { key: 'missedClockins', label: 'Missed Clock-ins', count: pendingMissedClockinCount + undecidedMissedCount },
         { key: 'hours', label: 'Amend Hours', title: 'Change what one person is paid for one job - arrived late, left early, one of two never came' },
+        { key: 'absences', label: 'Absence Record', title: 'Every missed shift that has been accounted for, per person' },
       ],
     },
     {
@@ -1340,6 +1364,68 @@ export default function AdminRequests() {
         </>
       )}
 
+      {section === 'absences' && (
+        <div>
+          <h2 style={{ fontSize: 15, margin: '0 0 4px' }}>Absence Record ({visibleAbsences.length})</h2>
+          <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
+            Every missed shift that has been accounted for, one entry per person, with the reason and who recorded it.
+            A shift comes here once everyone on it has a reason; Undo sends that person&apos;s entry back to Missed Clock-ins.
+            {Object.keys(absenceTotals).length > 0 && (
+              <> This view: {Object.entries(absenceTotals).map(([k, n]) => `${n} ${outcomeLabel(k).toLowerCase()}`).join(', ')}.</>
+            )}
+          </p>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+            <select value={absenceRange} onChange={(e) => setAbsenceRange(e.target.value)} style={{ width: 'auto' }}>
+              <option value="90">Last 90 days</option>
+              <option value="all">All time</option>
+            </select>
+            {absenceCleaners.length > 1 && (
+              <select value={absenceCleaner} onChange={(e) => setAbsenceCleaner(e.target.value)} style={{ width: 'auto' }}>
+                <option value="all">Everyone</option>
+                {absenceCleaners.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+              </select>
+            )}
+          </div>
+
+          {visibleAbsences.length === 0 && <p className="empty-state">Nothing recorded{absenceRange === '90' ? ' in the last 90 days' : ''}.</p>}
+
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            {visibleAbsences.map((r) => {
+              const key = `${r.job_id}:${r.cleaner_id}`;
+              return (
+                <div key={r.id} className="task-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '10px 14px' }}>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: 14, fontWeight: 600 }}>
+                      {r.cleaner?.full_name || 'Cleaner'}
+                      <span style={{ color: 'var(--muted)', fontWeight: 400 }}> · {outcomeLabel(r.outcome)}</span>
+                    </span>
+                    <span style={{ display: 'block', fontSize: 12.5, color: 'var(--muted)' }}>
+                      {new Date(r.jobs.scheduled_at).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                      {' · '}{r.jobs.properties?.clients?.name || r.jobs.properties?.address || 'Job'}
+                      {r.jobs.properties?.clients?.name && r.jobs.properties?.address ? `, ${r.jobs.properties.address}` : ''}
+                      {' · '}{r.jobs.duration_minutes || 120} min unpaid
+                    </span>
+                    <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)' }}>
+                      Recorded by {r.decider?.full_name || 'the office'} on {new Date(r.decided_at).toLocaleDateString()}{r.note ? ` — ${r.note}` : ''}
+                    </span>
+                  </span>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => undoOutcome({ id: r.job_id }, r.cleaner_id)}
+                    disabled={decidingKey === key}
+                    style={{ padding: '2px 10px', fontSize: 12 }}
+                    title="Remove this entry - the shift goes back to Missed Clock-ins for a new decision"
+                  >
+                    Undo
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {section === 'hours' && (
         <div>
           <h2 style={{ fontSize: 15, margin: '0 0 4px' }}>
@@ -1446,7 +1532,7 @@ export default function AdminRequests() {
           {/* Shifts nobody has asked about. Above the claims deliberately:
               these are the ones with no one chasing them, so they are the ones
               that quietly reach pay day unpaid. */}
-          {missedShifts.length > 0 && (
+          {openMissedShifts.length > 0 && (
             <>
               <h2 style={{ fontSize: 15, margin: '0 0 4px' }}>
                 Nobody clocked in ({undecidedMissedCount})
@@ -1458,7 +1544,7 @@ export default function AdminRequests() {
                 is unpaid, and payroll will not close while anyone is left undecided.
               </p>
               <div className="job-list" style={{ marginBottom: 24 }}>
-                {missedShifts.map((job) => {
+                {openMissedShifts.map((job) => {
                   const names = (job.job_assignments || []).map((a) => a.profiles?.full_name).filter(Boolean);
                   const assignees = (job.job_assignments || []).length || 1;
                   const payableHours = (job.duration_minutes || 120) / assignees / 60;

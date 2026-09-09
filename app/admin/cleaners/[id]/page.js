@@ -85,6 +85,9 @@ export default function CleanerProfile() {
   // Why each missed shift went unpaid (0093), by job - so a client's
   // cancellation is named as such in the history and kept out of the score.
   const [missedOutcomes, setMissedOutcomes] = useState({});
+  // The same rows with their jobs, newest first - this person's absence
+  // record, as the office recorded it.
+  const [absences, setAbsences] = useState([]);
 
   const [reminders, setReminders] = useState([]);
   const [isAddingReminder, setIsAddingReminder] = useState(false);
@@ -185,10 +188,13 @@ export default function CleanerProfile() {
 
     const { data: outcomeRows } = await supabase
       .from('missed_shift_outcomes')
-      .select('job_id, outcome')
-      .eq('cleaner_id', id);
+      .select('job_id, outcome, decided_at, jobs(scheduled_at, properties(address))')
+      .eq('cleaner_id', id)
+      .order('decided_at', { ascending: false });
     const outcomeByJob = {};
     (outcomeRows || []).forEach((o) => { outcomeByJob[o.job_id] = o.outcome; });
+    setAbsences((outcomeRows || []).filter((o) => o.jobs)
+      .sort((a, b) => new Date(b.jobs.scheduled_at) - new Date(a.jobs.scheduled_at)));
 
     // A missed shift counts against completion unless the office has
     // recorded a reason that is not theirs - a cancellation, sickness,
@@ -584,6 +590,30 @@ export default function CleanerProfile() {
           )}
         </div>
       )}
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h2>Absences ({absences.length})</h2>
+        {absences.length === 0 ? (
+          <p className="empty-state">No absences recorded.</p>
+        ) : (
+          <>
+            <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '0 0 6px' }}>
+              {Object.entries(absences.reduce((acc, a) => { acc[a.outcome] = (acc[a.outcome] || 0) + 1; return acc; }, {}))
+                .map(([k, n]) => `${n} ${outcomeLabel(k).toLowerCase()}`).join(' · ')}
+              {' '}— only &ldquo;did not turn up&rdquo; counts against the reliability score.
+            </p>
+            {absences.map((a) => (
+              <div key={a.job_id} className="task-row" style={{ justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontSize: 14 }}>{a.jobs.properties?.address || 'Job'}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>{new Date(a.jobs.scheduled_at).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                </div>
+                <span style={{ fontSize: 12.5, color: a.outcome === 'no_show' ? 'var(--wf-overdue)' : 'var(--muted)', fontWeight: 600 }}>{outcomeLabel(a.outcome)}</span>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
         <h2>Reliability Score</h2>
