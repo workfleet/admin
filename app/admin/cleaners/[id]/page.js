@@ -73,6 +73,15 @@ export default function CleanerProfile() {
   const [savingDetails, setSavingDetails] = useState(false);
 
   const [removing, setRemoving] = useState(false);
+
+  // The account itself - name, login email, role, password. Email comes from
+  // the admin API route, since auth.users is not readable from the browser.
+  const [email, setEmail] = useState(null);
+  const [editingAccount, setEditingAccount] = useState(false);
+  const [accountForm, setAccountForm] = useState({ full_name: '', email: '', role: 'cleaner', password: '' });
+  const [savingAccount, setSavingAccount] = useState(false);
+  const [accountError, setAccountError] = useState('');
+  const [handedPassword, setHandedPassword] = useState(null);
   const [removedEmail, setRemovedEmail] = useState(null);
 
   const [certifications, setCertifications] = useState([]);
@@ -117,6 +126,11 @@ export default function CleanerProfile() {
       .then((res) => ({ ...res, data: flattenPrivate(res.data) }));
 
     if (!cleanerData) { router.push('/admin/cleaners'); return; }
+
+    fetch(`/api/admin/cleaners/${id}/account`, { headers: { Authorization: `Bearer ${session.access_token}` } })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => setEmail(body?.email ?? null))
+      .catch(() => setEmail(null));
 
     const { data: assignmentRows } = await supabase
       .from('job_assignments')
@@ -365,6 +379,65 @@ export default function CleanerProfile() {
     }
   };
 
+  const startEditAccount = () => {
+    setAccountForm({ full_name: cleaner.full_name || '', email: email || '', role: cleaner.role === 'supervisor' ? 'supervisor' : 'cleaner', password: '' });
+    setAccountError('');
+    setHandedPassword(null);
+    setEditingAccount(true);
+  };
+
+  const generatePassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+    let pw = '';
+    for (let i = 0; i < 12; i++) pw += chars[Math.floor(Math.random() * chars.length)];
+    setAccountForm((f) => ({ ...f, password: pw }));
+  };
+
+  // Only what changed is sent, so an untouched field cannot overwrite
+  // anything. A new password is shown once afterwards for handing over,
+  // the same way the create form does it.
+  const saveAccount = async (e) => {
+    e.preventDefault();
+    setAccountError('');
+    const changes = {};
+    if (accountForm.full_name.trim() !== (cleaner.full_name || '')) changes.full_name = accountForm.full_name.trim();
+    if (accountForm.email.trim().toLowerCase() !== (email || '').toLowerCase()) changes.email = accountForm.email.trim();
+    if (accountForm.role !== cleaner.role) changes.role = accountForm.role;
+    if (accountForm.password) changes.password = accountForm.password;
+    if (Object.keys(changes).length === 0) { setEditingAccount(false); return; }
+
+    if (changes.role === 'supervisor' && !(await confirm(
+      `Make ${accountForm.full_name || 'this person'} a supervisor? They will be able to manage the rota, clients and requests like an admin, but not staff accounts or payroll.`,
+      { title: 'Change role', confirmLabel: 'Make supervisor' }
+    ))) return;
+
+    setSavingAccount(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch(`/api/admin/cleaners/${id}/account`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify(changes),
+    });
+    const body = await res.json().catch(() => ({}));
+    setSavingAccount(false);
+
+    if (!res.ok) {
+      setAccountError({
+        email_taken: 'Another account already uses that email.',
+        bad_email: 'That does not look like an email address.',
+        password_too_short: 'The password needs at least 8 characters.',
+        name_required: 'A name is needed.',
+      }[body.error] || 'Could not update the account. Please try again.');
+      return;
+    }
+
+    setCleaner((c) => ({ ...c, full_name: body.full_name, role: body.role }));
+    setEmail(body.email);
+    setHandedPassword(body.password_changed ? changes.password : null);
+    setEditingAccount(false);
+    toast.success('Account updated.');
+  };
+
   const removeAccount = async () => {
     if (!(await confirm(
       `Remove ${cleaner.full_name || 'this account'}? This deactivates them and frees up their email so it can be reused ` +
@@ -467,9 +540,15 @@ export default function CleanerProfile() {
                 <span className="badge missed" style={{ marginLeft: 8, verticalAlign: 'middle' }}>deactivated</span>
               )}
             </h1>
-            <p className="job-time" style={{ marginTop: 4 }}>Joined {new Date(cleaner.created_at).toLocaleDateString()}</p>
+            <p className="job-time" style={{ marginTop: 4 }}>
+              Joined {new Date(cleaner.created_at).toLocaleDateString()}
+              {email ? ` · ${email}` : ''}
+            </p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn-secondary" onClick={() => (editingAccount ? setEditingAccount(false) : startEditAccount())} title="Change their name, login email, role, or set a new password">
+              {editingAccount ? 'Cancel' : 'Edit Account'}
+            </button>
             <button className="btn-secondary" onClick={exportCleanerData} title="Download everything held about this person as a file - use this to answer a data request">Export Data</button>
             <button className="btn-secondary" onClick={toggleActive} title="Switch this account between active and deactivated - deactivating blocks login but keeps all their history">
               {cleaner.active === false ? 'Reactivate' : 'Deactivate'}
@@ -490,6 +569,59 @@ export default function CleanerProfile() {
           <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 10 }}>
             Removed — <strong>{removedEmail}</strong> is now free to use for a new onboarding invite.
           </p>
+        )}
+
+        {editingAccount && (
+          <form onSubmit={saveAccount} style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--hairline)' }}>
+            <div className="field">
+              <label className="field-label">Full name</label>
+              <input value={accountForm.full_name} onChange={(e) => setAccountForm((f) => ({ ...f, full_name: e.target.value }))} required autoFocus />
+            </div>
+            <div className="field">
+              <label className="field-label">Login email</label>
+              <input type="email" value={accountForm.email} onChange={(e) => setAccountForm((f) => ({ ...f, email: e.target.value }))} placeholder={email === null ? 'Loading...' : ''} />
+              <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
+                Changing this changes what they sign in with. Tell them.
+              </p>
+            </div>
+            <div className="field">
+              <label className="field-label">Role</label>
+              <select value={accountForm.role} onChange={(e) => setAccountForm((f) => ({ ...f, role: e.target.value }))}>
+                <option value="cleaner">Cleaner</option>
+                <option value="supervisor">Office Staff / Supervisor</option>
+              </select>
+            </div>
+            <div className="field">
+              <label className="field-label">New password (leave blank to keep theirs)</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  value={accountForm.password}
+                  onChange={(e) => setAccountForm((f) => ({ ...f, password: e.target.value }))}
+                  placeholder="At least 8 characters"
+                  autoComplete="new-password"
+                  style={{ flex: 1, marginBottom: 0 }}
+                />
+                <button type="button" className="btn-secondary" onClick={generatePassword} title="Generate a random password for them">Generate</button>
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
+                Setting one signs them in with it straight away. You&apos;ll need to pass it on yourself - it is shown once after saving.
+              </p>
+            </div>
+            {accountError && <p style={{ color: 'var(--wf-overdue)', fontSize: 14, margin: '0 0 10px' }}>{accountError}</p>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" className="btn-secondary" onClick={() => setEditingAccount(false)}>Cancel</button>
+              <button type="submit" className="btn-primary" disabled={savingAccount}>{savingAccount ? 'Saving...' : 'Save Account'}</button>
+            </div>
+          </form>
+        )}
+
+        {handedPassword && (
+          <div style={{ marginTop: 12, padding: 12, borderRadius: 10, background: 'rgba(52, 199, 123, 0.10)' }}>
+            <p style={{ fontSize: 13.5, margin: 0 }}>
+              New password set for <strong>{cleaner.full_name}</strong>. Share it with them directly - it will not be shown again:
+            </p>
+            <p style={{ fontSize: 13.5, marginTop: 8, marginBottom: 0, fontFamily: 'monospace' }}>{email}<br />{handedPassword}</p>
+          </div>
         )}
       </div>
 
