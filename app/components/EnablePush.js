@@ -33,9 +33,17 @@ export default function EnablePush({ iconColor = 'var(--muted)' }) {
   const checkExistingSubscription = async () => {
     if (!('serviceWorker' in navigator)) return;
     const reg = await navigator.serviceWorker.ready.catch(() => null);
-    if (!reg) return;
-    const existing = await reg.pushManager.getSubscription();
-    setSubscribed(Boolean(existing));
+    // iPhone Safari in an ordinary browser tab registers the service worker
+    // but has no pushManager on it - push there exists only once the app is
+    // on the Home Screen. Reading it anyway threw on every page load
+    // (Sentry, 2026-09-09) and told nobody anything.
+    if (!reg || !reg.pushManager) return;
+    try {
+      const existing = await reg.pushManager.getSubscription();
+      setSubscribed(Boolean(existing));
+    } catch {
+      setSubscribed(false);
+    }
   };
 
   const enable = async () => {
