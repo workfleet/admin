@@ -9,7 +9,6 @@ import { getSessionAndProfile } from '../../../lib/authGate';
 import { formatHours } from '../../../lib/hoursWorked';
 import { toCSV, downloadCSV } from '../../../lib/csv';
 import { notify } from '../../../lib/notify';
-import { MISSED_SHIFT_OUTCOMES, isJobWideOutcome } from '../../../lib/missedShiftOutcomes';
 import {
   DEFAULT_PAYROLL_SETTINGS,
   WEEKDAY_NAMES,
@@ -32,14 +31,12 @@ const REVIEW_KINDS = {
   short_shift: { title: 'Short shifts to confirm or correct', href: '/admin/requests', linkLabel: 'Open Requests' },
   unfinished: { title: 'Jobs not finished', href: '/admin/rota', linkLabel: 'Open Rota' },
   // Since 0093 these hold the close until each person on the shift has an
-  // outcome. Decided right here rather than on Requests: the admin is
-  // looking at the hours, and the answer is one click per person.
+  // outcome, decided on Requests with the other staff decisions.
   missed_shift: { title: 'Shifts nobody clocked into - what happened?', href: '/admin/requests', linkLabel: 'Open Requests' },
 };
 
 // Missed shifts that have been accounted for (0093). Not a hold-up - listed
-// so what was recorded is in view at the moment of closing, with a way back
-// if it was the wrong call.
+// so what was recorded is in view at the moment of closing.
 const RECORDED_KIND = 'missed_recorded';
 
 const CLOSE_ERRORS = {
@@ -199,18 +196,10 @@ export default function AdminPayroll() {
   const [note, setNote] = useState('');
   const [closing, setClosing] = useState(false);
   const [expanded, setExpanded] = useState(null);
-  // What the admin has picked for each undecided missed shift, keyed by
-  // job and person, until they press Record.
-  const [outcomeDraft, setOutcomeDraft] = useState({});
-  const [decidingKey, setDecidingKey] = useState(null);
-  // Per-person corrections on the lines about to be sent (0094): which
-  // lines already carry one, and the one being edited.
+  // Per-person corrections on the lines about to be sent (0094), made on
+  // Requests; read here so the preview can say which lines carry one.
   const [overrides, setOverrides] = useState({});
   const [showLines, setShowLines] = useState(false);
-  const [editingLine, setEditingLine] = useState(null);
-  const [lineMinutes, setLineMinutes] = useState('');
-  const [lineReason, setLineReason] = useState('');
-  const [savingLine, setSavingLine] = useState(false);
 
   useEffect(() => {
     load();
@@ -288,49 +277,6 @@ export default function AdminPayroll() {
     setReviewLoading(false);
   };
 
-  const startEditLine = (line) => {
-    const existing = overrides[`${line.job_id}:${line.cleaner_id}`];
-    setEditingLine(`${line.job_id}:${line.cleaner_id}`);
-    setLineMinutes(String(Math.round(Number(line.minutes))));
-    setLineReason(existing?.paid_minutes_reason || '');
-  };
-
-  // Sets what this one person is paid for this one job. The period is still
-  // open, so this changes the preview and nothing else; the same edit after
-  // a close arrives as an adjustment on the next run instead, by the
-  // trigger on job_assignments.
-  const saveLine = async (line, minutes) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    setSavingLine(true);
-    const { error } = await supabase
-      .from('job_assignments')
-      .update({
-        paid_minutes: minutes,
-        paid_minutes_reason: minutes == null ? null : (lineReason.trim() || null),
-        paid_minutes_set_by: minutes == null ? null : session.user.id,
-        paid_minutes_set_at: minutes == null ? null : new Date().toISOString(),
-      })
-      .eq('job_id', line.job_id)
-      .eq('cleaner_id', line.cleaner_id);
-    setSavingLine(false);
-    if (error) { toast.error('Could not save those hours. Please try again.'); return; }
-    setEditingLine(null);
-    toast.success(minutes == null ? 'Back to the booked share.' : `Set to ${formatHours(minutes / 60)} for this job.`);
-    await loadReview();
-  };
-
-  const submitLine = (line) => {
-    const value = parseInt(lineMinutes, 10);
-    if (!Number.isInteger(value) || value < 0) { toast.error('Enter the minutes to pay, 0 or more.'); return; }
-    // A changed figure with no reason is the thing the cleaner will ask
-    // about, so the reason is required whenever the number moves.
-    if (value !== Math.round(Number(line.minutes)) && !lineReason.trim()) {
-      toast.error('Say why, in a few words - it is shown to them.');
-      return;
-    }
-    saveLine(line, value);
-  };
-
   const chooseFirstPeriod = (start) => {
     const candidates = recentEndedPeriods(8, settings);
     const chosen = candidates.find((p) => p.start === start);
@@ -351,76 +297,6 @@ export default function AdminPayroll() {
     toast.success('Payroll schedule saved.');
     setFirstStart(null);
     await load();
-  };
-
-  const itemKey = (item) => `${item.job_id}:${item.cleaner_id || ''}`;
-
-  // Unpaid, with a reason. A cancellation is about the job, so it is written
-  // for everyone still undecided on that shift; the rest are about the one
-  // person. Goes straight to the table - the period is not closed yet, so
-  // there is nothing to adjust, and Undo below removes it again.
-  const recordOutcome = async (item) => {
-    const outcome = outcomeDraft[itemKey(item)];
-    if (!outcome) { toast.error('Pick what happened first.'); return; }
-    const { data: { session } } = await supabase.auth.getSession();
-
-    const targets = isJobWideOutcome(outcome)
-      ? blockers.filter((r) => r.kind === 'missed_shift' && r.job_id === item.job_id && r.cleaner_id)
-      : [item];
-    if (targets.length === 0) return;
-
-    setDecidingKey(itemKey(item));
-    const { error } = await supabase
-      .from('missed_shift_outcomes')
-      .upsert(
-        targets.map((t) => ({ job_id: t.job_id, cleaner_id: t.cleaner_id, outcome, decided_by: session.user.id, decided_at: new Date().toISOString() })),
-        { onConflict: 'job_id,cleaner_id' }
-      );
-    setDecidingKey(null);
-
-    if (error) { toast.error('Could not record that. Please try again.'); return; }
-    toast.success(targets.length > 1 ? `Recorded for ${targets.length} people.` : 'Recorded.');
-    await loadReview();
-  };
-
-  // The paid route: the same confirmation Requests offers, from here. Pays
-  // everyone assigned to the job the booked hours - the confirm says so.
-  const confirmWorked = async (item) => {
-    const onJob = blockers.filter((r) => r.kind === 'missed_shift' && r.job_id === item.job_id);
-    const names = onJob.map((r) => r.cleaner_name).filter(Boolean);
-    const proceed = await confirm(
-      `Record ${names.length > 0 ? names.join(' and ') : 'everyone assigned'} as having worked `
-      + `${item.job_address || 'this shift'} on ${new Date(item.scheduled_at).toLocaleDateString()}? `
-      + 'This pays the shift as booked and accrues holiday on it.',
-      { title: 'Confirm the shift was worked', confirmLabel: 'Yes, they worked it' }
-    );
-    if (!proceed) return;
-
-    setDecidingKey(itemKey(item));
-    const { data: outcome, error } = await supabase.rpc('admin_confirm_missed_shift', { target_job_id: item.job_id, note: null });
-    setDecidingKey(null);
-
-    if (error || outcome !== 'ok') {
-      toast.error(outcome === 'not_missed'
-        ? 'That shift is no longer missed - someone may have just clocked in.'
-        : 'Could not record that. Please try again.');
-      await loadReview();
-      return;
-    }
-    toast.success('Recorded as worked - the hours now count towards pay and holiday.');
-    await loadReview();
-  };
-
-  const undoOutcome = async (item) => {
-    setDecidingKey(itemKey(item));
-    const { error } = await supabase
-      .from('missed_shift_outcomes')
-      .delete()
-      .eq('job_id', item.job_id)
-      .eq('cleaner_id', item.cleaner_id);
-    setDecidingKey(null);
-    if (error) { toast.error('Could not undo that. Please try again.'); return; }
-    await loadReview();
   };
 
   const pendingAdjustments = adjustments.filter((a) => !a.included_in_period_id);
@@ -540,52 +416,16 @@ export default function AdminPayroll() {
                   </div>
                   {g.kind === 'missed_shift' && (
                     <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '4px 0 2px' }}>
-                      Say what happened to each person. Only &ldquo;they worked it&rdquo; pays; every reason is recorded as unpaid.
+                      Say what happened to each person on Requests, under Missed Clock-ins. Only &ldquo;they worked it&rdquo; pays; every reason is recorded as unpaid.
                     </p>
                   )}
                   {g.items.map((item, i) => (
-                    <div key={`${item.kind}-${item.job_id}-${item.cleaner_id || i}`} style={{ fontSize: 12.5, padding: '4px 0' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                        <span style={{ flex: 1, minWidth: 0 }}>
-                          {item.cleaner_name ? `${item.cleaner_name} · ` : ''}{item.job_address || 'Job'}
-                          <span style={{ color: 'var(--muted)' }}> — {item.detail}</span>
-                        </span>
-                        <span style={{ whiteSpace: 'nowrap', color: 'var(--muted)' }}>{shortDay(item.scheduled_at)}</span>
-                      </div>
-                      {g.kind === 'missed_shift' && item.cleaner_id && (
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
-                          <select
-                            value={outcomeDraft[itemKey(item)] || ''}
-                            onChange={(e) => setOutcomeDraft((prev) => ({ ...prev, [itemKey(item)]: e.target.value }))}
-                            style={{ width: 'auto', fontSize: 12.5, padding: '4px 8px', marginBottom: 0 }}
-                            title={MISSED_SHIFT_OUTCOMES.find((o) => o.key === outcomeDraft[itemKey(item)])?.hint || 'Why this shift is unpaid'}
-                          >
-                            <option value="">What happened?</option>
-                            {MISSED_SHIFT_OUTCOMES.map((o) => (
-                              <option key={o.key} value={o.key}>{o.label}</option>
-                            ))}
-                          </select>
-                          <button
-                            className="btn-secondary"
-                            onClick={() => recordOutcome(item)}
-                            disabled={decidingKey === itemKey(item)}
-                            style={{ padding: '4px 10px', fontSize: 12 }}
-                            title="Record this reason - the shift stays unpaid"
-                          >
-                            Record
-                          </button>
-                          <span style={{ color: 'var(--muted)' }}>or</span>
-                          <button
-                            className="btn-primary"
-                            onClick={() => confirmWorked(item)}
-                            disabled={decidingKey === itemKey(item)}
-                            style={{ padding: '4px 10px', fontSize: 12 }}
-                            title="Record the shift as worked - pays everyone on it the booked hours"
-                          >
-                            They worked it
-                          </button>
-                        </div>
-                      )}
+                    <div key={`${item.kind}-${item.job_id}-${item.cleaner_id || i}`} style={{ fontSize: 12.5, padding: '4px 0', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        {item.cleaner_name ? `${item.cleaner_name} · ` : ''}{item.job_address || 'Job'}
+                        <span style={{ color: 'var(--muted)' }}> — {item.detail}</span>
+                      </span>
+                      <span style={{ whiteSpace: 'nowrap', color: 'var(--muted)' }}>{shortDay(item.scheduled_at)}</span>
                     </div>
                   ))}
                 </div>
@@ -597,24 +437,17 @@ export default function AdminPayroll() {
             <div style={{ marginTop: 12, padding: 14, borderRadius: 10, background: 'var(--wf-ash)' }}>
               <strong style={{ fontSize: 13 }}>Missed shifts accounted for ({recorded.length})</strong>
               <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '4px 0 8px' }}>
-                Unpaid, with the reason recorded. Undo one if it was the wrong call - it goes back to the list above.
+                Unpaid, with the reason recorded. Wrong call? Undo it on{' '}
+                <Link href="/admin/requests" style={{ color: 'var(--brand-link)', fontWeight: 600, textDecoration: 'none' }}>Requests</Link>
+                {' '}and it comes back to the list above.
               </p>
               {recorded.map((item, i) => (
-                <div key={`${item.job_id}-${item.cleaner_id || i}`} style={{ fontSize: 12.5, padding: '3px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                <div key={`${item.job_id}-${item.cleaner_id || i}`} style={{ fontSize: 12.5, padding: '3px 0', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     {item.cleaner_name ? `${item.cleaner_name} · ` : ''}{item.job_address || 'Job'}
                     <span style={{ color: 'var(--muted)' }}> — {item.detail}</span>
                   </span>
                   <span style={{ whiteSpace: 'nowrap', color: 'var(--muted)' }}>{shortDay(item.scheduled_at)}</span>
-                  <button
-                    className="btn-secondary"
-                    onClick={() => undoOutcome(item)}
-                    disabled={decidingKey === itemKey(item)}
-                    style={{ padding: '2px 8px', fontSize: 11.5 }}
-                    title="Remove this reason so the shift is back to needing a decision"
-                  >
-                    Undo
-                  </button>
                 </div>
               ))}
             </div>
@@ -666,13 +499,14 @@ export default function AdminPayroll() {
                     title="Every job going out, per person - change what one person is paid for one job here"
                   >
                     {showLines ? 'Hide' : 'Show'} the {preview.length} line{preview.length === 1 ? '' : 's'}
-                    {Object.keys(overrides).length > 0 ? ` · ${Object.keys(overrides).length} set by hand` : ''}
+                    {Object.keys(overrides).length > 0 ? ` · ${Object.keys(overrides).length} amended` : ''}
                   </button>
 
                   {showLines && (
                     <div style={{ marginTop: 8 }}>
                       <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '0 0 6px' }}>
-                        Each line is one person on one job at their share of the booked time. Edit a line when that is not what they should be paid - arrived late, left early, one of two never came. It changes that person only.
+                        Each line is one person on one job at their share of the booked time. When that is not what they should be paid - arrived late, left early, one of two never came - amend it on{' '}
+                        <Link href="/admin/requests" style={{ color: 'var(--brand-link)', fontWeight: 600, textDecoration: 'none' }}>Requests</Link>, under Amend Hours.
                       </p>
                       {Object.entries(
                         preview.reduce((acc, l) => {
@@ -686,50 +520,15 @@ export default function AdminPayroll() {
                           {cleanerLines.map((line) => {
                             const key = `${line.job_id}:${line.cleaner_id}`;
                             const override = overrides[key];
-                            const isEditing = editingLine === key;
                             return (
-                              <div key={key} style={{ fontSize: 12.5, padding: '3px 0 3px 10px', borderLeft: override ? '2px solid var(--wf-graphite)' : '2px solid var(--hairline)' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                                  <span style={{ flex: 1, minWidth: 0 }}>
-                                    {shortDay(parseLocalDate(line.job_date))} · {line.job_address || 'Job'}
-                                    {override && (
-                                      <span style={{ color: 'var(--muted)' }}> — set by hand{override.paid_minutes_reason ? `: ${override.paid_minutes_reason}` : ''}</span>
-                                    )}
-                                  </span>
-                                  <span style={{ fontFamily: 'var(--wf-data)', fontWeight: 600, whiteSpace: 'nowrap' }}>{formatHours(Number(line.minutes) / 60)}</span>
-                                  {!isEditing && (
-                                    <button className="btn-secondary" onClick={() => startEditLine(line)} style={{ padding: '2px 8px', fontSize: 11.5 }} title="Change what this person is paid for this job">
-                                      Edit
-                                    </button>
+                              <div key={key} style={{ fontSize: 12.5, padding: '3px 0 3px 10px', borderLeft: override ? '2px solid var(--wf-graphite)' : '2px solid var(--hairline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                                <span style={{ flex: 1, minWidth: 0 }}>
+                                  {shortDay(parseLocalDate(line.job_date))} · {line.job_address || 'Job'}
+                                  {override && (
+                                    <span style={{ color: 'var(--muted)' }}> — amended{override.paid_minutes_reason ? `: ${override.paid_minutes_reason}` : ''}</span>
                                   )}
-                                </div>
-                                {isEditing && (
-                                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      step="5"
-                                      value={lineMinutes}
-                                      onChange={(e) => setLineMinutes(e.target.value)}
-                                      style={{ width: 80, marginBottom: 0, padding: '4px 8px', fontSize: 12.5 }}
-                                      autoFocus
-                                    />
-                                    <span style={{ color: 'var(--muted)' }}>min</span>
-                                    <input
-                                      value={lineReason}
-                                      onChange={(e) => setLineReason(e.target.value)}
-                                      placeholder="Why - e.g. arrived an hour late (shown to them)"
-                                      style={{ flex: 1, minWidth: 180, marginBottom: 0, padding: '4px 8px', fontSize: 12.5 }}
-                                    />
-                                    <button className="btn-primary" onClick={() => submitLine(line)} disabled={savingLine} style={{ padding: '4px 10px', fontSize: 12 }}>Save</button>
-                                    {override && (
-                                      <button className="btn-secondary" onClick={() => saveLine(line, null)} disabled={savingLine} style={{ padding: '4px 10px', fontSize: 12 }} title="Remove the hand-set figure and go back to their share of the booked time">
-                                        Booked share
-                                      </button>
-                                    )}
-                                    <button className="btn-secondary" onClick={() => setEditingLine(null)} style={{ padding: '4px 10px', fontSize: 12 }}>Cancel</button>
-                                  </div>
-                                )}
+                                </span>
+                                <span style={{ fontFamily: 'var(--wf-data)', fontWeight: 600, whiteSpace: 'nowrap' }}>{formatHours(Number(line.minutes) / 60)}</span>
                               </div>
                             );
                           })}

@@ -7,7 +7,7 @@ import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
 import { assignmentMinutes, formatHours } from '../../../lib/hoursWorked';
 import { isClaimableMissedJob } from '../../../lib/missedClockin';
-import { outcomeLabel } from '../../../lib/missedShiftOutcomes';
+import { MISSED_SHIFT_OUTCOMES, isJobWideOutcome, outcomeLabel } from '../../../lib/missedShiftOutcomes';
 import { describeShortfall, shiftShortfall } from '../../../lib/shortShift';
 import { respondToEmergencyAlert } from '../../../lib/emergencyRespond';
 import { useConfirm } from '../../components/ConfirmProvider';
@@ -90,7 +90,27 @@ export default function AdminRequests() {
   // person - shown so nobody confirms as worked a shift the office has
   // already put down as cancelled without seeing that first.
   const [missedOutcomes, setMissedOutcomes] = useState({});
+  // The reason picked for each person on a missed shift, until Record.
+  const [outcomeDraft, setOutcomeDraft] = useState({});
+  const [decidingKey, setDecidingKey] = useState(null);
   const [confirmingShiftId, setConfirmingShiftId] = useState(null);
+
+  // Amend Hours: one line per person per completed job since the last
+  // payroll close (0094). Loaded when the tab is opened - it is the largest
+  // list on this page and most visits never look at it.
+  const [hoursRows, setHoursRows] = useState([]);
+  const [hoursSince, setHoursSince] = useState(null);
+  const [hoursLoading, setHoursLoading] = useState(false);
+  const [hoursLoaded, setHoursLoaded] = useState(false);
+  const [hoursCleaner, setHoursCleaner] = useState('all');
+  const [editingLine, setEditingLine] = useState(null);
+  const [lineMinutes, setLineMinutes] = useState('');
+  const [lineReason, setLineReason] = useState('');
+  const [savingLine, setSavingLine] = useState(false);
+
+  useEffect(() => {
+    if (section === 'hours' && !hoursLoaded) loadHours();
+  }, [section]);
   const [confirmShiftNote, setConfirmShiftNote] = useState('');
 
   // Shifts held back because the clock and the booking disagree - somebody
@@ -641,6 +661,121 @@ export default function AdminRequests() {
     await load();
   };
 
+  // Unpaid, with a reason (0093). A cancellation is about the job, so it is
+  // written for everyone on that shift who has no reason yet; the rest are
+  // about the one person. The payroll close waits until nobody is left
+  // undecided.
+  const recordOutcome = async (job, cleanerId) => {
+    const key = `${job.id}:${cleanerId}`;
+    const outcome = outcomeDraft[key];
+    if (!outcome) { toast.error('Pick what happened first.'); return; }
+    const { data: { session } } = await supabase.auth.getSession();
+
+    const already = missedOutcomes[job.id] || {};
+    const targets = isJobWideOutcome(outcome)
+      ? (job.job_assignments || []).map((a) => a.cleaner_id).filter((id) => !already[id])
+      : [cleanerId];
+    if (targets.length === 0) return;
+
+    setDecidingKey(key);
+    const { error } = await supabase
+      .from('missed_shift_outcomes')
+      .upsert(
+        targets.map((id) => ({ job_id: job.id, cleaner_id: id, outcome, decided_by: session.user.id, decided_at: new Date().toISOString() })),
+        { onConflict: 'job_id,cleaner_id' }
+      );
+    setDecidingKey(null);
+
+    if (error) { toast.error('Could not record that. Please try again.'); return; }
+    toast.success(targets.length > 1 ? `Recorded for ${targets.length} people - unpaid.` : 'Recorded - unpaid.');
+    await load();
+  };
+
+  const undoOutcome = async (job, cleanerId) => {
+    const key = `${job.id}:${cleanerId}`;
+    setDecidingKey(key);
+    const { error } = await supabase
+      .from('missed_shift_outcomes')
+      .delete()
+      .eq('job_id', job.id)
+      .eq('cleaner_id', cleanerId);
+    setDecidingKey(null);
+    if (error) { toast.error('Could not undo that. Please try again.'); return; }
+    await load();
+  };
+
+  // Everything completed since the last payroll close, one row per person
+  // per job, with everyone on the job present so the even split can be
+  // worked out. Falls back to three weeks when nothing has been closed yet
+  // (or the viewer cannot see payroll_periods).
+  const loadHours = async () => {
+    setHoursLoading(true);
+    const { data: lastPeriod } = await supabase
+      .from('payroll_periods')
+      .select('period_end')
+      .order('period_end', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const since = lastPeriod?.period_end
+      ? new Date(`${lastPeriod.period_end}T00:00:00`)
+      : new Date(Date.now() - 21 * 86400000);
+
+    const { data } = await supabase
+      .from('job_assignments')
+      .select('job_id, cleaner_id, paid_minutes, paid_minutes_reason, profiles!job_assignments_cleaner_id_fkey(full_name), jobs!inner(id, scheduled_at, duration_minutes, status, properties(address, clients(name)))')
+      .eq('jobs.status', 'completed')
+      .gte('jobs.scheduled_at', since.toISOString())
+      .order('scheduled_at', { referencedTable: 'jobs', ascending: false });
+
+    setHoursSince(since);
+    setHoursRows((data || []).filter((r) => r.jobs));
+    setHoursLoading(false);
+    setHoursLoaded(true);
+  };
+
+  const startEditLine = (row, currentMinutes) => {
+    setEditingLine(`${row.job_id}:${row.cleaner_id}`);
+    setLineMinutes(String(Math.round(currentMinutes)));
+    setLineReason(row.paid_minutes_reason || '');
+  };
+
+  // Sets what this one person is paid for this one job. Before the period
+  // closes it simply changes the figure; after, the trigger on
+  // job_assignments (0094) writes the difference as an adjustment on the
+  // next run. Null puts them back on the booked share.
+  const saveLine = async (row, minutes) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    setSavingLine(true);
+    const { error } = await supabase
+      .from('job_assignments')
+      .update({
+        paid_minutes: minutes,
+        paid_minutes_reason: minutes == null ? null : (lineReason.trim() || null),
+        paid_minutes_set_by: minutes == null ? null : session.user.id,
+        paid_minutes_set_at: minutes == null ? null : new Date().toISOString(),
+      })
+      .eq('job_id', row.job_id)
+      .eq('cleaner_id', row.cleaner_id);
+    setSavingLine(false);
+    if (error) { toast.error('Could not save those hours. Please try again.'); return; }
+    setEditingLine(null);
+    toast.success(minutes == null ? 'Back to the booked share.' : `Set to ${formatHours(minutes / 60)} for this job.`);
+    setHoursLoaded(false);
+    await loadHours();
+  };
+
+  const submitLine = (row, currentMinutes) => {
+    const value = parseInt(lineMinutes, 10);
+    if (!Number.isInteger(value) || value < 0) { toast.error('Enter the minutes to pay, 0 or more.'); return; }
+    // A changed figure with no reason is the thing the cleaner will ask
+    // about, so the reason is required whenever the number moves.
+    if (value !== Math.round(currentMinutes) && !lineReason.trim()) {
+      toast.error('Say why, in a few words - it is shown to them.');
+      return;
+    }
+    saveLine(row, value);
+  };
+
   // Moving a pin is a decision about every future visit to that property,
   // made from one cleaner's phone reading - so it goes through the definer
   // function that writes the proposal's own coordinates, never the
@@ -682,6 +817,29 @@ export default function AdminRequests() {
     return c.status !== 'pending';
   });
   const pendingMissedClockinCount = missedClockins.filter((c) => c.status === 'pending').length;
+  // A missed shift is still open while anyone on it has no reason recorded
+  // and nobody has confirmed it was worked.
+  const undecidedMissedCount = missedShifts.filter((j) =>
+    (j.job_assignments || []).some((a) => !missedOutcomes[j.id]?.[a.cleaner_id])
+  ).length;
+
+  const hoursAssigneeCounts = {};
+  hoursRows.forEach((r) => { hoursAssigneeCounts[r.job_id] = (hoursAssigneeCounts[r.job_id] || 0) + 1; });
+  const hoursCleaners = [...new Map(hoursRows.map((r) => [r.cleaner_id, r.profiles?.full_name || 'Unknown'])).entries()]
+    .sort((a, b) => a[1].localeCompare(b[1]));
+  const hoursByJob = [];
+  {
+    const seen = new Map();
+    hoursRows.forEach((r) => {
+      if (hoursCleaner !== 'all' && r.cleaner_id !== hoursCleaner) return;
+      if (!seen.has(r.job_id)) {
+        seen.set(r.job_id, { job: r.jobs, rows: [] });
+        hoursByJob.push(seen.get(r.job_id));
+      }
+      seen.get(r.job_id).rows.push(r);
+    });
+  }
+  const amendedCount = hoursRows.filter((r) => r.paid_minutes != null).length;
 
   const filteredReschedules = reschedules.filter((r) => {
     if (rescheduleFilter === 'all') return true;
@@ -739,7 +897,10 @@ export default function AdminRequests() {
             {/* Both halves of the same problem: shifts somebody has asked
                 about, and shifts nobody has. The second kind is the one that
                 reaches pay day unpaid, so it has to be in the count. */}
-            Missed Clock-ins ({pendingMissedClockinCount + missedShifts.length})
+            Missed Clock-ins ({pendingMissedClockinCount + undecidedMissedCount})
+          </button>
+          <button className={section === 'hours' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('hours')} title="Change what one person is paid for one job - arrived late, left early, one of two never came">
+            Amend Hours
           </button>
           <button className={section === 'reschedules' ? 'btn-primary' : 'btn-secondary'} onClick={() => setSection('reschedules')}>
             Reschedules ({pendingRescheduleCount})
@@ -1137,6 +1298,95 @@ export default function AdminRequests() {
         </>
       )}
 
+      {section === 'hours' && (
+        <div>
+          <h2 style={{ fontSize: 15, margin: '0 0 4px' }}>
+            Amend Hours{amendedCount > 0 ? ` · ${amendedCount} amended` : ''}
+          </h2>
+          <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
+            Every completed job since {hoursSince ? hoursSince.toLocaleDateString() : 'the last payroll close'}, one line per person at their share of the booked time.
+            Amend a line when that is not what they should be paid — arrived late, left early, one of two never came.
+            It changes that person only, and the reason is shown to them. Anything already sent to payroll comes through as an adjustment on the next run.
+          </p>
+
+          {hoursCleaners.length > 1 && (
+            <div style={{ marginBottom: 12 }}>
+              <select value={hoursCleaner} onChange={(e) => setHoursCleaner(e.target.value)} style={{ width: 'auto' }}>
+                <option value="all">Everyone</option>
+                {hoursCleaners.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+              </select>
+            </div>
+          )}
+
+          {hoursLoading && <p className="empty-state">Loading...</p>}
+          {!hoursLoading && hoursByJob.length === 0 && <p className="empty-state">No completed jobs in this period yet.</p>}
+
+          <div className="job-list">
+            {hoursByJob.map(({ job, rows }) => (
+              <div key={job.id} className="card job-card" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                <h2>{job.properties?.clients?.name || job.properties?.address || 'Job'}</h2>
+                <p style={{ fontSize: 14, margin: '4px 0' }}>{job.properties?.address}</p>
+                <p style={{ fontSize: 13.5, margin: '0 0 6px', color: 'var(--muted)' }}>
+                  {new Date(job.scheduled_at).toLocaleString()} · booked {job.duration_minutes || 120} min
+                  {hoursAssigneeCounts[job.id] > 1 ? ` · ${hoursAssigneeCounts[job.id]} people` : ''}
+                </p>
+                {rows.map((row) => {
+                  const key = `${row.job_id}:${row.cleaner_id}`;
+                  const minutes = assignmentMinutes(row, hoursAssigneeCounts);
+                  const amended = row.paid_minutes != null;
+                  const isEditing = editingLine === key;
+                  return (
+                    <div key={key} style={{ padding: '6px 0 6px 10px', borderLeft: amended ? '2px solid var(--wf-graphite)' : '2px solid var(--hairline)', marginTop: 4 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 13.5 }}>
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <strong>{row.profiles?.full_name || 'Cleaner'}</strong>
+                          {amended && (
+                            <span style={{ color: 'var(--muted)' }}> — amended{row.paid_minutes_reason ? `: ${row.paid_minutes_reason}` : ''}</span>
+                          )}
+                        </span>
+                        <span style={{ fontFamily: 'var(--wf-data)', fontWeight: 600, whiteSpace: 'nowrap' }}>{formatHours(minutes / 60)}</span>
+                        {!isEditing && (
+                          <button className="btn-secondary" onClick={() => startEditLine(row, minutes)} style={{ padding: '2px 10px', fontSize: 12 }} title="Change what this person is paid for this job">
+                            Amend
+                          </button>
+                        )}
+                      </div>
+                      {isEditing && (
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
+                          <input
+                            type="number"
+                            min="0"
+                            step="5"
+                            value={lineMinutes}
+                            onChange={(e) => setLineMinutes(e.target.value)}
+                            style={{ width: 84, marginBottom: 0, padding: '6px 8px' }}
+                            autoFocus
+                          />
+                          <span style={{ color: 'var(--muted)', fontSize: 13 }}>min</span>
+                          <input
+                            value={lineReason}
+                            onChange={(e) => setLineReason(e.target.value)}
+                            placeholder="Why — e.g. arrived an hour late (shown to them)"
+                            style={{ flex: 1, minWidth: 200, marginBottom: 0, padding: '6px 8px' }}
+                          />
+                          <button className="btn-primary" onClick={() => submitLine(row, minutes)} disabled={savingLine}>Save</button>
+                          {amended && (
+                            <button className="btn-secondary" onClick={() => saveLine(row, null)} disabled={savingLine} title="Remove the amendment and go back to their share of the booked time">
+                              Booked share
+                            </button>
+                          )}
+                          <button className="btn-secondary" onClick={() => setEditingLine(null)}>Cancel</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {section === 'missedClockins' && (
         <>
           <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
@@ -1157,12 +1407,13 @@ export default function AdminRequests() {
           {missedShifts.length > 0 && (
             <>
               <h2 style={{ fontSize: 15, margin: '0 0 4px' }}>
-                Nobody clocked in ({missedShifts.length})
+                Nobody clocked in ({undecidedMissedCount})
               </h2>
               <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
                 No one has asked about these. If you know the shift was worked — the client
                 confirmed it, or you spoke to them at the time — record it here rather than
-                waiting to be asked.
+                waiting to be asked. Otherwise say what happened to each person; every reason
+                is unpaid, and payroll will not close while anyone is left undecided.
               </p>
               <div className="job-list" style={{ marginBottom: 24 }}>
                 {missedShifts.map((job) => {
@@ -1181,14 +1432,55 @@ export default function AdminRequests() {
                           <p style={{ fontSize: 13.5, color: 'var(--muted)', margin: '0 0 4px' }}>
                             {names.length > 0 ? names.join(', ') : 'Nobody assigned'}
                           </p>
-                          {missedOutcomes[job.id] && (
-                            <p style={{ fontSize: 13, margin: '0 0 4px' }}>
-                              Recorded on Payroll as unpaid:{' '}
-                              {(job.job_assignments || [])
-                                .filter((a) => missedOutcomes[job.id][a.cleaner_id])
-                                .map((a) => `${a.profiles?.full_name || 'Cleaner'} - ${outcomeLabel(missedOutcomes[job.id][a.cleaner_id]).toLowerCase()}`)
-                                .join(', ')}
-                            </p>
+                          {(job.job_assignments || []).length > 0 && (
+                            <div style={{ margin: '4px 0 6px' }}>
+                              {(job.job_assignments || []).map((a) => {
+                                const recorded = missedOutcomes[job.id]?.[a.cleaner_id];
+                                const key = `${job.id}:${a.cleaner_id}`;
+                                return (
+                                  <div key={a.cleaner_id} style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', fontSize: 13, padding: '2px 0' }}>
+                                    <span style={{ minWidth: 110, fontWeight: 600 }}>{a.profiles?.full_name || 'Cleaner'}</span>
+                                    {recorded ? (
+                                      <>
+                                        <span style={{ color: 'var(--muted)' }}>{outcomeLabel(recorded)} · unpaid</span>
+                                        <button
+                                          className="btn-secondary"
+                                          onClick={() => undoOutcome(job, a.cleaner_id)}
+                                          disabled={decidingKey === key}
+                                          style={{ padding: '2px 8px', fontSize: 11.5 }}
+                                          title="Remove this reason so the shift needs a decision again"
+                                        >
+                                          Undo
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <select
+                                          value={outcomeDraft[key] || ''}
+                                          onChange={(e) => setOutcomeDraft((prev) => ({ ...prev, [key]: e.target.value }))}
+                                          style={{ width: 'auto', fontSize: 12.5, padding: '4px 8px', marginBottom: 0 }}
+                                          title={MISSED_SHIFT_OUTCOMES.find((o) => o.key === outcomeDraft[key])?.hint || 'Why this shift is unpaid for them'}
+                                        >
+                                          <option value="">What happened?</option>
+                                          {MISSED_SHIFT_OUTCOMES.map((o) => (
+                                            <option key={o.key} value={o.key}>{o.label}</option>
+                                          ))}
+                                        </select>
+                                        <button
+                                          className="btn-secondary"
+                                          onClick={() => recordOutcome(job, a.cleaner_id)}
+                                          disabled={decidingKey === key}
+                                          style={{ padding: '4px 10px', fontSize: 12 }}
+                                          title="Record this reason - the shift stays unpaid for them"
+                                        >
+                                          Record
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           )}
                           {/* Says who gets paid what, because confirming pays
                               everyone assigned - the hours model splits a job
