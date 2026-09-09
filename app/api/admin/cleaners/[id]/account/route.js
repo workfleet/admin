@@ -36,6 +36,62 @@ export async function GET(request, { params }) {
   return NextResponse.json({ email: userData?.user?.email || null });
 }
 
+// A true delete, for an account that was never really used: added by
+// mistake, a duplicate, an invite that never signed in. Refused the moment
+// the person has any history - shifts, check-ins, photos, claims, pay -
+// because jobs, checkins and photos reference profiles without a cascade
+// (deleting would fail) and the tables that do cascade hold records that
+// should outlive the account (deleting would destroy them). For anyone with
+// history the route is Remove (see ../remove), which frees the email and
+// keeps everything.
+const HISTORY = [
+  ['job_assignments', 'cleaner_id'],
+  ['checkins', 'cleaner_id'],
+  ['photos', 'uploaded_by'],
+  ['job_reports', 'generated_by'],
+  ['missed_clockin_claims', 'cleaner_id'],
+  ['missed_shift_outcomes', 'cleaner_id'],
+  ['time_off_requests', 'cleaner_id'],
+  ['staff_requests', 'cleaner_id'],
+  ['time_extension_requests', 'cleaner_id'],
+  ['emergency_alerts', 'cleaner_id'],
+  ['staff_onboarding_submissions', 'profile_id'],
+  ['staff_certifications', 'staff_id'],
+  ['key_holdings', 'holder_id'],
+  ['payroll_period_lines', 'cleaner_id'],
+  ['payroll_adjustments', 'cleaner_id'],
+];
+
+async function historyFor(id) {
+  const found = [];
+  for (const [table, column] of HISTORY) {
+    const { count, error } = await supabaseAdmin.from(table).select('*', { count: 'exact', head: true }).eq(column, id);
+    if (!error && count > 0) found.push(table);
+  }
+  return found;
+}
+
+export async function DELETE(request, { params }) {
+  const admin = await requireAdmin(request);
+  if (!admin) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
+  const profile = await loadStaffProfile(params.id);
+  if (!profile) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+
+  const history = await historyFor(params.id);
+  if (history.length > 0) {
+    return NextResponse.json({ error: 'has_history', tables: history }, { status: 409 });
+  }
+
+  // Deleting the auth user cascades to the profile and from there to the
+  // per-person rows that are safe to lose: notifications, presence, push
+  // subscriptions, personal details, chat membership.
+  const { error } = await supabaseAdmin.auth.admin.deleteUser(params.id);
+  if (error) return NextResponse.json({ error: 'delete_failed' }, { status: 502 });
+
+  return NextResponse.json({ ok: true, deleted: profile.full_name });
+}
+
 // Name, login email, role between cleaner and supervisor, and a new
 // password. Each is optional; only what is sent changes. The password is
 // set, not emailed - the admin hands it over, as on the create form.

@@ -641,12 +641,21 @@ export default function AdminRequests() {
   // approving a claim - an approved record, an attendance row, a completed job
   // - but flagged raised_by_admin so the two are told apart afterwards. It
   // pays everyone assigned, so the confirm names them.
+  // Who on a missed shift is being paid if it is confirmed: everyone without
+  // a reason recorded. Those with one are absent and stay unpaid (0096).
+  const shiftWorkers = (job) => (job.job_assignments || []).filter((a) => !missedOutcomes[job.id]?.[a.cleaner_id]);
+  const shiftAbsent = (job) => (job.job_assignments || []).filter((a) => missedOutcomes[job.id]?.[a.cleaner_id]);
+
   const confirmMissedShift = async (job) => {
-    const names = (job.job_assignments || []).map((a) => a.profiles?.full_name).filter(Boolean);
+    const workers = shiftWorkers(job).map((a) => a.profiles?.full_name).filter(Boolean);
+    const absent = shiftAbsent(job).map((a) => a.profiles?.full_name).filter(Boolean);
+    const all = (job.job_assignments || []).length;
     const proceed = await confirm(
-      `Record ${names.length > 0 ? names.join(' and ') : 'the assigned cleaner(s)'} as having worked `
+      `Record ${workers.length > 0 ? workers.join(' and ') : 'the assigned cleaner(s)'} as having worked `
       + `${job.properties?.address || 'this shift'} on ${new Date(job.scheduled_at).toLocaleDateString()}? `
-      + 'This pays the shift and accrues holiday on it.',
+      + 'This pays the shift and accrues holiday on it.'
+      + (absent.length > 0 ? ` ${absent.join(' and ')} stay${absent.length === 1 ? 's' : ''} unpaid as recorded.` : '')
+      + (all > 1 && absent.length === 0 ? ` If one of them did not turn up, cancel and record that for them first - otherwise all ${all} are paid.` : ''),
       { title: 'Confirm the shift was worked', confirmLabel: 'Yes, they worked it' }
     );
     if (!proceed) return;
@@ -660,9 +669,11 @@ export default function AdminRequests() {
       toast.error(
         outcome === 'no_assignees'
           ? 'Nobody is assigned to that job - assign someone on the rota first.'
-          : outcome === 'not_missed'
-            ? 'That shift is no longer missed - someone may have just clocked in.'
-            : 'Could not record that. Please try again.'
+          : outcome === 'nobody_worked'
+            ? 'Everyone on this shift is recorded as absent - undo one of those first if someone did work it.'
+            : outcome === 'not_missed'
+              ? 'That shift is no longer missed - someone may have just clocked in.'
+              : 'Could not record that. Please try again.'
       );
       setConfirmingShiftId(null);
       await load();
@@ -1546,8 +1557,6 @@ export default function AdminRequests() {
               <div className="job-list" style={{ marginBottom: 24 }}>
                 {openMissedShifts.map((job) => {
                   const names = (job.job_assignments || []).map((a) => a.profiles?.full_name).filter(Boolean);
-                  const assignees = (job.job_assignments || []).length || 1;
-                  const payableHours = (job.duration_minutes || 120) / assignees / 60;
                   return (
                     <div key={job.id} className="card job-card" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
@@ -1610,19 +1619,23 @@ export default function AdminRequests() {
                               })}
                             </div>
                           )}
-                          {/* Says who gets paid what, because confirming pays
-                              everyone assigned - the hours model splits a job
-                              across its team and cannot express one of two
-                              having turned up. */}
-                          {names.length > 0 && (
+                          {/* Says who gets paid what: the people without a
+                              reason recorded split the booked time; anyone
+                              recorded absent stays unpaid (0096). */}
+                          {shiftWorkers(job).length > 0 && (
                             <p style={{ fontSize: 13.5, margin: '0 0 4px' }}>
-                              Recording this adds <strong>{formatHours(payableHours)}</strong>
-                              {assignees > 1 ? ` to each of ${assignees} people` : ' to their pay'}.
+                              &ldquo;They worked it&rdquo; adds <strong>{formatHours((job.duration_minutes || 120) / shiftWorkers(job).length / 60)}</strong>
+                              {shiftWorkers(job).length > 1
+                                ? ` to each of ${shiftWorkers(job).map((a) => a.profiles?.full_name).filter(Boolean).join(', ')}`
+                                : ` to ${shiftWorkers(job)[0].profiles?.full_name || 'their pay'}`}
+                              {shiftAbsent(job).length > 0
+                                ? `; ${shiftAbsent(job).map((a) => a.profiles?.full_name).filter(Boolean).join(' and ')} stay${shiftAbsent(job).length === 1 ? 's' : ''} unpaid.`
+                                : '.'}
                             </p>
                           )}
                           <span className="badge missed">missed</span>
                         </div>
-                        {names.length > 0 && (
+                        {shiftWorkers(job).length > 0 && (
                           <div style={{ display: 'flex', gap: 8, height: 'fit-content' }}>
                             <button
                               className="btn-primary"

@@ -212,9 +212,14 @@ export default function CleanerProfile() {
 
     // A missed shift counts against completion unless the office has
     // recorded a reason that is not theirs - a cancellation, sickness,
-    // being turned away. A no-show, or nothing recorded, still counts.
-    const pastJobs = jobsData.filter((j) => j.status === 'completed'
-      || (j.status === 'missed' && countsAgainstCleaner(outcomeByJob[j.id])));
+    // being turned away. A no-show, or nothing recorded, still counts. A
+    // reason recorded for this person makes the job missed for them even
+    // when a colleague worked it and the job itself reads completed (0096).
+    const missedForThem = (j) => j.status === 'missed' || (j.status === 'completed' && outcomeByJob[j.id]);
+    const pastJobs = jobsData
+      .filter((j) => (j.status === 'completed' && !outcomeByJob[j.id])
+        || (missedForThem(j) && countsAgainstCleaner(outcomeByJob[j.id])))
+      .map((j) => (missedForThem(j) ? { ...j, status: 'missed' } : j));
     const completedJobIds = jobsData.filter((j) => j.status === 'completed').map((j) => j.id);
 
     const [{ data: photoRows }, { data: ratingRows }] = await Promise.all([
@@ -438,6 +443,36 @@ export default function CleanerProfile() {
     toast.success('Account updated.');
   };
 
+  // Gone for good - only for an account with no history at all. The route
+  // refuses anything else, and the answer then is Remove.
+  const deleteAccount = async () => {
+    if (!(await confirm(
+      `Delete ${cleaner.full_name || 'this account'} completely? This is for an account that was never really used - added by mistake, or a duplicate. `
+      + 'Their login, profile and personal details are removed and cannot be recovered. If they have any shifts or history, this will be refused and you should use Remove instead.',
+      { title: 'Delete account', danger: true, confirmLabel: 'Delete for good' }
+    ))) return;
+
+    setRemoving(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch(`/api/admin/cleaners/${id}/account`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    const body = await res.json().catch(() => ({}));
+    setRemoving(false);
+
+    if (res.ok) {
+      toast.success(`${body.deleted || 'Account'} deleted.`);
+      router.push('/admin/cleaners');
+      return;
+    }
+    if (body.error === 'has_history') {
+      toast.error(`${cleaner.full_name || 'This person'} has history here (${(body.tables || []).slice(0, 3).join(', ')}${(body.tables || []).length > 3 ? ', ...' : ''}), so the account cannot be deleted. Use Remove to deactivate them and free their email while keeping that history.`);
+      return;
+    }
+    toast.error("Couldn't delete this account. Please try again.");
+  };
+
   const removeAccount = async () => {
     if (!(await confirm(
       `Remove ${cleaner.full_name || 'this account'}? This deactivates them and frees up their email so it can be reused ` +
@@ -556,6 +591,11 @@ export default function CleanerProfile() {
             {cleaner.active !== false && (
               <button className="btn-secondary" onClick={removeAccount} disabled={removing} title="Deactivate them and free up their email so a new starter can use it - their history is kept, and this is blocked while they still hold keys">
                 {removing ? 'Removing...' : 'Remove Account'}
+              </button>
+            )}
+            {jobs.length === 0 && (checkins || []).length === 0 && (
+              <button className="btn-secondary" onClick={deleteAccount} disabled={removing} style={{ color: 'var(--wf-overdue)' }} title="Delete the account completely - only possible while they have no shifts or history; otherwise use Remove">
+                Delete Account
               </button>
             )}
           </div>
@@ -907,10 +947,10 @@ export default function CleanerProfile() {
               <div style={{ fontSize: 12, color: 'var(--muted)' }}>{new Date(job.scheduled_at).toLocaleString()}</div>
             </div>
             <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              {job.status === 'missed' && missedOutcomes[job.id] && (
+              {missedOutcomes[job.id] && (
                 <span style={{ fontSize: 12, color: 'var(--muted)' }}>{outcomeLabel(missedOutcomes[job.id])}</span>
               )}
-              {job.status === 'completed' && job.paid_minutes != null && (
+              {job.status === 'completed' && job.paid_minutes != null && !missedOutcomes[job.id] && (
                 <span style={{ fontSize: 12, color: 'var(--muted)' }} title={job.paid_minutes_reason || 'Hours set by the office for this job'}>
                   paid {job.paid_minutes} min
                 </span>
