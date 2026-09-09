@@ -841,10 +841,42 @@ export default function AdminRequests() {
   }
   const amendedCount = hoursRows.filter((r) => r.paid_minutes != null).length;
 
+  const filteredReschedules = reschedules.filter((r) => {
+    if (rescheduleFilter === 'all') return true;
+    if (rescheduleFilter === 'pending') return r.status === 'pending';
+    return r.status !== 'pending';
+  });
+  const pendingRescheduleCount = reschedules.filter((r) => r.status === 'pending').length;
+
+  const filteredRequests = requests.filter((r) => filter === 'all' || r.status === filter);
+  const openCount = requests.filter((r) => r.status === 'open').length;
+
+  const filteredClientRequests = clientRequests.filter((r) => clientRequestFilter === 'all' || r.status === clientRequestFilter);
+  const openClientRequestCount = clientRequests.filter((r) => r.status === 'open').length;
+
+  const filteredPauses = pauses.filter((p) => {
+    if (pauseFilter === 'all') return true;
+    if (pauseFilter === 'pending') return p.status === 'pending';
+    return p.status !== 'pending';
+  });
+  const pendingPauseCount = pauses.filter((p) => p.status === 'pending').length;
+
+  const filteredTimeOff = timeOff.filter((t) => timeOffFilter === 'all' || t.status === timeOffFilter);
+  const pendingCount = timeOff.filter((t) => t.status === 'pending').length;
+
+  const filteredExtensions = extensions.filter((r) => extensionFilter === 'all' || (extensionFilter === 'decided' ? r.status !== 'pending' : r.status === extensionFilter));
+  const pendingExtensionCount = extensions.filter((r) => r.status === 'pending').length;
+
+  const filteredEmergencies = emergencies.filter((e) => emergencyFilter === 'all' || e.status === emergencyFilter);
+  const openEmergencyCount = emergencies.filter((e) => e.status === 'open').length;
+
+  if (loading) return <div className="page-inner">Loading...</div>;
+
   // Eleven queues is too many for one row of buttons. They fall into four
   // kinds of decision, so the nav is two rows: the kind, then the queue.
   // A group's count is everything waiting in it, so nothing is hidden by
-  // being one level down.
+  // being one level down. Defined here, after every count above exists -
+  // reading one earlier is a ReferenceError that takes the whole page down.
   const TAB_GROUPS = [
     {
       key: 'staff',
@@ -888,37 +920,6 @@ export default function AdminRequests() {
   const activeGroup = TAB_GROUPS.find((g) => g.tabs.some((t) => t.key === section)) || TAB_GROUPS[0];
   // Opening a group lands on the first queue with something in it.
   const openGroup = (g) => setSection((g.tabs.find((t) => t.count > 0) || g.tabs[0]).key);
-
-  const filteredReschedules = reschedules.filter((r) => {
-    if (rescheduleFilter === 'all') return true;
-    if (rescheduleFilter === 'pending') return r.status === 'pending';
-    return r.status !== 'pending';
-  });
-  const pendingRescheduleCount = reschedules.filter((r) => r.status === 'pending').length;
-
-  const filteredRequests = requests.filter((r) => filter === 'all' || r.status === filter);
-  const openCount = requests.filter((r) => r.status === 'open').length;
-
-  const filteredClientRequests = clientRequests.filter((r) => clientRequestFilter === 'all' || r.status === clientRequestFilter);
-  const openClientRequestCount = clientRequests.filter((r) => r.status === 'open').length;
-
-  const filteredPauses = pauses.filter((p) => {
-    if (pauseFilter === 'all') return true;
-    if (pauseFilter === 'pending') return p.status === 'pending';
-    return p.status !== 'pending';
-  });
-  const pendingPauseCount = pauses.filter((p) => p.status === 'pending').length;
-
-  const filteredTimeOff = timeOff.filter((t) => timeOffFilter === 'all' || t.status === timeOffFilter);
-  const pendingCount = timeOff.filter((t) => t.status === 'pending').length;
-
-  const filteredExtensions = extensions.filter((r) => extensionFilter === 'all' || (extensionFilter === 'decided' ? r.status !== 'pending' : r.status === extensionFilter));
-  const pendingExtensionCount = extensions.filter((r) => r.status === 'pending').length;
-
-  const filteredEmergencies = emergencies.filter((e) => emergencyFilter === 'all' || e.status === emergencyFilter);
-  const openEmergencyCount = emergencies.filter((e) => e.status === 'open').length;
-
-  if (loading) return <div className="page-inner">Loading...</div>;
 
   return (
     <div className="page-inner">
