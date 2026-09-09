@@ -8,6 +8,7 @@ import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import {
   HOLIDAY_ACCRUAL_RATE,
+  assignedJob,
   fetchAssigneeCounts,
   jobShareHours,
   formatHours,
@@ -122,10 +123,10 @@ export default function CleanerHours() {
 
     const { data: assignmentRows } = await supabase
       .from('job_assignments')
-      .select('jobs(id, scheduled_at, status, duration_minutes, properties(address))')
+      .select('paid_minutes, jobs(id, scheduled_at, status, duration_minutes, properties(address))')
       .eq('cleaner_id', session.user.id);
 
-    const jobs = (assignmentRows || []).map((row) => row.jobs).filter(Boolean);
+    const jobs = (assignmentRows || []).map(assignedJob).filter(Boolean);
     const assigneeCounts = await fetchAssigneeCounts(jobs.map((j) => j.id));
 
     const completed = jobs.filter((j) => j.status === 'completed');

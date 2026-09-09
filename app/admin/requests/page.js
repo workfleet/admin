@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
-import { formatHours } from '../../../lib/hoursWorked';
+import { assignmentMinutes, formatHours } from '../../../lib/hoursWorked';
 import { isClaimableMissedJob } from '../../../lib/missedClockin';
 import { outcomeLabel } from '../../../lib/missedShiftOutcomes';
 import { describeShortfall, shiftShortfall } from '../../../lib/shortShift';
@@ -129,7 +129,7 @@ export default function AdminRequests() {
       // Adjustments live on profile_private (0088); aliased so the balance
       // maths below still keys on `id`.
       supabase.from('profile_private').select('id:profile_id, holiday_adjustment_hours, profiles!inner(role)').eq('profiles.role', 'cleaner'),
-      supabase.from('job_assignments').select('cleaner_id, jobs(id, status, duration_minutes)'),
+      supabase.from('job_assignments').select('cleaner_id, paid_minutes, jobs(id, status, duration_minutes)'),
       supabase
         .from('time_extension_requests')
         .select('id, job_id, requested_minutes, reason, status, admin_note, suggested_scheduled_at, suggested_duration_minutes, created_at, cleaner_id, decided_by, profiles!time_extension_requests_cleaner_id_fkey(full_name), decider:profiles!time_extension_requests_decided_by_fkey(full_name), jobs(scheduled_at, duration_minutes, properties(address))')
@@ -189,7 +189,7 @@ export default function AdminRequests() {
     (cleanerProfiles || []).forEach((p) => {
       const worked = (assignmentsData || [])
         .filter((row) => row.cleaner_id === p.id && row.jobs?.status === 'completed')
-        .reduce((sum, row) => sum + (row.jobs.duration_minutes || 0) / (assigneeCounts[row.jobs.id] || 1), 0) / 60;
+        .reduce((sum, row) => sum + assignmentMinutes(row, assigneeCounts), 0) / 60;
       balanceMap[p.id] = worked * HOLIDAY_ACCRUAL_RATE + (p.holiday_adjustment_hours || 0);
     });
     setHolidayBalances(balanceMap);

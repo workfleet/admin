@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
-import { HOLIDAY_ACCRUAL_RATE, fetchAssigneeCounts, hoursWorked } from '../../../lib/hoursWorked';
+import { HOLIDAY_ACCRUAL_RATE, assignedJob, fetchAssigneeCounts, hoursWorked } from '../../../lib/hoursWorked';
 import BackButton from '../../components/BackButton';
 
 function groupByDate(jobs) {
@@ -84,7 +84,7 @@ export default function CleanerRota() {
     const [{ data: assignmentRows }, { data: timeOffData }, { data: profileData }] = await Promise.all([
       supabase
         .from('job_assignments')
-        .select('jobs(id, scheduled_at, status, duration_minutes, properties(address))')
+        .select('paid_minutes, jobs(id, scheduled_at, status, duration_minutes, properties(address))')
         .eq('cleaner_id', session.user.id),
       supabase
         .from('time_off_requests')
@@ -94,7 +94,7 @@ export default function CleanerRota() {
     ]);
 
     const jobsData = (assignmentRows || [])
-      .map((row) => row.jobs)
+      .map(assignedJob)
       .filter(Boolean)
       .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
 

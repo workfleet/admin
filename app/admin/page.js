@@ -9,6 +9,7 @@ import { getSessionWithRetry } from '../../lib/authGate';
 import { getWorkAnniversaryYears } from '../../lib/workAnniversary';
 import { needsReorder } from '../../lib/inventory';
 import { localDateString } from '../../lib/localDate';
+import { assignmentMinutes } from '../../lib/hoursWorked';
 import WorkAnniversaryPopup from '../components/WorkAnniversaryPopup';
 import { abbreviateName } from '../../lib/jobOverlap';
 
@@ -163,12 +164,13 @@ export default function AdminDashboard() {
 
     const { data: allRows } = await supabase
       .from('job_assignments')
-      .select('cleaner_id, profiles(full_name), jobs!inner(id, duration_minutes, status, scheduled_at)')
+      .select('cleaner_id, paid_minutes, profiles(full_name), jobs!inner(id, duration_minutes, status, scheduled_at)')
       .gte('jobs.scheduled_at', start.toISOString())
       .lt('jobs.scheduled_at', end.toISOString());
 
     // A job's duration is split evenly across everyone assigned to it, so
-    // a 2-hour job with 2 people counts as 1 hour each - not 2 hours each.
+    // a 2-hour job with 2 people counts as 1 hour each - not 2 hours each -
+    // unless the office has set that person's minutes for the job (0094).
     const assigneeCounts = {};
     (allRows || []).forEach((row) => {
       assigneeCounts[row.jobs.id] = (assigneeCounts[row.jobs.id] || 0) + 1;
@@ -183,7 +185,7 @@ export default function AdminDashboard() {
     // the period is a fortnight in the past and it plainly isn't.
     let missedMinutes = 0;
     (allRows || []).forEach((row) => {
-      const shareMinutes = (row.jobs.duration_minutes || 0) / assigneeCounts[row.jobs.id];
+      const shareMinutes = assignmentMinutes(row, assigneeCounts);
       totalMinutes += shareMinutes;
       if (row.jobs.status === 'missed') missedMinutes += shareMinutes;
       if (row.jobs.status === 'completed') {

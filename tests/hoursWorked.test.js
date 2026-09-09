@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { jobShareHours, hoursWorked, formatHours, HOLIDAY_ACCRUAL_RATE } from '../lib/hoursWorked';
+import { jobShareHours, hoursWorked, formatHours, assignedJob, assignmentMinutes, HOLIDAY_ACCRUAL_RATE } from '../lib/hoursWorked';
 
 // These figures reach staff twice - as the totals on a cleaner's own hours
 // page, and as the holiday balance the rota lets them book against. They also
@@ -26,6 +26,31 @@ describe('jobShareHours', () => {
   it('reads zero for a job with no duration recorded', () => {
     expect(jobShareHours({ id: 'a' }, {})).toBe(0);
     expect(jobShareHours(job('a', null), {})).toBe(0);
+  });
+
+  it('uses the office\'s figure for this person when one is set', () => {
+    // One of two arrived an hour late on a 4-hour job: the office pays them
+    // 60 minutes rather than their even 120. Zero is a real figure too - the
+    // one who never came - and must not fall back to the split.
+    expect(jobShareHours({ ...job('a', 240), paid_minutes: 60 }, { a: 2 })).toBe(1);
+    expect(jobShareHours({ ...job('a', 240), paid_minutes: 0 }, { a: 2 })).toBe(0);
+    expect(jobShareHours({ ...job('a', 240), paid_minutes: null }, { a: 2 })).toBe(2);
+  });
+});
+
+describe('assignedJob', () => {
+  it('carries the row\'s override onto the job, null when there is none', () => {
+    expect(assignedJob({ paid_minutes: 30, jobs: job('a', 120) })).toEqual({ ...job('a', 120), paid_minutes: 30 });
+    expect(assignedJob({ jobs: job('a', 120) }).paid_minutes).toBeNull();
+    expect(assignedJob({ paid_minutes: 30, jobs: null })).toBeNull();
+  });
+});
+
+describe('assignmentMinutes', () => {
+  it('agrees with jobShareHours, in minutes', () => {
+    expect(assignmentMinutes({ jobs: job('a', 120) }, { a: 2 })).toBe(60);
+    expect(assignmentMinutes({ paid_minutes: 45, jobs: job('a', 120) }, { a: 2 })).toBe(45);
+    expect(assignmentMinutes({ jobs: null }, {})).toBe(0);
   });
 });
 

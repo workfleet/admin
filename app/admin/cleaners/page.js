@@ -6,6 +6,7 @@ import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { flattenPrivate } from '../../../lib/profilePrivate';
 import { missingEssentials } from '../../../lib/staffDetails';
+import { assignmentMinutes } from '../../../lib/hoursWorked';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
 import BackButton from '../../components/BackButton';
@@ -26,7 +27,7 @@ function buildAssigneeCounts(assignmentRows) {
 function hoursWorked(cleanerId, assignmentRows, assigneeCounts) {
   return assignmentRows
     .filter((row) => row.cleaner_id === cleanerId && row.jobs?.status === 'completed')
-    .reduce((sum, row) => sum + (row.jobs.duration_minutes || 0) / (assigneeCounts[row.jobs.id] || 1), 0) / 60;
+    .reduce((sum, row) => sum + assignmentMinutes(row, assigneeCounts), 0) / 60;
 }
 
 function jobCount(cleanerId, assignmentRows) {
@@ -85,7 +86,7 @@ export default function AdminCleaners() {
 
     const [{ data: cleanersData }, { data: assignmentsData }, { data: timeOffData }, { data: detailsData }] = await Promise.all([
       supabase.from('profiles').select('id, full_name, role, created_at, active, profile_private(holiday_adjustment_hours, deactivated_at)').in('role', ['cleaner', 'supervisor']).order('created_at'),
-      supabase.from('job_assignments').select('cleaner_id, jobs(id, status, duration_minutes)'),
+      supabase.from('job_assignments').select('cleaner_id, paid_minutes, jobs(id, status, duration_minutes)'),
       supabase.from('time_off_requests').select('cleaner_id, type, status, hours'),
       // Enough of each person's details (staff_details, 0092) to show a
       // phone number on the card and flag who has not filled theirs in.

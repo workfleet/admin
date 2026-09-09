@@ -203,6 +203,14 @@ export default function AdminPayroll() {
   // job and person, until they press Record.
   const [outcomeDraft, setOutcomeDraft] = useState({});
   const [decidingKey, setDecidingKey] = useState(null);
+  // Per-person corrections on the lines about to be sent (0094): which
+  // lines already carry one, and the one being edited.
+  const [overrides, setOverrides] = useState({});
+  const [showLines, setShowLines] = useState(false);
+  const [editingLine, setEditingLine] = useState(null);
+  const [lineMinutes, setLineMinutes] = useState('');
+  const [lineReason, setLineReason] = useState('');
+  const [savingLine, setSavingLine] = useState(false);
 
   useEffect(() => {
     load();
@@ -264,7 +272,63 @@ export default function AdminPayroll() {
     ]);
     setReview(reviewRows || []);
     setPreview(previewRows || []);
+
+    // Which of these lines the office has already set by hand, and why.
+    const jobIds = [...new Set((previewRows || []).map((l) => l.job_id))];
+    const { data: assignmentRows } = jobIds.length > 0
+      ? await supabase
+        .from('job_assignments')
+        .select('job_id, cleaner_id, paid_minutes, paid_minutes_reason')
+        .in('job_id', jobIds)
+        .not('paid_minutes', 'is', null)
+      : { data: [] };
+    const byLine = {};
+    (assignmentRows || []).forEach((a) => { byLine[`${a.job_id}:${a.cleaner_id}`] = a; });
+    setOverrides(byLine);
     setReviewLoading(false);
+  };
+
+  const startEditLine = (line) => {
+    const existing = overrides[`${line.job_id}:${line.cleaner_id}`];
+    setEditingLine(`${line.job_id}:${line.cleaner_id}`);
+    setLineMinutes(String(Math.round(Number(line.minutes))));
+    setLineReason(existing?.paid_minutes_reason || '');
+  };
+
+  // Sets what this one person is paid for this one job. The period is still
+  // open, so this changes the preview and nothing else; the same edit after
+  // a close arrives as an adjustment on the next run instead, by the
+  // trigger on job_assignments.
+  const saveLine = async (line, minutes) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    setSavingLine(true);
+    const { error } = await supabase
+      .from('job_assignments')
+      .update({
+        paid_minutes: minutes,
+        paid_minutes_reason: minutes == null ? null : (lineReason.trim() || null),
+        paid_minutes_set_by: minutes == null ? null : session.user.id,
+        paid_minutes_set_at: minutes == null ? null : new Date().toISOString(),
+      })
+      .eq('job_id', line.job_id)
+      .eq('cleaner_id', line.cleaner_id);
+    setSavingLine(false);
+    if (error) { toast.error('Could not save those hours. Please try again.'); return; }
+    setEditingLine(null);
+    toast.success(minutes == null ? 'Back to the booked share.' : `Set to ${formatHours(minutes / 60)} for this job.`);
+    await loadReview();
+  };
+
+  const submitLine = (line) => {
+    const value = parseInt(lineMinutes, 10);
+    if (!Number.isInteger(value) || value < 0) { toast.error('Enter the minutes to pay, 0 or more.'); return; }
+    // A changed figure with no reason is the thing the cleaner will ask
+    // about, so the reason is required whenever the number moves.
+    if (value !== Math.round(Number(line.minutes)) && !lineReason.trim()) {
+      toast.error('Say why, in a few words - it is shown to them.');
+      return;
+    }
+    saveLine(line, value);
   };
 
   const chooseFirstPeriod = (start) => {
@@ -591,6 +655,89 @@ export default function AdminPayroll() {
                 <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '8px 0 0' }}>
                   Includes {pendingAdjustments.length} adjustment{pendingAdjustments.length === 1 ? '' : 's'} from earlier periods - listed below.
                 </p>
+              )}
+
+              {preview.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => setShowLines((s) => !s)}
+                    style={{ padding: '4px 10px', fontSize: 12.5 }}
+                    title="Every job going out, per person - change what one person is paid for one job here"
+                  >
+                    {showLines ? 'Hide' : 'Show'} the {preview.length} line{preview.length === 1 ? '' : 's'}
+                    {Object.keys(overrides).length > 0 ? ` · ${Object.keys(overrides).length} set by hand` : ''}
+                  </button>
+
+                  {showLines && (
+                    <div style={{ marginTop: 8 }}>
+                      <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '0 0 6px' }}>
+                        Each line is one person on one job at their share of the booked time. Edit a line when that is not what they should be paid - arrived late, left early, one of two never came. It changes that person only.
+                      </p>
+                      {Object.entries(
+                        preview.reduce((acc, l) => {
+                          const key = l.cleaner_name || 'Unknown';
+                          (acc[key] = acc[key] || []).push(l);
+                          return acc;
+                        }, {})
+                      ).map(([name, cleanerLines]) => (
+                        <div key={name} style={{ marginBottom: 8 }}>
+                          <strong style={{ fontSize: 13 }}>{name}</strong>
+                          {cleanerLines.map((line) => {
+                            const key = `${line.job_id}:${line.cleaner_id}`;
+                            const override = overrides[key];
+                            const isEditing = editingLine === key;
+                            return (
+                              <div key={key} style={{ fontSize: 12.5, padding: '3px 0 3px 10px', borderLeft: override ? '2px solid var(--wf-graphite)' : '2px solid var(--hairline)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                                  <span style={{ flex: 1, minWidth: 0 }}>
+                                    {shortDay(parseLocalDate(line.job_date))} · {line.job_address || 'Job'}
+                                    {override && (
+                                      <span style={{ color: 'var(--muted)' }}> — set by hand{override.paid_minutes_reason ? `: ${override.paid_minutes_reason}` : ''}</span>
+                                    )}
+                                  </span>
+                                  <span style={{ fontFamily: 'var(--wf-data)', fontWeight: 600, whiteSpace: 'nowrap' }}>{formatHours(Number(line.minutes) / 60)}</span>
+                                  {!isEditing && (
+                                    <button className="btn-secondary" onClick={() => startEditLine(line)} style={{ padding: '2px 8px', fontSize: 11.5 }} title="Change what this person is paid for this job">
+                                      Edit
+                                    </button>
+                                  )}
+                                </div>
+                                {isEditing && (
+                                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="5"
+                                      value={lineMinutes}
+                                      onChange={(e) => setLineMinutes(e.target.value)}
+                                      style={{ width: 80, marginBottom: 0, padding: '4px 8px', fontSize: 12.5 }}
+                                      autoFocus
+                                    />
+                                    <span style={{ color: 'var(--muted)' }}>min</span>
+                                    <input
+                                      value={lineReason}
+                                      onChange={(e) => setLineReason(e.target.value)}
+                                      placeholder="Why - e.g. arrived an hour late (shown to them)"
+                                      style={{ flex: 1, minWidth: 180, marginBottom: 0, padding: '4px 8px', fontSize: 12.5 }}
+                                    />
+                                    <button className="btn-primary" onClick={() => submitLine(line)} disabled={savingLine} style={{ padding: '4px 10px', fontSize: 12 }}>Save</button>
+                                    {override && (
+                                      <button className="btn-secondary" onClick={() => saveLine(line, null)} disabled={savingLine} style={{ padding: '4px 10px', fontSize: 12 }} title="Remove the hand-set figure and go back to their share of the booked time">
+                                        Booked share
+                                      </button>
+                                    )}
+                                    <button className="btn-secondary" onClick={() => setEditingLine(null)} style={{ padding: '4px 10px', fontSize: 12 }}>Cancel</button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}

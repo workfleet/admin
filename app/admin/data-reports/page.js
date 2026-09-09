@@ -7,6 +7,7 @@ import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { toCSV, downloadCSV } from '../../../lib/csv';
 import { privateOf } from '../../../lib/profilePrivate';
+import { assignmentMinutes } from '../../../lib/hoursWorked';
 import BackButton from '../../components/BackButton';
 
 function getWeekRange(weekOffset) {
@@ -87,7 +88,7 @@ async function loadStaff() {
 async function loadHours(range) {
   let query = supabase
     .from('job_assignments')
-    .select('cleaner_id, profiles(full_name), jobs!inner(id, duration_minutes, status, scheduled_at)')
+    .select('cleaner_id, paid_minutes, profiles(full_name), jobs!inner(id, duration_minutes, status, scheduled_at)')
     .eq('jobs.status', 'completed');
   if (range) query = query.gte('jobs.scheduled_at', range.start.toISOString()).lt('jobs.scheduled_at', range.end.toISOString());
   const { data } = await query;
@@ -102,7 +103,7 @@ async function loadHours(range) {
     const key = row.cleaner_id;
     if (!totals[key]) totals[key] = { name: row.profiles?.full_name || 'Unknown', jobs: 0, minutes: 0 };
     totals[key].jobs += 1;
-    totals[key].minutes += (row.jobs.duration_minutes || 0) / assigneeCounts[row.jobs.id];
+    totals[key].minutes += assignmentMinutes(row, assigneeCounts);
   });
 
   return {

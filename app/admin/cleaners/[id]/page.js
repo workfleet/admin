@@ -117,7 +117,7 @@ export default function CleanerProfile() {
 
     const { data: assignmentRows } = await supabase
       .from('job_assignments')
-      .select('job_id, jobs(id, scheduled_at, status, duration_minutes, properties(address))')
+      .select('job_id, paid_minutes, paid_minutes_reason, jobs(id, scheduled_at, status, duration_minutes, properties(address))')
       .eq('cleaner_id', id);
 
     const jobIds = (assignmentRows || []).map((r) => r.job_id);
@@ -129,7 +129,7 @@ export default function CleanerProfile() {
     (allAssignmentsForJobs || []).forEach((r) => { assigneeCounts[r.job_id] = (assigneeCounts[r.job_id] || 0) + 1; });
 
     const jobsData = (assignmentRows || [])
-      .map((r) => ({ ...r.jobs, assigneeCount: assigneeCounts[r.job_id] || 1 }))
+      .map((r) => ({ ...r.jobs, assigneeCount: assigneeCounts[r.job_id] || 1, paid_minutes: r.paid_minutes ?? null, paid_minutes_reason: r.paid_minutes_reason || null }))
       .filter((j) => j.id)
       .sort((a, b) => new Date(b.scheduled_at) - new Date(a.scheduled_at));
 
@@ -435,9 +435,11 @@ export default function CleanerProfile() {
 
   if (loading || !cleaner) return <div className="page-inner">Loading...</div>;
 
+  // Their own figure for a job where the office set one (0094), else the
+  // even split - the same rule as lib/hoursWorked.js and the database.
   const worked = jobs
     .filter((j) => j.status === 'completed')
-    .reduce((sum, j) => sum + (j.duration_minutes || 0) / j.assigneeCount, 0) / 60;
+    .reduce((sum, j) => sum + (j.paid_minutes != null ? j.paid_minutes : (j.duration_minutes || 0) / j.assigneeCount), 0) / 60;
   const accrued = worked * HOLIDAY_ACCRUAL_RATE + (cleaner.holiday_adjustment_hours || 0);
   const used = timeOffRequests
     .filter((t) => t.type === 'holiday' && t.status === 'approved')
@@ -745,6 +747,11 @@ export default function CleanerProfile() {
             <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               {job.status === 'missed' && missedOutcomes[job.id] && (
                 <span style={{ fontSize: 12, color: 'var(--muted)' }}>{outcomeLabel(missedOutcomes[job.id])}</span>
+              )}
+              {job.status === 'completed' && job.paid_minutes != null && (
+                <span style={{ fontSize: 12, color: 'var(--muted)' }} title={job.paid_minutes_reason || 'Hours set by the office for this job'}>
+                  paid {job.paid_minutes} min
+                </span>
               )}
               <span className={`badge ${job.status}`}>{job.status.replace('_', ' ')}</span>
             </span>
