@@ -110,7 +110,7 @@ async function runRetentionSweep(request) {
       .update({ contact_name: 'Redacted', email: null, phone: null, billing_address: 'Redacted', notes: null })
       .eq('id', client.id);
 
-    await supabaseAdmin.from('properties').update({ client_access_notes: null }).eq('client_id', client.id);
+    await supabaseAdmin.from('properties').update({ access_details: null, client_access_notes: null }).eq('client_id', client.id);
     clientsProcessed.push(client.id);
   }
 

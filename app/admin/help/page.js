@@ -13,7 +13,7 @@ const HELP_SECTIONS = [
   },
   {
     title: 'Adding a Client & Their Property',
-    body: 'Go to Clients → "+ New Client" to add a client and their first property. Further properties, contact details and call logs can be added from the client\'s own page.',
+    body: 'Go to Clients → "+ New Client" to add a client and their first property. Further properties, contact details and call logs can be added from the client\'s own page. Use the Access button on a property to record alarm codes, key safe codes and how to get in - they show on the cleaner\'s job screen once they are assigned there, and are cleared along with the client\'s other details when a relationship is redacted.',
   },
   {
     title: 'Onboarding a New Cleaner',

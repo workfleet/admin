@@ -35,6 +35,13 @@ export default function ClientDetail() {
   const [newAddress, setNewAddress] = useState('');
   const [newAddressCoords, setNewAddressCoords] = useState(null);
   const [newNotes, setNewNotes] = useState('');
+  const [newAccess, setNewAccess] = useState('');
+
+  // Office-entered access details (0097): alarm codes, key safe codes, where
+  // the key lives. One property's editor is open at a time.
+  const [accessEditId, setAccessEditId] = useState(null);
+  const [accessDraft, setAccessDraft] = useState('');
+  const [savingAccess, setSavingAccess] = useState(false);
 
   // Correcting a property's pin and radius (0089). `start` is where the map
   // opens and stays put while dragging; `lat`/`lng` follow the marker.
@@ -89,7 +96,7 @@ export default function ClientDetail() {
 
     const { data: propertiesData } = await supabase
       .from('properties')
-      .select('id, client_id, address, notes, client_access_notes, lat, lng, geofence_radius_m')
+      .select('id, client_id, address, notes, access_details, client_access_notes, lat, lng, geofence_radius_m')
       .eq('client_id', id)
       .order('address');
 
@@ -414,17 +421,41 @@ export default function ClientDetail() {
         client_id: id,
         address: newAddress.trim(),
         notes: newNotes.trim() || null,
+        access_details: newAccess.trim() || null,
         lat: newAddressCoords?.lat ?? null,
         lng: newAddressCoords?.lng ?? null,
       })
-      .select('id, client_id, address, notes, lat, lng')
+      .select('id, client_id, address, notes, access_details, lat, lng')
       .single();
 
     if (data) setProperties((prev) => [...prev, data]);
     setNewAddress('');
     setNewAddressCoords(null);
     setNewNotes('');
+    setNewAccess('');
     setIsAddingProperty(false);
+  };
+
+  const startEditAccess = (p) => {
+    if (accessEditId === p.id) { setAccessEditId(null); setAccessDraft(''); return; }
+    setAccessEditId(p.id);
+    setAccessDraft(p.access_details || '');
+  };
+
+  const saveAccess = async (propertyId) => {
+    setSavingAccess(true);
+    const { data, error } = await supabase
+      .from('properties')
+      .update({ access_details: accessDraft.trim() || null })
+      .eq('id', propertyId)
+      .select('id, access_details')
+      .single();
+    setSavingAccess(false);
+    if (error || !data) { toast.error("Couldn't save the access details."); return; }
+    setProperties((prev) => prev.map((p) => (p.id === propertyId ? { ...p, ...data } : p)));
+    setAccessEditId(null);
+    setAccessDraft('');
+    toast.success('Access details saved - cleaners see them on the job once assigned.');
   };
 
   const startEditLocation = (p) => {
@@ -728,13 +759,25 @@ export default function ClientDetail() {
                 <div style={{ flex: 1 }}>
                   <div>{p.address}</div>
                   {p.notes && <div style={{ fontSize: 12, color: 'var(--muted)' }}>{p.notes}</div>}
+                  {p.access_details && (
+                    <div style={{ fontSize: 12, color: 'var(--ink)', marginTop: 2, whiteSpace: 'pre-wrap' }}>
+                      Access: {p.access_details}
+                    </div>
+                  )}
                   {p.client_access_notes && (
                     <div style={{ fontSize: 12, color: 'var(--ink)', marginTop: 2 }}>
                       Client-provided access notes: {p.client_access_notes}
                     </div>
                   )}
                 </div>
-                <div style={{ display: 'flex', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => startEditAccess(p)}
+                    title="Alarm codes, key safe codes and how to get in - shown to whoever is assigned to clean here"
+                  >
+                    {accessEditId === p.id ? 'Close' : 'Access'}
+                  </button>
                   <button className="btn-secondary" onClick={() => toggleChecklist(p.id)} title="Show or hide the room-by-room checklist for this property">
                     {expandedPropertyId === p.id ? 'Close' : 'Checklist'}
                   </button>
@@ -753,6 +796,34 @@ export default function ClientDetail() {
                 <p style={{ fontSize: 12, color: 'var(--wf-overdue)', margin: '4px 0 0' }}>
                   No map pin - check-in is not location-checked here.
                 </p>
+              )}
+
+              {accessEditId === p.id && (
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--hairline)' }}>
+                  <label>Access details</label>
+                  <textarea
+                    value={accessDraft}
+                    onChange={(e) => setAccessDraft(e.target.value)}
+                    rows={4}
+                    placeholder={'e.g. Alarm code 4521 - panel inside the front door, 30 seconds to disarm\nKey safe on the left of the porch, code 1908\nBack gate padlock 0077'}
+                    style={{ width: '100%' }}
+                  />
+                  <p style={{ fontSize: 12, color: 'var(--muted)', margin: '4px 0 8px' }}>
+                    Shown to the cleaner on their job screen for this property, and to the office here. Anything the client adds in their own portal appears separately below it.
+                  </p>
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button type="button" className="btn-secondary" onClick={() => { setAccessEditId(null); setAccessDraft(''); }}>Cancel</button>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={() => saveAccess(p.id)}
+                      disabled={savingAccess}
+                      title="Save the access details for this property"
+                    >
+                      {savingAccess ? 'Saving...' : 'Save access details'}
+                    </button>
+                  </div>
+                </div>
               )}
 
               {locationEditId === p.id && locationDraft && (
@@ -875,7 +946,15 @@ export default function ClientDetail() {
               <input
                 value={newNotes}
                 onChange={(e) => setNewNotes(e.target.value)}
-                placeholder="e.g. Gate code 1234"
+                placeholder="e.g. Park in the rear car park, bins go out Tuesday"
+              />
+              <label>Access details (optional)</label>
+              <textarea
+                value={newAccess}
+                onChange={(e) => setNewAccess(e.target.value)}
+                rows={3}
+                placeholder="e.g. Alarm code 4521, key safe by the front door code 1908"
+                style={{ width: '100%' }}
               />
               <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                 <button type="button" className="btn-secondary" onClick={() => setIsAddingProperty(false)}>Cancel</button>

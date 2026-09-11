@@ -192,7 +192,7 @@ export default function JobDetailPage() {
 
     const { data: jobData } = await supabase
       .from('jobs')
-      .select('id, scheduled_at, status, duration_minutes, property_id, properties(address, notes, client_access_notes, lat, lng, geofence_radius_m, clients(name))')
+      .select('id, scheduled_at, status, duration_minutes, property_id, properties(address, notes, access_details, client_access_notes, lat, lng, geofence_radius_m, clients(name))')
       .eq('id', id)
       .single();
 
@@ -966,10 +966,18 @@ export default function JobDetailPage() {
 
             {/* On a doorstep this is the most-needed thing on the screen, so
                 it sits above the task list rather than below the map. */}
-            {job.properties?.client_access_notes && (
+            {(job.properties?.access_details || job.properties?.client_access_notes) && (
               <div className="visit-card visit-access">
                 <div className="visit-card-label">How to get in</div>
-                <p className="visit-access-body">{job.properties.client_access_notes}</p>
+                {job.properties.access_details && (
+                  <p className="visit-access-body" style={{ whiteSpace: 'pre-wrap' }}>{job.properties.access_details}</p>
+                )}
+                {job.properties.client_access_notes && (
+                  <div style={{ marginTop: job.properties.access_details ? 8 : 0 }}>
+                    {job.properties.access_details && <div className="visit-card-label">From the client</div>}
+                    <p className="visit-access-body" style={{ whiteSpace: 'pre-wrap' }}>{job.properties.client_access_notes}</p>
+                  </div>
+                )}
               </div>
             )}
 
