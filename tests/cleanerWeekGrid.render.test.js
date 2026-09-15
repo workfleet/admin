@@ -92,3 +92,37 @@ describe('CleanerWeekGrid', () => {
     expect(html).toContain('0 jobs');
   });
 });
+
+describe('CleanerWeekGrid on one day', () => {
+  const renderDay = (rowsJobs, dayIndex) => renderToStaticMarkup(createElement(CleanerWeekGrid, {
+    rows: buildCleanerRows(rowsJobs, cleaners, weekDays),
+    weekDays,
+    todayKey: weekDays[1].toDateString(),
+    dayIndex,
+    onOpenJob: () => {},
+    onNewJob: () => {},
+    onDropJob: () => {},
+  }));
+
+  it('shows one column with full times, addresses and the free slots between jobs', () => {
+    const html = renderDay(jobs, 1);
+    expect(html).toContain('rota-grid is-day');
+    expect(html).toContain('07:00 – 09:00');
+    expect(html).toContain('14 Bridge St');
+    // Amira: 07:00-09:00 then 09:30-12:00, so free 12:00-18:00 and a
+    // 30-minute slot at 09:00. Ben has only the 09:30 job.
+    expect(html).toContain('Free 12:00 – 18:00');
+    expect(html).toContain('Free 09:00 – 09:30');
+    expect(html).toContain('Free 07:00 – 09:30');
+    // Wednesday's unassigned job and Saturday's former-staff job are not
+    // on Tuesday, so neither row appears.
+    expect(html).not.toContain('Needs a cleaner');
+    expect(html).not.toContain('Zed Former');
+  });
+
+  it('shows a whole free day for someone with nothing on', () => {
+    const html = renderDay(jobs, 3);
+    expect((html.match(/Free 07:00 – 18:00/g) || []).length).toBe(2);
+    expect(html).toContain('11h');
+  });
+});
