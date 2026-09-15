@@ -139,9 +139,10 @@ export default function AdminRota() {
   const toast = useToast();
   const [weekStart, setWeekStart] = useState(getMonday(new Date()));
   // 'cleaners' is a row per person with the days across; 'calendar' is the
-  // week on the clock. Starts on the calendar for the first render so the
-  // server and client agree, then reads the remembered choice.
-  const [view, setView] = useState('calendar');
+  // week on the clock. The by-cleaner grid is the rota; the calendar is the
+  // other way to read it. Starts the same on server and client, then reads
+  // the remembered choice.
+  const [view, setView] = useState('cleaners');
   const [jobs, setJobs] = useState([]);
   const [cleaners, setCleaners] = useState([]);
   const [clients, setClients] = useState([]);
