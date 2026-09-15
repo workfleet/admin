@@ -15,6 +15,8 @@ import { useToast } from '../../components/ToastProvider';
 import BackButton from '../../components/BackButton';
 import { groupOverlappingJobs, assignLanes, abbreviateName } from '../../../lib/jobOverlap';
 import { findTightTurnarounds, describeTurnaround } from '../../../lib/travelTime';
+import { buildCleanerRows, UNASSIGNED_ROW_ID } from '../../../lib/rotaGrid';
+import CleanerWeekGrid from './CleanerWeekGrid';
 
 // Full 24hr range with scroll (CrewConnect crews run early mornings through
 // overnight), defaulting the scroll position to business hours on load.
@@ -41,6 +43,11 @@ const DRAG_MOVE_THRESHOLD = 5;
 const TOUCH_HOLD_MS = 350;
 const EDGE_SCROLL_ZONE = 44;
 const EDGE_SCROLL_SPEED = 10;
+
+// Which way the week is read. Remembered per browser, so the office lands
+// on the view it left rather than choosing again every morning.
+const VIEW_STORAGE_KEY = 'admin-rota-view';
+const VIEWS = ['cleaners', 'calendar'];
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => h);
 const MINUTE_OPTIONS = [0, 15, 30, 45];
@@ -131,6 +138,10 @@ export default function AdminRota() {
   const confirm = useConfirm();
   const toast = useToast();
   const [weekStart, setWeekStart] = useState(getMonday(new Date()));
+  // 'cleaners' is a row per person with the days across; 'calendar' is the
+  // week on the clock. Starts on the calendar for the first render so the
+  // server and client agree, then reads the remembered choice.
+  const [view, setView] = useState('calendar');
   const [jobs, setJobs] = useState([]);
   const [cleaners, setCleaners] = useState([]);
   const [clients, setClients] = useState([]);
@@ -239,7 +250,21 @@ export default function AdminRota() {
     if (calendarScrollRef.current) {
       calendarScrollRef.current.scrollTop = (DEFAULT_SCROLL_HOUR - START_HOUR) * HOUR_HEIGHT;
     }
+  }, [view]);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(VIEW_STORAGE_KEY);
+      if (VIEWS.includes(saved)) setView(saved);
+    } catch {
+      // Private browsing or blocked storage: the calendar is a fine default.
+    }
   }, []);
+
+  const chooseView = (next) => {
+    setView(next);
+    try { window.localStorage.setItem(VIEW_STORAGE_KEY, next); } catch { /* see above */ }
+  };
 
   const weekDays = useMemo(
     () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
@@ -660,10 +685,14 @@ export default function AdminRota() {
     );
   };
 
-  const addCleanerToJob = async (jobId, cleanerId) => {
-    if (!cleanerId) return;
-    const job = jobs.find((j) => j.id === jobId) || selectedJob;
-    if (!job) return;
+  // `jobOverride` is the job as it stands right now, for a caller that has
+  // just changed it (a drop that moved the day and then the cleaner) and
+  // can't wait for the re-render to catch up. Returns true once the cleaner
+  // is on the job, so a chain of changes knows whether to carry on.
+  const addCleanerToJob = async (jobId, cleanerId, jobOverride) => {
+    if (!cleanerId) return false;
+    const job = jobOverride || jobs.find((j) => j.id === jobId) || selectedJob;
+    if (!job) return false;
 
     const conflict = await findConflict(cleanerId, new Date(job.scheduled_at), job.duration_minutes || 120, jobId);
     if (conflict) {
@@ -671,9 +700,9 @@ export default function AdminRota() {
         `This cleaner is already booked at ${conflict.properties?.address} around this time (${new Date(conflict.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}). Assign anyway?`,
         { title: 'Scheduling conflict', confirmLabel: 'Assign anyway' }
       );
-      if (!proceed) return;
+      if (!proceed) return false;
     }
-    if (!(await confirmTimeOffConflict(cleanerId, new Date(job.scheduled_at)))) return;
+    if (!(await confirmTimeOffConflict(cleanerId, new Date(job.scheduled_at)))) return false;
 
     const tight = await findTravelConflict(cleanerId, new Date(job.scheduled_at), job.duration_minutes || 120, job.properties, jobId);
     if (tight) {
@@ -681,11 +710,11 @@ export default function AdminRota() {
         `${describeTurnaround(tight)} Assign anyway?`,
         { title: 'Not enough time to get there', confirmLabel: 'Assign anyway' }
       );
-      if (!proceed) return;
+      if (!proceed) return false;
     }
 
     const { error } = await supabase.from('job_assignments').insert({ job_id: jobId, cleaner_id: cleanerId });
-    if (error) { toast.error('Could not assign this cleaner.'); return; }
+    if (error) { toast.error('Could not assign this cleaner.'); return false; }
 
     const newAssignment = { cleaner_id: cleanerId, profiles: { full_name: cleaners.find((c) => c.id === cleanerId)?.full_name } };
     const withNewAssignment = (j) => ({ ...j, job_assignments: [...(j.job_assignments || []), newAssignment] });
@@ -693,17 +722,24 @@ export default function AdminRota() {
     setSelectedJob((sj) => (sj && sj.id === jobId ? withNewAssignment(sj) : sj));
 
     notify({ type: 'shift_assigned', cleanerId, address: job.properties?.address, scheduledAt: job.scheduled_at });
+    return true;
   };
 
-  const removeCleanerFromJob = async (jobId, cleanerId) => {
-    if (!(await confirm('Remove this cleaner from the job?', { danger: true, confirmLabel: 'Remove' }))) return;
-
+  // The save behind "remove", without the question. The modal's button asks
+  // first; a drag onto another row has already said what it means.
+  const dropCleanerFromJob = async (jobId, cleanerId) => {
     const { error } = await supabase.from('job_assignments').delete().eq('job_id', jobId).eq('cleaner_id', cleanerId);
-    if (error) { toast.error('Could not remove this cleaner.'); return; }
+    if (error) { toast.error('Could not remove this cleaner.'); return false; }
 
     const withoutAssignment = (j) => ({ ...j, job_assignments: (j.job_assignments || []).filter((a) => a.cleaner_id !== cleanerId) });
     setJobs((prev) => prev.map((j) => (j.id === jobId ? withoutAssignment(j) : j)));
     setSelectedJob((sj) => (sj && sj.id === jobId ? withoutAssignment(sj) : sj));
+    return true;
+  };
+
+  const removeCleanerFromJob = async (jobId, cleanerId) => {
+    if (!(await confirm('Remove this cleaner from the job?', { danger: true, confirmLabel: 'Remove' }))) return;
+    await dropCleanerFromJob(jobId, cleanerId);
   };
 
   const deleteJob = async (job) => {
@@ -1168,26 +1204,30 @@ export default function AdminRota() {
     return assignments.length;
   };
 
-  const moveJobTo = async (jobId, dayIndex, minutes) => {
+  // Returns the saved job, or null if the move was declined or failed.
+  // `ignoreCleanerId` is someone the caller is about to take off the job,
+  // whose diary at the new time is therefore not worth asking about.
+  const moveJobTo = async (jobId, dayIndex, minutes, { ignoreCleanerId } = {}) => {
     const job = jobs.find((j) => j.id === jobId);
-    if (!job) return;
+    if (!job) return null;
 
     const newDate = new Date(weekDays[dayIndex]);
     newDate.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
 
     const previousAt = job.scheduled_at;
-    if (newDate.getTime() === new Date(previousAt).getTime()) return;
+    if (newDate.getTime() === new Date(previousAt).getTime()) return job;
 
     for (const a of job.job_assignments || []) {
+      if (a.cleaner_id === ignoreCleanerId) continue;
       const conflict = await findConflict(a.cleaner_id, newDate, job.duration_minutes || 120, job.id);
       if (conflict) {
         const proceed = await confirm(
           `${a.profiles?.full_name || 'This cleaner'} is already booked at ${conflict.properties?.address} around this time (${new Date(conflict.scheduled_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}). Move anyway?`,
           { title: 'Scheduling conflict', confirmLabel: 'Move anyway' }
         );
-        if (!proceed) return;
+        if (!proceed) return null;
       }
-      if (!(await confirmTimeOffConflict(a.cleaner_id, newDate))) return;
+      if (!(await confirmTimeOffConflict(a.cleaner_id, newDate))) return null;
     }
 
     // Show the new time straight away and put it back if the save fails -
@@ -1204,7 +1244,7 @@ export default function AdminRota() {
     if (error) {
       setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, scheduled_at: previousAt } : j)));
       toast.error('Could not move this job.');
-      return;
+      return null;
     }
 
     setJobs((prev) => prev.map((j) => (j.id === data.id ? { ...j, ...data } : j)));
@@ -1215,6 +1255,48 @@ export default function AdminRota() {
       `Moved to ${newDate.toLocaleDateString(undefined, { weekday: 'short' })} ${formatMinutesOfDay(minutes)}.`
       + (told > 0 ? ` ${told} cleaner${told === 1 ? '' : 's'} notified.` : '')
     );
+    return data;
+  };
+
+  // A job dropped on a cell of the by-cleaner grid. The cell says two
+  // things at once - which day and whose row - and either or both may have
+  // changed. The day moves first (keeping the start time), then the job
+  // changes hands: the new person goes on, with the usual clash and time
+  // off checks at the new date, and only then does the old one come off,
+  // so a declined check leaves the job where it was.
+  const handleGridDrop = async ({ jobId, fromRowId, toRowId, dayIndex }) => {
+    const job = jobs.find((j) => j.id === jobId);
+    if (!job || job.status !== 'scheduled') return;
+
+    const fromCleaner = fromRowId === UNASSIGNED_ROW_ID ? null : fromRowId;
+    const toCleaner = toRowId === UNASSIGNED_ROW_ID ? null : toRowId;
+    const currentDay = weekDays.findIndex((d) => d.toDateString() === new Date(job.scheduled_at).toDateString());
+    const sameCleaner = fromCleaner === toCleaner;
+    if (dayIndex === currentDay && sameCleaner) return;
+
+    let current = job;
+    if (dayIndex !== currentDay) {
+      current = await moveJobTo(jobId, dayIndex, minutesOfDayFor(job), { ignoreCleanerId: sameCleaner ? null : fromCleaner });
+      if (!current) return;
+    }
+    if (sameCleaner) return;
+
+    if (toCleaner) {
+      const alreadyOn = (current.job_assignments || []).some((a) => a.cleaner_id === toCleaner);
+      if (!alreadyOn && !(await addCleanerToJob(jobId, toCleaner, current))) return;
+    }
+    if (fromCleaner && !(await dropCleanerFromJob(jobId, fromCleaner))) return;
+
+    const toName = cleaners.find((c) => c.id === toCleaner)?.full_name;
+    toast.success(toName ? `Now with ${toName}.` : 'Taken off the job - it needs a cleaner.');
+  };
+
+  // The "+" in a cell: the form opens with that day and that person already
+  // filled in, so booking into a gap is just the client and the time.
+  const startNewJob = (dayIndex, cleanerId) => {
+    setJobDate(localDateString(weekDays[dayIndex]));
+    setFormCleanerIds(cleanerId ? [cleanerId] : []);
+    setShowForm(true);
   };
 
   const jobsForDay = (day) =>
@@ -1234,6 +1316,11 @@ export default function AdminRota() {
     unassigned: jobs.filter((j) => (j.job_assignments || []).length === 0).length,
     missed: jobs.filter((j) => j.status === 'missed').length,
   }), [jobs]);
+
+  const cleanerRows = useMemo(
+    () => buildCleanerRows(jobs, cleaners, weekDays),
+    [jobs, cleaners, weekDays]
+  );
 
   // Gaps this week that nobody can drive in time. Only future jobs: a tight
   // turnaround last Tuesday is history, and either happened or did not.
@@ -1467,10 +1554,28 @@ export default function AdminRota() {
       <BackButton />
       <div className="rota-header">
         <div>
-          <p className="rota-eyebrow">Rota · week view</p>
+          <p className="rota-eyebrow">Rota · {view === 'cleaners' ? 'by cleaner' : 'by time'}</p>
           <h1 className="rota-week">{weekLabel}</h1>
         </div>
         <div className="rota-actions">
+          <div className="segmented" role="group" aria-label="How to read the week">
+            <button
+              className={`segmented-btn${view === 'cleaners' ? ' is-active' : ''}`}
+              onClick={() => chooseView('cleaners')}
+              aria-pressed={view === 'cleaners'}
+              title="A row per cleaner, the days across"
+            >
+              By cleaner
+            </button>
+            <button
+              className={`segmented-btn${view === 'calendar' ? ' is-active' : ''}`}
+              onClick={() => chooseView('calendar')}
+              aria-pressed={view === 'calendar'}
+              title="The week on the clock"
+            >
+              By time
+            </button>
+          </div>
           {/* Prev / Today / Next are one control because they do one job -
               moving through weeks. As three loose buttons they carried the
               same weight as the page's primary action. */}
@@ -1543,6 +1648,16 @@ export default function AdminRota() {
         </div>
       )}
 
+      {view === 'cleaners' ? (
+        <CleanerWeekGrid
+          rows={cleanerRows}
+          weekDays={weekDays}
+          todayKey={todayKey}
+          onOpenJob={setSelectedJob}
+          onNewJob={startNewJob}
+          onDropJob={handleGridDrop}
+        />
+      ) : (
       <div className="calendar">
         {/* The day headings live inside the scroller and stick to its top.
             Outside it they'd be a separate grid, and the scrollbar's width
@@ -1620,6 +1735,7 @@ export default function AdminRota() {
           </div>
         </div>
       </div>
+      )}
 
       <div className="calendar-legend">
         {[
@@ -1638,10 +1754,22 @@ export default function AdminRota() {
 
       <div className="calendar-foot">
         <span className="calendar-foot-hint">
-          Drag a job to a new day or time. On a touchscreen, press and hold it first.
-          Jobs that clash are grouped into one block with each start time listed - and
-          turn red when it's the same cleaner twice over. Tight travel counts the gaps
-          between one cleaner&apos;s jobs that are shorter than the drive.
+          {view === 'cleaners' ? (
+            <>
+              Each row is one cleaner&apos;s week; a job with two people on it shows on both rows.
+              Point at a day and press + to book that person a job there. On a desktop, drag a
+              job to another day to move it, or onto another row to hand it to that cleaner - the
+              time stays the same, and the usual clash and time-off checks still run. Tight travel
+              counts the gaps between one cleaner&apos;s jobs that are shorter than the drive.
+            </>
+          ) : (
+            <>
+              Drag a job to a new day or time. On a touchscreen, press and hold it first.
+              Jobs that clash are grouped into one block with each start time listed - and
+              turn red when it&apos;s the same cleaner twice over. Tight travel counts the gaps
+              between one cleaner&apos;s jobs that are shorter than the drive.
+            </>
+          )}
         </span>
         <Link href="/admin/rota/history" className="calendar-foot-link">Job history &rarr;</Link>
       </div>

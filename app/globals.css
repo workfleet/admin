@@ -3257,3 +3257,315 @@ a.btn-compact {
   accent-color: var(--wf-graphite);
   cursor: pointer;
 }
+
+/* ---- Rota by cleaner ----
+   A row per person, the days across. It shares .calendar's frame so the two
+   views swap in the same box, and the chips reuse the calendar's status
+   colours so a completed job looks the same whichever way the week is read. */
+.rota-grid-scroll {
+  max-height: 72vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.rota-grid {
+  display: grid;
+  grid-template-columns: 184px repeat(7, minmax(124px, 1fr)) 76px;
+  min-width: 1080px;
+}
+
+.rota-grid-head,
+.rota-grid-row {
+  display: contents;
+}
+
+.rota-grid-head > * {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--surface);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.rota-grid-corner {
+  z-index: 5;
+  font-family: var(--wf-data);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.rota-grid-dayhead {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 10px 10px 8px;
+  border-left: 1px solid var(--hairline);
+  font-family: var(--wf-data);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.rota-grid-daynum {
+  font-family: var(--wf-display);
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--ink);
+  line-height: 1;
+}
+
+.rota-grid-dayhead.weekend { background: #F6F7F8; }
+.rota-grid-dayhead.today   { background: rgba(255, 107, 91, 0.05); }
+.rota-grid-dayhead.today,
+.rota-grid-dayhead.today .rota-grid-daynum { color: var(--wf-coral-ink); }
+
+.rota-grid-hourshead {
+  padding: 10px 12px 8px;
+  border-left: 1px solid var(--hairline);
+  text-align: right;
+  font-family: var(--wf-data);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* The name column stays put while the week scrolls sideways on a narrow
+   screen; the row header is what makes a row readable. */
+.rota-grid-who {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border-right: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.rota-grid-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--wf-graphite);
+  color: #fff;
+  font-family: var(--wf-display);
+  font-size: 11px;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.rota-grid-avatar.unassigned {
+  background: transparent;
+  border: 1.5px dashed var(--wf-overdue);
+  color: var(--wf-overdue);
+}
+
+.rota-grid-whotext {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rota-grid-name {
+  font-family: var(--wf-display);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rota-grid-meta {
+  font-family: var(--wf-data);
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rota-grid-meta.is-alert {
+  color: var(--wf-overdue);
+  font-weight: 600;
+}
+
+.rota-grid-row.is-former .rota-grid-name { color: var(--muted); }
+
+.rota-grid-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 64px;
+  padding: 8px 6px 26px;
+  border-left: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.rota-grid-cell.weekend { background: #F6F7F8; }
+.rota-grid-cell.today   { background: rgba(255, 107, 91, 0.05); }
+.rota-grid-row.is-unassigned .rota-grid-cell { background-color: rgba(216, 30, 52, 0.03); }
+
+.rota-grid-cell.drag-over {
+  background: rgba(255, 107, 91, 0.12);
+  box-shadow: inset 0 0 0 2px var(--wf-coral);
+}
+
+/* The "+" only shows when the cell is pointed at or reached by keyboard, so
+   the sheet stays a sheet rather than a wall of plus signs. */
+.rota-grid-add {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 5px;
+  height: 18px;
+  padding: 0;
+  margin: 0;
+  width: auto;
+  border: 1px dashed transparent;
+  border-radius: var(--wf-radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.rota-grid-cell:hover .rota-grid-add,
+.rota-grid-add:focus-visible {
+  opacity: 1;
+  border-color: var(--wf-line);
+}
+
+.rota-grid-add:hover {
+  background: var(--wf-ash);
+  color: var(--ink);
+}
+
+.rota-chip {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  width: 100%;
+  margin: 0;
+  padding: 4px 7px;
+  border: none;
+  border-left: 3px solid var(--wf-steel);
+  border-radius: 5px;
+  background: var(--wf-ash);
+  color: var(--ink);
+  font-family: var(--wf-data);
+  font-size: 11.5px;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: filter 0.15s ease;
+}
+
+.rota-chip:hover { filter: brightness(0.97); }
+.rota-chip.draggable { cursor: grab; }
+.rota-chip.draggable:active { cursor: grabbing; }
+
+.rota-chip b {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.rota-chip-client {
+  font-family: var(--wf-display);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.rota-chip-with {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+/* Weekend cells are already ash, so a scheduled chip goes white there to
+   still read as a chip - the same rule as the calendar's weekend blocks. */
+.rota-grid-cell.weekend .rota-chip.scheduled:not(.unassigned) {
+  background: var(--wf-white);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+
+.rota-chip.completed {
+  background: var(--wf-verified-bg);
+  border-left-color: var(--wf-verified);
+}
+.rota-chip.completed b { color: var(--wf-verified-text); }
+
+.rota-chip.in_progress {
+  background: var(--wf-white);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  border-left-color: var(--wf-graphite);
+}
+.rota-chip.in_progress b { color: var(--ink); }
+
+.rota-chip.missed {
+  background: var(--wf-overdue-bg);
+  border-left-color: var(--wf-overdue);
+}
+.rota-chip.missed b,
+.rota-chip.missed .rota-chip-with { color: var(--wf-overdue); }
+
+.rota-chip.unassigned {
+  background: var(--wf-white);
+  border: 1px dashed var(--wf-overdue);
+  border-left-width: 1px;
+  color: var(--wf-overdue);
+}
+.rota-chip.unassigned b { color: var(--wf-overdue); }
+
+.rota-grid-hours {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  padding: 0 12px;
+  border-left: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+  font-family: var(--wf-display);
+  font-size: 15px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.rota-grid-hours small {
+  font-family: var(--wf-data);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+@media (max-width: 720px) {
+  .rota-grid {
+    grid-template-columns: 140px repeat(7, 124px) 64px;
+  }
+  .rota-grid-name { white-space: normal; }
+}
+
+.segmented-btn.is-active {
+  background: var(--wf-graphite);
+  color: var(--wf-white);
+}
+
+.segmented-btn.is-active:hover:not(:disabled) {
+  background: var(--wf-slate);
+}
