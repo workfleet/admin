@@ -168,6 +168,32 @@ describe('autoCheckoutTimestamp', () => {
     expect(stamp).toBe('2026-08-30T12:30:00.000Z');
   });
 
+  it('gives a late arrival their full booked time before assuming they left', () => {
+    // Clocked in at 10:18 for a job booked 09:00-11:00. Opening the app
+    // off-site at 13:00 must not record a departure at the 11:00 booked end -
+    // they were 42 minutes into a two-hour shift then. Their time ran out at
+    // 12:18, so that is the guess.
+    const stamp = autoCheckoutTimestamp({
+      observedDepartureAt: null,
+      checkin: { checked_in_at: '2026-08-30T10:18:00.000Z', last_seen_inside_at: '2026-08-30T10:19:00.000Z' },
+      job,
+      now: new Date('2026-08-30T13:00:00.000Z'),
+    });
+    expect(stamp).toBe('2026-08-30T12:18:00.000Z');
+  });
+
+  it('keeps the booked end for an early arrival', () => {
+    // Arriving at 08:00 for a 09:00 start does not bring the end forward to
+    // 10:00; they are booked until 11:00 either way.
+    const stamp = autoCheckoutTimestamp({
+      observedDepartureAt: null,
+      checkin: { checked_in_at: '2026-08-30T08:00:00.000Z' },
+      job,
+      now: new Date('2026-08-30T16:00:00.000Z'),
+    });
+    expect(stamp).toBe('2026-08-30T11:00:00.000Z');
+  });
+
   it('never writes a check-out before they arrived', () => {
     const stamp = autoCheckoutTimestamp({
       observedDepartureAt: new Date('2026-08-30T08:00:00.000Z'),
