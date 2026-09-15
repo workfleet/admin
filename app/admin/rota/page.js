@@ -68,7 +68,8 @@ function formatHour12(h) {
   return `${h12} ${period}`;
 }
 
-const DURATION_OPTIONS = Array.from({ length: 32 }, (_, i) => (i + 1) * 15).map((mins) => {
+// 15-minute steps up to 12 hours - long commercial cleans run past a standard day.
+const DURATION_OPTIONS = Array.from({ length: 48 }, (_, i) => (i + 1) * 15).map((mins) => {
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   let label = '';
