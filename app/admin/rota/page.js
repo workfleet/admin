@@ -532,8 +532,11 @@ export default function AdminRota() {
     const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
+    // Only current staff can be put on a job. Someone deactivated stays on
+    // the jobs they already had (the assignment embed carries their name),
+    // they just stop being offered for new ones.
     const { data: cleanersData } = await supabase
-      .from('profiles').select('id, full_name').eq('role', 'cleaner');
+      .from('profiles').select('id, full_name').eq('role', 'cleaner').eq('active', true).order('full_name');
     const { data: clientsData } = await supabase
       .from('clients').select('id, name').order('name');
     const { data: propertiesData } = await supabase
