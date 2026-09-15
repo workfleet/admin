@@ -33,9 +33,12 @@ describe('classifyFix', () => {
   });
 
   it('reads the band between the two radii as unknown, not as left', () => {
-    // 75m is the geofence, 150m triggers check-out. In between, the app does
+    // 100m is the geofence, 200m triggers check-out. In between, the app does
     // not know - and must not treat "not sure" as evidence of leaving.
     expect(classifyFix(metresNorth(110), property)).toBe('near');
+    expect(classifyFix(metresNorth(190), property)).toBe('near');
+    expect(classifyFix(metresNorth(90), property)).toBe('inside');
+    expect(classifyFix(metresNorth(210), property)).toBe('outside');
   });
 
   it('honours a property with its own, wider radius', () => {
