@@ -48,6 +48,14 @@ const EDGE_SCROLL_SPEED = 10;
 // on the view it left rather than choosing again every morning.
 const VIEW_STORAGE_KEY = 'admin-rota-view';
 const VIEWS = ['cleaners', 'calendar'];
+// Whether the by-cleaner sheet shows the week or one day of it.
+const RANGE_STORAGE_KEY = 'admin-rota-range';
+const RANGES = ['week', 'day'];
+
+// Monday is 0. Used to open the day view on today rather than on Monday.
+function dayIndexOf(date) {
+  return (date.getDay() + 6) % 7;
+}
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => h);
 const MINUTE_OPTIONS = [0, 15, 30, 45];
@@ -143,6 +151,10 @@ export default function AdminRota() {
   // other way to read it. Starts the same on server and client, then reads
   // the remembered choice.
   const [view, setView] = useState('cleaners');
+  // 'week' or 'day', and which day of the loaded week the day view is on.
+  // Only the by-cleaner sheet has a day mode.
+  const [range, setRange] = useState('week');
+  const [dayIndex, setDayIndex] = useState(() => dayIndexOf(new Date()));
   const [jobs, setJobs] = useState([]);
   const [cleaners, setCleaners] = useState([]);
   const [clients, setClients] = useState([]);
@@ -257,6 +269,8 @@ export default function AdminRota() {
     try {
       const saved = window.localStorage.getItem(VIEW_STORAGE_KEY);
       if (VIEWS.includes(saved)) setView(saved);
+      const savedRange = window.localStorage.getItem(RANGE_STORAGE_KEY);
+      if (RANGES.includes(savedRange)) setRange(savedRange);
     } catch {
       // Private browsing or blocked storage: the calendar is a fine default.
     }
@@ -265,6 +279,26 @@ export default function AdminRota() {
   const chooseView = (next) => {
     setView(next);
     try { window.localStorage.setItem(VIEW_STORAGE_KEY, next); } catch { /* see above */ }
+  };
+
+  const chooseRange = (next) => {
+    setRange(next);
+    try { window.localStorage.setItem(RANGE_STORAGE_KEY, next); } catch { /* see above */ }
+  };
+
+  // Day mode moves a day at a time and rolls over into the next or previous
+  // week, which loads that week's jobs. Week mode moves a week at a time.
+  const dayMode = view === 'cleaners' && range === 'day';
+  const goToToday = () => {
+    setWeekStart(getMonday(new Date()));
+    setDayIndex(dayIndexOf(new Date()));
+  };
+  const step = (direction) => {
+    if (!dayMode) { setWeekStart(addDays(weekStart, 7 * direction)); return; }
+    const next = dayIndex + direction;
+    if (next < 0) { setWeekStart(addDays(weekStart, -7)); setDayIndex(6); return; }
+    if (next > 6) { setWeekStart(addDays(weekStart, 7)); setDayIndex(0); return; }
+    setDayIndex(next);
   };
 
   const weekDays = useMemo(
@@ -1293,10 +1327,17 @@ export default function AdminRota() {
   };
 
   // The "+" in a cell: the form opens with that day and that person already
-  // filled in, so booking into a gap is just the client and the time.
-  const startNewJob = (dayIndex, cleanerId) => {
-    setJobDate(localDateString(weekDays[dayIndex]));
+  // filled in, so booking into a gap is just the client and the time. A
+  // free slot passes its start as well, rounded up to the quarter hour the
+  // time picker offers.
+  const startNewJob = (index, cleanerId, startMinutes) => {
+    setJobDate(localDateString(weekDays[index]));
     setFormCleanerIds(cleanerId ? [cleanerId] : []);
+    if (startMinutes !== undefined && startMinutes !== null) {
+      const snapped = Math.min(Math.ceil(startMinutes / 15) * 15, 23 * 60 + 45);
+      setJobHour(String(Math.floor(snapped / 60)).padStart(2, '0'));
+      setJobMinute(String(snapped % 60).padStart(2, '0'));
+    }
     setShowForm(true);
   };
 
@@ -1308,6 +1349,7 @@ export default function AdminRota() {
 
   const todayKey = new Date().toDateString();
   const isCurrentWeek = weekStart.getTime() === getMonday(new Date()).getTime();
+  const isOnToday = isCurrentWeek && dayIndex === dayIndexOf(new Date());
 
   // What an admin opens the rota to find out: is this week covered?
   const weekStats = useMemo(() => ({
@@ -1341,6 +1383,7 @@ export default function AdminRota() {
   })();
 
   const weekLabel = `${weekStart.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${addDays(weekStart, 6).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+  const dayLabel = weekDays[dayIndex].toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
 
   // Seven equal columns give a day about 200px, and four jobs abreast in
   // 200px is 50px a card - which is a start time and two letters of the
@@ -1555,8 +1598,8 @@ export default function AdminRota() {
       <BackButton />
       <div className="rota-header">
         <div>
-          <p className="rota-eyebrow">Rota · {view === 'cleaners' ? 'by cleaner' : 'by time'}</p>
-          <h1 className="rota-week">{weekLabel}</h1>
+          <p className="rota-eyebrow">Rota · {view === 'cleaners' ? `by cleaner · ${range}` : 'by time'}</p>
+          <h1 className="rota-week">{dayMode ? dayLabel : weekLabel}</h1>
         </div>
         <div className="rota-actions">
           <div className="segmented" role="group" aria-label="How to read the week">
@@ -1577,13 +1620,33 @@ export default function AdminRota() {
               By time
             </button>
           </div>
+          {view === 'cleaners' && (
+            <div className="segmented" role="group" aria-label="How much to show">
+              <button
+                className={`segmented-btn${range === 'week' ? ' is-active' : ''}`}
+                onClick={() => chooseRange('week')}
+                aria-pressed={range === 'week'}
+                title="Seven days across"
+              >
+                Week
+              </button>
+              <button
+                className={`segmented-btn${range === 'day' ? ' is-active' : ''}`}
+                onClick={() => chooseRange('day')}
+                aria-pressed={range === 'day'}
+                title="One day, with everyone's free time"
+              >
+                Day
+              </button>
+            </div>
+          )}
           {/* Prev / Today / Next are one control because they do one job -
               moving through weeks. As three loose buttons they carried the
               same weight as the page's primary action. */}
-          <div className="segmented" role="group" aria-label="Change week">
-            <button className="segmented-btn" onClick={() => setWeekStart(addDays(weekStart, -7))} title="Go back a week" aria-label="Previous week">‹</button>
-            <button className="segmented-btn" onClick={() => setWeekStart(getMonday(new Date()))} title="Jump back to this week" disabled={isCurrentWeek}>Today</button>
-            <button className="segmented-btn" onClick={() => setWeekStart(addDays(weekStart, 7))} title="Go forward a week" aria-label="Next week">›</button>
+          <div className="segmented" role="group" aria-label={dayMode ? 'Change day' : 'Change week'}>
+            <button className="segmented-btn" onClick={() => step(-1)} title={dayMode ? 'Go back a day' : 'Go back a week'} aria-label={dayMode ? 'Previous day' : 'Previous week'}>‹</button>
+            <button className="segmented-btn" onClick={goToToday} title={dayMode ? 'Jump back to today' : 'Jump back to this week'} disabled={dayMode ? isOnToday : isCurrentWeek}>Today</button>
+            <button className="segmented-btn" onClick={() => step(1)} title={dayMode ? 'Go forward a day' : 'Go forward a week'} aria-label={dayMode ? 'Next day' : 'Next week'}>›</button>
           </div>
           <button className="btn-primary btn-compact" onClick={() => setShowForm(true)} title="Schedule a new job and assign staff to it">
             + New Job
@@ -1654,6 +1717,7 @@ export default function AdminRota() {
           rows={cleanerRows}
           weekDays={weekDays}
           todayKey={todayKey}
+          dayIndex={dayMode ? dayIndex : null}
           onOpenJob={setSelectedJob}
           onNewJob={startNewJob}
           onDropJob={handleGridDrop}
@@ -1745,6 +1809,7 @@ export default function AdminRota() {
           ['scheduled', 'Scheduled'],
           ['unassigned', 'Needs a cleaner'],
           ['clash', 'Double-booked or missed'],
+          ...(dayMode ? [['free', 'Free to book']] : []),
         ].map(([key, label]) => (
           <span key={key} className="calendar-legend-item">
             <span className={`calendar-legend-swatch ${key}`} />
@@ -1755,7 +1820,14 @@ export default function AdminRota() {
 
       <div className="calendar-foot">
         <span className="calendar-foot-hint">
-          {view === 'cleaners' ? (
+          {dayMode ? (
+            <>
+              Each row is one cleaner&apos;s day, with the free time between their jobs drawn as
+              dashed slots - press one to book that person a job starting then. Free time counts
+              between 07:00 and 18:00. A job with two people on it shows on both rows. On a
+              desktop, drag a job onto another row to hand it to that cleaner.
+            </>
+          ) : view === 'cleaners' ? (
             <>
               Each row is one cleaner&apos;s week; a job with two people on it shows on both rows.
               Point at a day and press + to book that person a job there. On a desktop, drag a

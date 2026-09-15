@@ -1,12 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { coworkersOf, firstName, formatHours, UNASSIGNED_ROW_ID } from '../../../lib/rotaGrid';
+import { coworkersOf, firstName, formatHours, freeGaps, formatGap, UNASSIGNED_ROW_ID } from '../../../lib/rotaGrid';
 
-// The week with a row per cleaner and the days across. Each cell lists that
+// The rota with a row per cleaner. Across the week, each cell lists that
 // person's jobs for the day in order, so a gap on the sheet is a gap in
-// their day. Clicking a job opens it; the "+" in a cell books a new job for
-// that person on that day; on a desktop a scheduled job can be dragged to
+// their day. On a single day the row opens out: every job carries its
+// times and address, and the free time between jobs is drawn as a slot
+// the office can book straight into.
+//
+// Clicking a job opens it; the "+" in a cell books a new job for that
+// person on that day; on a desktop a scheduled job can be dragged to
 // another day or onto someone else's row.
 //
 // The page owns the data and every save. This only draws it and says what
@@ -25,19 +29,34 @@ function initials(name) {
     .toUpperCase();
 }
 
-function clock(date) {
+function clockOf(date) {
   const d = new Date(date);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function clockAt(minutes) {
+  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 }
 
 function endOf(job) {
   return new Date(new Date(job.scheduled_at).getTime() + (job.duration_minutes || 120) * 60000);
 }
 
-export default function CleanerWeekGrid({ rows, weekDays, todayKey, onOpenJob, onNewJob, onDropJob }) {
+function statusWord(job) {
+  if (job.status === 'missed') return 'Missed';
+  if (job.status === 'in_progress') return 'On site';
+  if (job.status === 'completed') return 'Completed';
+  return null;
+}
+
+// `dayIndex` null draws the whole week; a number draws that one day only.
+export default function CleanerWeekGrid({ rows, weekDays, todayKey, dayIndex = null, onOpenJob, onNewJob, onDropJob }) {
   // The cell under a dragged job, so it can light up as the place the job
   // will land. Only meaningful mid-drag; cleared on drop or leave.
   const [over, setOver] = useState(null);
+
+  const single = dayIndex !== null && dayIndex !== undefined;
+  const shownDays = single ? [dayIndex] : weekDays.map((_, i) => i);
 
   const dayClass = (i) => {
     const isToday = weekDays[i].toDateString() === todayKey;
@@ -60,38 +79,58 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, onOpenJob, o
     const others = coworkersOf(job, cleanerId).map(firstName);
     const draggable = job.status === 'scheduled';
     const everyone = (job.job_assignments || []).map((a) => a.profiles?.full_name || 'Unknown');
+    const timeRange = `${clockOf(job.scheduled_at)} – ${clockOf(endOf(job))}`;
+    const word = statusWord(job);
     const title = [
-      `${clock(job.scheduled_at)} – ${clock(endOf(job))}`,
+      timeRange,
       client,
       job.properties?.address,
       unassigned ? 'Needs a cleaner' : everyone.join(', '),
-      job.status === 'missed' ? 'Missed' : job.status === 'in_progress' ? 'On site' : job.status === 'completed' ? 'Completed' : null,
+      word,
       draggable ? 'Drag to another day or cleaner, or click to open' : 'Click to open',
     ].filter(Boolean).join(' · ');
 
+    const className = [
+      'rota-chip',
+      job.status,
+      unassigned ? 'unassigned' : '',
+      draggable ? 'draggable' : '',
+      single ? 'is-day' : '',
+    ].filter(Boolean).join(' ');
+
+    const dragProps = {
+      draggable,
+      onDragStart: (e) => {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData(DRAG_MIME, JSON.stringify({ jobId: job.id, fromRowId: row.id }));
+        // Some browsers need a plain-text payload before they will start
+        // a drag at all.
+        e.dataTransfer.setData('text/plain', job.id);
+      },
+      onDragEnd: () => setOver(null),
+    };
+
+    if (single) {
+      const sub = [
+        job.properties?.address && job.properties.address !== client ? job.properties.address : null,
+        unassigned ? 'Needs a cleaner' : null,
+        word,
+      ].filter(Boolean).join(' · ');
+      return (
+        <button key={`${row.id}-${job.id}`} type="button" className={className} {...dragProps} onClick={() => onOpenJob(job)} title={title}>
+          <span className="rota-chip-line">
+            <b>{timeRange}</b>
+            <span className="rota-chip-client">{client}</span>
+            {others.length > 0 && <span className="rota-chip-with">w/ {others.join(', ')}</span>}
+          </span>
+          {sub && <span className="rota-chip-sub">{sub}</span>}
+        </button>
+      );
+    }
+
     return (
-      <button
-        key={`${row.id}-${job.id}`}
-        type="button"
-        className={[
-          'rota-chip',
-          job.status,
-          unassigned ? 'unassigned' : '',
-          draggable ? 'draggable' : '',
-        ].filter(Boolean).join(' ')}
-        draggable={draggable}
-        onDragStart={(e) => {
-          e.dataTransfer.effectAllowed = 'move';
-          e.dataTransfer.setData(DRAG_MIME, JSON.stringify({ jobId: job.id, fromRowId: row.id }));
-          // Some browsers need a plain-text payload before they will start
-          // a drag at all.
-          e.dataTransfer.setData('text/plain', job.id);
-        }}
-        onDragEnd={() => setOver(null)}
-        onClick={() => onOpenJob(job)}
-        title={title}
-      >
-        <b>{clock(job.scheduled_at)}</b>
+      <button key={`${row.id}-${job.id}`} type="button" className={className} {...dragProps} onClick={() => onOpenJob(job)} title={title}>
+        <b>{clockOf(job.scheduled_at)}</b>
         <span className="rota-chip-client">{client}</span>
         {others.length > 0 && <span className="rota-chip-with">w/ {others.join(', ')}</span>}
         {job.status === 'missed' && <span className="rota-chip-with">missed</span>}
@@ -99,18 +138,54 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, onOpenJob, o
     );
   };
 
+  // On a single day a cleaner's cell is their jobs and the free time
+  // between them, in clock order. A gap is a button: booking into it
+  // starts the new job form with the day, the person and the time filled.
+  const renderDayItems = (list, row, i) => {
+    const cleanerId = row.id === UNASSIGNED_ROW_ID ? null : row.id;
+    if (!cleanerId) return list.map((job) => renderChip(job, row));
+
+    const gaps = freeGaps(list).map((g) => ({ kind: 'gap', start: g.start, gap: g }));
+    const jobs = list.map((job) => {
+      const d = new Date(job.scheduled_at);
+      return { kind: 'job', start: d.getHours() * 60 + d.getMinutes(), job };
+    });
+    const items = [...jobs, ...gaps].sort((a, b) => a.start - b.start);
+    const who = firstName(row.name);
+
+    return items.map((item) => {
+      if (item.kind === 'job') return renderChip(item.job, row);
+      const { start, end } = item.gap;
+      const length = formatGap(end - start);
+      return (
+        <button
+          key={`gap-${row.id}-${start}`}
+          type="button"
+          className="rota-gap"
+          onClick={() => onNewJob(i, cleanerId, start)}
+          title={`${who} is free ${clockAt(start)} – ${clockAt(end)}. Book a job here.`}
+        >
+          <span>Free {clockAt(start)} – {clockAt(end)}</span>
+          <small>{length} · book</small>
+        </button>
+      );
+    });
+  };
+
   return (
     <div className="calendar rota-grid-wrap">
       <div className="rota-grid-scroll">
-        <div className="rota-grid" role="table" aria-label="Rota by cleaner">
+        <div className={`rota-grid ${single ? 'is-day' : ''}`} role="table" aria-label={single ? 'Rota by cleaner for the day' : 'Rota by cleaner'}>
           <div className="rota-grid-head" role="row">
             <div className="rota-grid-who rota-grid-corner" role="columnheader">Cleaner</div>
-            {weekDays.map((day, i) => {
+            {shownDays.map((i) => {
+              const day = weekDays[i];
               const isToday = day.toDateString() === todayKey;
               return (
                 <div key={i} className={`rota-grid-dayhead ${dayClass(i)}`} role="columnheader">
                   <span className="rota-grid-daynum">{day.getDate()}</span>
                   <span className="rota-grid-dayname">{DAY_NAMES[i]}{isToday ? ' · today' : ''}</span>
+                  {single && <span className="rota-grid-daynote">Free time counted 07:00 – 18:00</span>}
                 </div>
               );
             })}
@@ -119,10 +194,16 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, onOpenJob, o
 
           {rows.map((row) => {
             const isUnassigned = row.id === UNASSIGNED_ROW_ID;
+            const cleanerId = isUnassigned ? null : row.id;
+            const shownLists = shownDays.map((i) => row.days[i]);
+            const shownJobs = shownLists.reduce((n, list) => n + list.length, 0);
+            const shownMinutes = shownLists.reduce((sum, list) => sum + list.reduce((s, j) => s + (j.duration_minutes || 120), 0), 0);
             // A row for nobody with nothing on it is a good sign, not a
             // sheet row - it only appears when there is something to fix.
-            if (isUnassigned && row.jobCount === 0) return null;
-            const cleanerId = isUnassigned ? null : row.id;
+            if (isUnassigned && shownJobs === 0) return null;
+            // Someone who has left only earns a row on a day they still
+            // hold a job.
+            if (!row.current && shownJobs === 0) return null;
 
             return (
               <div key={row.id} className={`rota-grid-row ${isUnassigned ? 'is-unassigned' : ''} ${row.current ? '' : 'is-former'}`} role="row">
@@ -133,13 +214,14 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, onOpenJob, o
                   <span className="rota-grid-whotext">
                     <span className="rota-grid-name">{row.name}</span>
                     <span className={`rota-grid-meta ${isUnassigned ? 'is-alert' : ''}`}>
-                      {row.jobCount} job{row.jobCount === 1 ? '' : 's'}
+                      {shownJobs} job{shownJobs === 1 ? '' : 's'}
                       {isUnassigned ? ' need someone' : row.current ? '' : ' · no longer on staff'}
                     </span>
                   </span>
                 </div>
 
-                {row.days.map((list, i) => {
+                {shownDays.map((i) => {
+                  const list = row.days[i];
                   const key = `${row.id}:${i}`;
                   const dayLabel = weekDays[i].toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
                   return (
@@ -164,7 +246,7 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, onOpenJob, o
                         if (payload) onDropJob({ ...payload, toRowId: row.id, dayIndex: i });
                       }}
                     >
-                      {list.map((job) => renderChip(job, row))}
+                      {single ? renderDayItems(list, row, i) : list.map((job) => renderChip(job, row))}
                       {(!isUnassigned || list.length === 0) && (
                         <button
                           type="button"
@@ -180,8 +262,8 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, onOpenJob, o
                   );
                 })}
 
-                <div className="rota-grid-hours" role="cell" title={`${formatHours(row.minutes)} hours scheduled this week`}>
-                  {formatHours(row.minutes)}
+                <div className="rota-grid-hours" role="cell" title={`${formatHours(shownMinutes)} hours scheduled ${single ? 'today' : 'this week'}`}>
+                  {formatHours(shownMinutes)}
                   <small>hrs</small>
                 </div>
               </div>

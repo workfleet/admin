@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildCleanerRows, coworkersOf, firstName, formatHours, UNASSIGNED_ROW_ID } from '../lib/rotaGrid';
+import { buildCleanerRows, coworkersOf, firstName, formatHours, freeGaps, formatGap, UNASSIGNED_ROW_ID } from '../lib/rotaGrid';
 
 // The by-cleaner rota is a row per person with the days across. A job that
 // lands on the wrong row, or on no row, is a job the office can't see.
@@ -105,5 +105,49 @@ describe('labels', () => {
     expect(formatHours(480)).toBe('8');
     expect(formatHours(390)).toBe('6.5');
     expect(formatHours(0)).toBe('0');
+  });
+});
+
+describe('freeGaps', () => {
+  const at = (time, minutes) => ({ scheduled_at: `2026-09-15T${time}:00`, duration_minutes: minutes });
+
+  it('is the whole working day when there is nothing on', () => {
+    expect(freeGaps([])).toEqual([{ start: 420, end: 1080 }]);
+  });
+
+  it('finds the gaps between jobs and at either end of the day', () => {
+    const gaps = freeGaps([at('09:00', 120), at('13:00', 120)]);
+    expect(gaps).toEqual([
+      { start: 420, end: 540 },
+      { start: 660, end: 780 },
+      { start: 900, end: 1080 },
+    ]);
+  });
+
+  it('drops a gap shorter than the minimum', () => {
+    const gaps = freeGaps([at('07:00', 120), at('09:20', 60)]);
+    expect(gaps).toEqual([{ start: 620, end: 1080 }]);
+  });
+
+  it('merges overlapping jobs rather than opening a gap between them', () => {
+    const gaps = freeGaps([at('09:00', 180), at('10:00', 60)]);
+    expect(gaps).toEqual([{ start: 420, end: 540 }, { start: 720, end: 1080 }]);
+  });
+
+  it('counts only the working window', () => {
+    const gaps = freeGaps([at('05:00', 60), at('17:00', 180)]);
+    expect(gaps).toEqual([{ start: 420, end: 1020 }]);
+  });
+
+  it('treats a blank duration as two hours', () => {
+    expect(freeGaps([{ scheduled_at: '2026-09-15T07:00:00', duration_minutes: null }])).toEqual([{ start: 540, end: 1080 }]);
+  });
+});
+
+describe('formatGap', () => {
+  it('writes a length the way the office says it', () => {
+    expect(formatGap(90)).toBe('1h 30m');
+    expect(formatGap(120)).toBe('2h');
+    expect(formatGap(45)).toBe('45m');
   });
 });

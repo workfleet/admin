@@ -3569,3 +3569,93 @@ a.btn-compact {
 .segmented-btn.is-active:hover:not(:disabled) {
   background: var(--wf-slate);
 }
+
+/* ---- Rota by cleaner, one day ----
+   The same rows with one column, so it fits any width. Chips open out to
+   two lines and the free time between jobs is drawn as a slot: dashed, no
+   fill, so it reads as space to put something in rather than as a job. */
+.rota-grid.is-day {
+  grid-template-columns: 184px minmax(0, 1fr) 76px;
+  min-width: 0;
+}
+
+.rota-grid-daynote {
+  margin-left: auto;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.rota-chip.is-day {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 6px 9px;
+  white-space: normal;
+}
+
+.rota-chip-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.rota-chip-line .rota-chip-client { font-size: 12.5px; }
+
+.rota-chip-sub {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rota-chip.unassigned .rota-chip-sub,
+.rota-chip.missed .rota-chip-sub { color: var(--wf-overdue); }
+
+.rota-gap {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 5px 9px;
+  border: 1.5px dashed rgba(194, 64, 46, 0.5);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--wf-coral-ink);
+  font-family: var(--wf-data);
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.rota-gap:hover,
+.rota-gap:focus-visible {
+  background: rgba(255, 107, 91, 0.1);
+  border-color: var(--wf-coral-ink);
+}
+
+.rota-gap small {
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.calendar-legend-swatch.free {
+  background: transparent;
+  border: 1.5px dashed var(--wf-coral-ink);
+}
+
+@media (max-width: 720px) {
+  .rota-grid.is-day {
+    grid-template-columns: 120px minmax(0, 1fr) 56px;
+  }
+  .rota-grid.is-day .rota-chip-line { flex-wrap: wrap; white-space: normal; }
+}

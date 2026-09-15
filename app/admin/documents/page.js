@@ -47,7 +47,7 @@ export default function AdminDocuments() {
     const [{ data: docs }, { data: recipientRows }, { data: cleanerRows }] = await Promise.all([
       supabase
         .from('company_documents')
-        .select('id, title, category, storage_path, file_name, file_size, created_at, profiles(full_name)')
+        .select('id, title, category, storage_path, file_name, file_size, created_at, profiles!company_documents_uploaded_by_fkey(full_name)')
         .order('created_at', { ascending: false }),
       supabase.from('company_document_recipients').select('document_id, profiles(full_name)'),
       supabase.from('profiles').select('id, full_name').eq('role', 'cleaner').eq('active', true).order('full_name'),
@@ -102,7 +102,7 @@ export default function AdminDocuments() {
           file_size: file.size,
           uploaded_by: userId,
         })
-        .select('id, title, category, storage_path, file_name, file_size, created_at, profiles(full_name)')
+        .select('id, title, category, storage_path, file_name, file_size, created_at, profiles!company_documents_uploaded_by_fkey(full_name)')
         .single();
 
       if (error) { toast.error(`Uploaded ${file.name} but couldn't save it - try again.`); continue; }
