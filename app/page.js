@@ -79,6 +79,7 @@ export default function LoginPage() {
     // if it didn't, rather than silently bouncing back to login.
     const destination = profile?.role === 'admin' || profile?.role === 'supervisor'
       ? '/admin'
+      : profile?.role === 'inventory' ? '/admin/inventory'
       : profile?.role === 'client' ? '/client' : '/cleaner';
 
     let persisted = sessionPersisted();

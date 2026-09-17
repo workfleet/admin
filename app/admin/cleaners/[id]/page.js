@@ -434,7 +434,7 @@ export default function CleanerProfile() {
   };
 
   const startEditAccount = () => {
-    setAccountForm({ full_name: cleaner.full_name || '', email: email || '', role: cleaner.role === 'supervisor' ? 'supervisor' : 'cleaner', password: '' });
+    setAccountForm({ full_name: cleaner.full_name || '', email: email || '', role: ['supervisor', 'inventory'].includes(cleaner.role) ? cleaner.role : 'cleaner', password: '' });
     setAccountError('');
     setHandedPassword(null);
     setEditingAccount(true);
@@ -463,6 +463,10 @@ export default function CleanerProfile() {
     if (changes.role === 'supervisor' && !(await confirm(
       `Make ${accountForm.full_name || 'this person'} a supervisor? They will be able to manage the rota, clients and requests like an admin, but not staff accounts or payroll.`,
       { title: 'Change role', confirmLabel: 'Make supervisor' }
+    ))) return;
+    if (changes.role === 'inventory' && !(await confirm(
+      `Make ${accountForm.full_name || 'this person'} inventory only? They will be able to count and reorder stock and nothing else - no jobs, rota, chat or clients.`,
+      { title: 'Change role', confirmLabel: 'Make inventory only' }
     ))) return;
 
     setSavingAccount(true);
@@ -620,6 +624,9 @@ export default function CleanerProfile() {
               {cleaner.role === 'supervisor' && (
                 <span className="badge scheduled" style={{ marginLeft: 8, verticalAlign: 'middle' }}>supervisor</span>
               )}
+              {cleaner.role === 'inventory' && (
+                <span className="badge scheduled" style={{ marginLeft: 8, verticalAlign: 'middle' }}>inventory only</span>
+              )}
               {cleaner.active === false && (
                 <span className="badge missed" style={{ marginLeft: 8, verticalAlign: 'middle' }}>deactivated</span>
               )}
@@ -678,6 +685,7 @@ export default function CleanerProfile() {
               <select value={accountForm.role} onChange={(e) => setAccountForm((f) => ({ ...f, role: e.target.value }))}>
                 <option value="cleaner">Cleaner</option>
                 <option value="supervisor">Office Staff / Supervisor</option>
+                <option value="inventory">Inventory only</option>
               </select>
             </div>
             <div className="field">

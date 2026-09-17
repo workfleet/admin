@@ -14,6 +14,12 @@ import Logo from '../components/Logo';
 // Cleaners/Onboarding manage staff accounts directly (adding, deactivating,
 // reviewing onboarding ID documents) - kept admin-only, hidden from
 // supervisors here and enforced again on those two pages themselves.
+//
+// The 'inventory' role (0101) is stock-only: it lands on Inventory, sees no
+// other link, and is bounced back here from any other /admin page. RLS
+// backs that up - no other table's policies name the role.
+const INVENTORY_HOME = '/admin/inventory';
+
 const NAV_ITEMS = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/notifications', label: 'Notifications', icon: Bell },
@@ -55,6 +61,10 @@ export default function AdminLayout({ children }) {
     setDrawerOpen(false);
   }, [pathname]);
 
+  useEffect(() => {
+    if (role === 'inventory' && pathname !== INVENTORY_HOME) router.replace(INVENTORY_HOME);
+  }, [role, pathname]);
+
   const checkAccess = async () => {
     setLoadError(false);
     const { session, profile, error } = await getSessionAndProfile();
@@ -62,7 +72,7 @@ export default function AdminLayout({ children }) {
 
     if (error) { setLoadError(true); return; }
 
-    if (profile?.role !== 'admin' && profile?.role !== 'supervisor') {
+    if (profile?.role !== 'admin' && profile?.role !== 'supervisor' && profile?.role !== 'inventory') {
       router.push('/');
       return;
     }
@@ -70,7 +80,9 @@ export default function AdminLayout({ children }) {
     setAuthorized(true);
   };
 
-  const navItems = NAV_ITEMS.filter((item) => !item.adminOnly || role === 'admin');
+  const navItems = role === 'inventory'
+    ? NAV_ITEMS.filter((item) => item.href === INVENTORY_HOME)
+    : NAV_ITEMS.filter((item) => !item.adminOnly || role === 'admin');
 
   const handleLogout = async () => {
     await signOutAndClearPresence();

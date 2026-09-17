@@ -92,7 +92,7 @@ export default function AdminCleaners() {
     if (ownProfile?.role !== 'admin') { router.push('/admin'); return; }
 
     const [{ data: cleanersData }, { data: assignmentsData }, { data: timeOffData }, { data: detailsData }, { data: bankRows }] = await Promise.all([
-      supabase.from('profiles').select('id, full_name, role, created_at, active, profile_private(holiday_adjustment_hours, deactivated_at)').in('role', ['cleaner', 'supervisor']).order('created_at'),
+      supabase.from('profiles').select('id, full_name, role, created_at, active, profile_private(holiday_adjustment_hours, deactivated_at)').in('role', ['cleaner', 'supervisor', 'inventory']).order('created_at'),
       supabase.from('job_assignments').select('cleaner_id, paid_minutes, jobs(id, status, duration_minutes)'),
       supabase.from('time_off_requests').select('cleaner_id, type, status, hours'),
       // Enough of each person's details (staff_details, 0092) to show a
@@ -198,8 +198,9 @@ export default function AdminCleaners() {
         <div>
           <h1>Cleaners</h1>
           <p className="page-subtitle">
-            {current.filter((c) => c.role !== 'supervisor').length} cleaner{current.filter((c) => c.role !== 'supervisor').length === 1 ? '' : 's'}
+            {current.filter((c) => c.role === 'cleaner').length} cleaner{current.filter((c) => c.role === 'cleaner').length === 1 ? '' : 's'}
             {' · '}{current.filter((c) => c.role === 'supervisor').length} supervisor{current.filter((c) => c.role === 'supervisor').length === 1 ? '' : 's'}
+            {current.some((c) => c.role === 'inventory') && <>{' · '}{current.filter((c) => c.role === 'inventory').length} inventory only</>}
             {former.length > 0 && <>{' · '}{former.length} former</>}
           </p>
         </div>
@@ -244,9 +245,11 @@ export default function AdminCleaners() {
                 <select value={newRole} onChange={(e) => setNewRole(e.target.value)}>
                   <option value="cleaner">Cleaner</option>
                   <option value="supervisor">Office Staff / Supervisor</option>
+                  <option value="inventory">Inventory only</option>
                 </select>
                 <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
                   Supervisors can manage the rota, clients, and requests like an admin, but can't manage staff accounts or see payroll.
+                  Inventory only accounts can count and reorder stock and see nothing else.
                 </p>
               </div>
               <div className="field">
@@ -323,6 +326,9 @@ export default function AdminCleaners() {
                     {c.full_name || 'Unnamed cleaner'}
                     {c.role === 'supervisor' && (
                       <span className="badge scheduled" style={{ marginLeft: 8, verticalAlign: 'middle' }}>supervisor</span>
+                    )}
+                    {c.role === 'inventory' && (
+                      <span className="badge scheduled" style={{ marginLeft: 8, verticalAlign: 'middle' }}>inventory only</span>
                     )}
                   </h2>
                   <p className="job-time">

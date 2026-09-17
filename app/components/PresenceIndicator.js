@@ -13,7 +13,7 @@ const REFRESH_INTERVAL_MS = 20000;
 // network tick, a background tab) without flickering offline.
 const ONLINE_WINDOW_MS = 60000;
 
-const ROLE_LABELS = { admin: 'admin', supervisor: 'supervisor', cleaner: 'cleaner' };
+const ROLE_LABELS = { admin: 'admin', supervisor: 'supervisor', cleaner: 'cleaner', inventory: 'inventory' };
 const MENU_WIDTH = 240;
 
 // Reports the signed-in user's presence via a heartbeat row, refreshed

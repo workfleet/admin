@@ -14,7 +14,7 @@ async function requireStaff(request) {
   if (error || !user) return null;
 
   const { data: profile } = await supabaseAdmin.from('profiles').select('role').eq('id', user.id).single();
-  if (profile?.role !== 'admin' && profile?.role !== 'supervisor') return null;
+  if (!['admin', 'supervisor', 'inventory'].includes(profile?.role)) return null;
   return user;
 }
 

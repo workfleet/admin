@@ -19,7 +19,7 @@ async function requireAdmin(request) {
 async function loadStaffProfile(id) {
   const { data: profile } = await supabaseAdmin
     .from('profiles').select('id, full_name, role, active').eq('id', id).single();
-  if (!profile || !['cleaner', 'supervisor'].includes(profile.role)) return null;
+  if (!profile || !['cleaner', 'supervisor', 'inventory'].includes(profile.role)) return null;
   return profile;
 }
 
@@ -117,7 +117,7 @@ export async function PATCH(request, { params }) {
   if (password !== undefined && password.length < 8) {
     return NextResponse.json({ error: 'password_too_short' }, { status: 400 });
   }
-  if (role !== undefined && !['cleaner', 'supervisor'].includes(role)) {
+  if (role !== undefined && !['cleaner', 'supervisor', 'inventory'].includes(role)) {
     return NextResponse.json({ error: 'bad_role' }, { status: 400 });
   }
 

@@ -41,6 +41,7 @@ export default function CleanerLayout({ children }) {
     if (error) { setLoadError(true); return; }
 
     if (profile?.role === 'admin' || profile?.role === 'supervisor') { router.push('/admin'); return; }
+    if (profile?.role === 'inventory') { router.push('/admin/inventory'); return; }
     if (profile?.role === 'client') { router.push('/client'); return; }
 
     setAuthorized(true);
