@@ -88,6 +88,9 @@ async function runRetentionSweep(request) {
     // is deleted outright, since unlike the submission there is no signed
     // record to keep a redacted shell of.
     await supabaseAdmin.from('staff_details').delete().eq('profile_id', cleaner.id);
+    // Bank details (staff_bank_details, 0099) have no reason to outlive the
+    // last payslip, so the row goes with them.
+    await supabaseAdmin.from('staff_bank_details').delete().eq('profile_id', cleaner.id);
     // Sickness absences are health data, so the recorded reasons go too
     // (missed_shift_outcomes, 0093). The job stays 'missed'.
     await supabaseAdmin.from('missed_shift_outcomes').delete().eq('cleaner_id', cleaner.id);

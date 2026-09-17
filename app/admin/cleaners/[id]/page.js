@@ -9,6 +9,7 @@ import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 import { claimFor, describeClockRecord, indexClaims, lateMinutes } from '../../../../lib/clockIn';
 import { STAFF_DETAIL_FIELDS, detailsToForm, formToDetails, formatDateOnly, missingEssentials } from '../../../../lib/staffDetails';
+import { BANK_DETAIL_FIELDS, emptyBankForm, formToBankDetails, formatSortCode } from '../../../../lib/bankDetails';
 import { countsAgainstCleaner, outcomeLabel } from '../../../../lib/missedShiftOutcomes';
 import BackButton from '../../../components/BackButton';
 
@@ -71,6 +72,14 @@ export default function CleanerProfile() {
   const [editingDetails, setEditingDetails] = useState(false);
   const [detailsForm, setDetailsForm] = useState(() => detailsToForm(null));
   const [savingDetails, setSavingDetails] = useState(false);
+
+  // Where their pay goes (staff_bank_details, 0099). Usually entered by the
+  // person from My Profile; the office can enter or correct it here.
+  const [bank, setBank] = useState(null);
+  const [editingBank, setEditingBank] = useState(false);
+  const [bankForm, setBankForm] = useState(() => emptyBankForm());
+  const [bankError, setBankError] = useState('');
+  const [savingBank, setSavingBank] = useState(false);
 
   const [removing, setRemoving] = useState(false);
 
@@ -174,6 +183,12 @@ export default function CleanerProfile() {
       .eq('profile_id', id)
       .maybeSingle();
 
+    const { data: bankData } = await supabase
+      .from('staff_bank_details')
+      .select('account_holder_name, sort_code, account_number, updated_at, updated_by')
+      .eq('profile_id', id)
+      .maybeSingle();
+
     const { data: remindersData } = await supabase
       .from('reminders')
       .select('id, due_date, recurs_yearly, notes')
@@ -242,8 +257,42 @@ export default function CleanerProfile() {
     setSubmission(submissionData || null);
     setDetails(detailsData || null);
     setDetailsForm(detailsToForm(detailsData));
+    setBank(bankData || null);
     setReminders(remindersData || []);
     setLoading(false);
+  };
+
+  const startEditBank = () => {
+    setBankForm(emptyBankForm());
+    setBankError('');
+    setEditingBank(true);
+  };
+
+  const saveBank = async (e) => {
+    e.preventDefault();
+    setBankError('');
+    const { row, error: shapeError } = formToBankDetails(bankForm);
+    if (shapeError) { setBankError(shapeError); return; }
+
+    setSavingBank(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data, error } = await supabase
+      .from('staff_bank_details')
+      .upsert({
+        profile_id: id,
+        ...row,
+        updated_at: new Date().toISOString(),
+        updated_by: session.user.id,
+      }, { onConflict: 'profile_id' })
+      .select('account_holder_name, sort_code, account_number, updated_at, updated_by')
+      .single();
+    setSavingBank(false);
+
+    if (error || !data) { toast.error("Couldn't save their bank details. Please check them and try again."); return; }
+    setBank(data);
+    setBankForm(emptyBankForm());
+    setEditingBank(false);
+    toast.success('Bank details saved.');
   };
 
   const startEditDetails = () => {
@@ -735,6 +784,60 @@ export default function CleanerProfile() {
               </div>
             )}
           </>
+        )}
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="page-header-row" style={{ marginBottom: 8 }}>
+          <h2 style={{ margin: 0 }}>Bank Details</h2>
+          <button
+            className="btn-secondary"
+            onClick={() => (editingBank ? setEditingBank(false) : startEditBank())}
+            title="Where their pay goes - they can add or change these themselves from My Profile, and every change is announced to the office"
+          >
+            {editingBank ? 'Cancel' : (bank ? 'Replace' : 'Add Bank Details')}
+          </button>
+        </div>
+
+        {editingBank ? (
+          <form onSubmit={saveBank}>
+            {BANK_DETAIL_FIELDS.map((f) => (
+              <div className="field" key={f.key}>
+                <label className="field-label">{f.label}</label>
+                <input
+                  type={f.type}
+                  inputMode={f.inputMode}
+                  value={bankForm[f.key]}
+                  onChange={(e) => setBankForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                  placeholder={f.placeholder}
+                  autoComplete={f.autoComplete || 'off'}
+                />
+              </div>
+            ))}
+            {bankError && <p style={{ color: 'var(--wf-overdue)', fontSize: 13.5, margin: '0 0 8px' }}>{bankError}</p>}
+            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+              <button type="button" className="btn-secondary" onClick={() => setEditingBank(false)}>Cancel</button>
+              <button type="submit" className="btn-primary" disabled={savingBank} title="Save these bank details against this person">
+                {savingBank ? 'Saving...' : 'Save Bank Details'}
+              </button>
+            </div>
+          </form>
+        ) : bank ? (
+          <div style={{ fontSize: 14, color: 'var(--muted)', lineHeight: 1.9 }}>
+            <div>Name on account: <span style={{ color: 'var(--ink)' }}>{bank.account_holder_name}</span></div>
+            <div>Sort code: <span style={{ color: 'var(--ink)', fontFamily: 'monospace' }}>{formatSortCode(bank.sort_code)}</span></div>
+            <div>Account number: <span style={{ color: 'var(--ink)', fontFamily: 'monospace' }}>{bank.account_number}</span></div>
+            {bank.updated_at && (
+              <div style={{ fontSize: 12, marginTop: 2 }}>
+                Last updated {new Date(bank.updated_at).toLocaleDateString()}
+                {bank.updated_by === id ? ' by them' : bank.updated_by ? ' by the office' : ''}
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="empty-state" style={{ marginBottom: 0 }}>
+            No bank details on file. Ask {cleaner.full_name ? cleaner.full_name.split(' ')[0] : 'them'} to add them from My Profile, or enter them here.
+          </p>
         )}
       </div>
 

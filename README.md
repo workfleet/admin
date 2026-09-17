@@ -72,8 +72,11 @@ provides free reviewed templates, or use a solicitor) before sending real
 invite links.
 
 The onboarding flow collects sensitive personal data (date of birth, home
-address, National Insurance number, and an ID document photo). Before using
-this for real staff:
+address, National Insurance number, and an ID document photo), and staff
+enter their bank details from My Profile (`staff_bank_details`, readable
+only by admins and the person themself; every change raises a notification
+to the office so a changed account can be checked before payroll runs).
+Before using this for real staff:
 
 - Decide and document a **data retention period** — how long you keep an
   ex-employee's ID photo and NI number after they leave.

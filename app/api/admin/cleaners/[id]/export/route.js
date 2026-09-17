@@ -33,6 +33,7 @@ export async function GET(request, { params }) {
 
   const [
     { data: details },
+    { data: bankDetails },
     { data: missedOutcomes },
     { data: onboarding },
     { data: certifications },
@@ -47,6 +48,7 @@ export async function GET(request, { params }) {
     { data: participants },
   ] = await Promise.all([
     supabaseAdmin.from('staff_details').select('*').eq('profile_id', id).maybeSingle(),
+    supabaseAdmin.from('staff_bank_details').select('*').eq('profile_id', id).maybeSingle(),
     supabaseAdmin.from('missed_shift_outcomes').select('*').eq('cleaner_id', id),
     supabaseAdmin.from('staff_onboarding_submissions').select('*').eq('profile_id', id),
     supabaseAdmin.from('staff_certifications').select('*').eq('staff_id', id),
@@ -86,6 +88,7 @@ export async function GET(request, { params }) {
       last_sign_in_at: authUser?.user?.last_sign_in_at || null,
     },
     personal_details: details || null,
+    bank_details: bankDetails || null,
     missed_shift_outcomes: missedOutcomes,
     onboarding_submission: onboardingWithLink,
     certifications,

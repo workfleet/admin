@@ -55,6 +55,9 @@ export default function AdminCleaners() {
   const [jobs, setJobs] = useState([]);
   const [timeOffRequests, setTimeOffRequests] = useState([]);
   const [detailsById, setDetailsById] = useState({});
+  // Who has bank details on file (staff_bank_details, 0099) - just the ids,
+  // never the numbers, which this list has no reason to hold.
+  const [bankIds, setBankIds] = useState(() => new Set());
   const [loading, setLoading] = useState(true);
 
   const [editingAdjustmentId, setEditingAdjustmentId] = useState(null);
@@ -87,13 +90,16 @@ export default function AdminCleaners() {
     const { data: ownProfile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
     if (ownProfile?.role !== 'admin') { router.push('/admin'); return; }
 
-    const [{ data: cleanersData }, { data: assignmentsData }, { data: timeOffData }, { data: detailsData }] = await Promise.all([
+    const [{ data: cleanersData }, { data: assignmentsData }, { data: timeOffData }, { data: detailsData }, { data: bankRows }] = await Promise.all([
       supabase.from('profiles').select('id, full_name, role, created_at, active, profile_private(holiday_adjustment_hours, deactivated_at)').in('role', ['cleaner', 'supervisor']).order('created_at'),
       supabase.from('job_assignments').select('cleaner_id, paid_minutes, jobs(id, status, duration_minutes)'),
       supabase.from('time_off_requests').select('cleaner_id, type, status, hours'),
       // Enough of each person's details (staff_details, 0092) to show a
       // phone number on the card and flag who has not filled theirs in.
       supabase.from('staff_details').select('profile_id, phone, address, emergency_contact_name, emergency_contact_phone'),
+      // Only whether bank details exist, so payroll can see who it cannot
+      // pay yet. The numbers themselves stay on the person's own page.
+      supabase.from('staff_bank_details').select('profile_id'),
     ]);
 
     const byId = {};
@@ -103,6 +109,7 @@ export default function AdminCleaners() {
     setJobs(assignmentsData || []);
     setTimeOffRequests(timeOffData || []);
     setDetailsById(byId);
+    setBankIds(new Set((bankRows || []).map((b) => b.profile_id)));
     setLoading(false);
   };
 
@@ -325,6 +332,11 @@ export default function AdminCleaners() {
                   {missing.length > 0 && (
                     <p className="job-time" style={{ color: 'var(--wf-graphite)' }} title="Open their page to add these, or ask them to fill in My Profile">
                       {cDetails ? `Details missing: ${missing.join(', ')}` : 'No personal details on file'}
+                    </p>
+                  )}
+                  {c.active !== false && !bankIds.has(c.id) && (
+                    <p className="job-time" style={{ color: 'var(--wf-graphite)' }} title="Payroll has nowhere to send their pay - ask them to add bank details from My Profile, or enter them on their page">
+                      No bank details on file
                     </p>
                   )}
                   <p className="job-time">
