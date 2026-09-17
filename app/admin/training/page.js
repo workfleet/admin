@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Upload, Trash2, ChevronUp, ChevronDown, Play, Eye } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
+import { withoutTestAccounts } from '../../../lib/testAccounts';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { TRAINING_SECTIONS, TRAINING_SECTION_LABELS, formatDuration } from '../../../lib/trainingSections';
 import { useConfirm } from '../../components/ConfirmProvider';
@@ -59,7 +60,7 @@ export default function AdminTraining() {
     if (!session) { router.push('/'); return; }
     setUserId(session.user.id);
 
-    const [{ data: videoRows }, { data: viewRows }, { count }] = await Promise.all([
+    const [{ data: videoRows }, { data: viewRows }, { data: cleanerRows }] = await Promise.all([
       supabase
         .from('training_videos')
         .select('id, title, blurb, section, position, duration_seconds, storage_path, file_name, file_size')
@@ -67,7 +68,7 @@ export default function AdminTraining() {
       supabase.from('training_video_views').select('video_id, completed_at'),
       supabase
         .from('profiles')
-        .select('id', { count: 'exact', head: true })
+        .select('id')
         .eq('role', 'cleaner')
         .eq('active', true),
     ]);
@@ -81,7 +82,7 @@ export default function AdminTraining() {
 
     setVideos(videoRows || []);
     setViewsByVideo(tally);
-    setCleanerCount(count || 0);
+    setCleanerCount(withoutTestAccounts(cleanerRows).length);
     setLoading(false);
   };
 

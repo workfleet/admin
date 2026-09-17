@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LifeBuoy, Clock } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
+import { withoutTestAccounts } from '../../../lib/testAccounts';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
 import { useConfirm } from '../../components/ConfirmProvider';
@@ -70,7 +71,7 @@ export default function AdminCover() {
     setOffers(offerRows || []);
     setJobs(jobRows || []);
     setAssignments(assignmentRows || []);
-    setCleaners(cleanerRows || []);
+    setCleaners(withoutTestAccounts(cleanerRows));
     setLoading(false);
   };
 

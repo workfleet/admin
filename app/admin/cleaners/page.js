@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
+import { withoutTestAccounts } from '../../../lib/testAccounts';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { flattenPrivate } from '../../../lib/profilePrivate';
 import { missingEssentials } from '../../../lib/staffDetails';
@@ -105,7 +106,7 @@ export default function AdminCleaners() {
     const byId = {};
     (detailsData || []).forEach((d) => { byId[d.profile_id] = d; });
 
-    setCleaners((cleanersData || []).map(flattenPrivate));
+    setCleaners(withoutTestAccounts(cleanersData).map(flattenPrivate));
     setJobs(assignmentsData || []);
     setTimeOffRequests(timeOffData || []);
     setDetailsById(byId);

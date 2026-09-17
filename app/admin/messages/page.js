@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
+import { withoutTestAccounts } from '../../../lib/testAccounts';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
 import BackButton from '../../components/BackButton';
@@ -176,7 +177,7 @@ export default function AdminMessages() {
     setShowDirectory(true);
     if (directory === null) {
       const { data } = await supabase.from('profiles').select('id, full_name, role').neq('id', myId).in('role', ['admin', 'cleaner']);
-      setDirectory(data || []);
+      setDirectory(withoutTestAccounts(data));
     }
   };
 

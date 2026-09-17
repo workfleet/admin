@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FileText, Download, Trash2 } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
+import { withoutTestAccounts } from '../../../lib/testAccounts';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
@@ -61,7 +62,7 @@ export default function AdminDocuments() {
 
     setDocuments(docs || []);
     setRecipientsByDoc(byDoc);
-    setCleaners(cleanerRows || []);
+    setCleaners(withoutTestAccounts(cleanerRows));
     setLoading(false);
   };
 

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '../../../../lib/supabaseAdmin';
+import { withoutTestAccounts } from '../../../../lib/testAccounts';
 import { sendPushToSubscriptions } from '../../../../lib/webPush';
 import {
   DEFAULT_PAYROLL_SETTINGS,
@@ -93,7 +94,7 @@ async function runReminder(request) {
 
   const { data: active } = await supabaseAdmin
     .from('profiles').select('id').in('id', cleanerIds).eq('active', true).eq('role', 'cleaner');
-  const recipients = (active || []).map((p) => p.id);
+  const recipients = withoutTestAccounts(active).map((p) => p.id);
 
   const label = periodLabel(period, { withYear: false });
   const message = `Payroll for ${label} closes tomorrow - check My Hours and tell the office today if a shift is missing.`;

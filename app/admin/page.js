@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ClipboardList, Users, Inbox, Clock, UserX, ChevronDown } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
+import { withoutTestAccounts } from '../../lib/testAccounts';
 import { getSessionWithRetry } from '../../lib/authGate';
 import { getWorkAnniversaryYears } from '../../lib/workAnniversary';
 import { needsReorder } from '../../lib/inventory';
@@ -343,13 +344,13 @@ export default function AdminDashboard() {
     const workingIds = new Set((openCheckins || []).map((c) => c.cleaner_id));
     const holidayIds = new Set((todaysTimeOff || []).map((t) => t.cleaner_id));
     const working = [], holiday = [], off = [];
-    (activeCleaners || []).forEach((c) => {
+    withoutTestAccounts(activeCleaners).forEach((c) => {
       const name = c.full_name || 'Unknown';
       if (workingIds.has(c.id)) working.push(name);
       else if (holidayIds.has(c.id)) holiday.push(name);
       else off.push(name);
     });
-    setStaffGlance({ working, holiday, off, total: (activeCleaners || []).length });
+    setStaffGlance({ working, holiday, off, total: withoutTestAccounts(activeCleaners).length });
 
     setOnSiteNow((openCheckins || []).map((c) => ({
       id: c.cleaner_id,

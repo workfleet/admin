@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Download } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
+import { withoutTestAccounts } from '../../../lib/testAccounts';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { toCSV, downloadCSV } from '../../../lib/csv';
 import { privateOf } from '../../../lib/profilePrivate';
@@ -78,7 +79,7 @@ async function loadStaff() {
       { key: 'joined', label: 'Joined' },
       { key: 'holiday_adjustment', label: 'Holiday Adjustment (h)' },
     ],
-    rows: (data || []).map((p) => ({
+    rows: withoutTestAccounts(data).map((p) => ({
       name: p.full_name || 'Unknown', role: p.role, active: p.active ? 'Yes' : 'No',
       joined: new Date(p.created_at).toLocaleDateString(), holiday_adjustment: privateOf(p)?.holiday_adjustment_hours ?? 0,
     })),

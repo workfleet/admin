@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { KeyRound, Undo2, Archive, History } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
+import { withoutTestAccounts } from '../../../lib/testAccounts';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
@@ -69,7 +70,7 @@ export default function AdminKeys() {
     setKeys(keyRows || []);
     setHoldings(holdingRows || []);
     setProperties(propertyRows || []);
-    setStaff(staffRows || []);
+    setStaff(withoutTestAccounts(staffRows));
     setLoading(false);
   };
 

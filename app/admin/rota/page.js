@@ -4,6 +4,7 @@ import { Fragment, useEffect, useRef, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../../../lib/supabaseClient';
+import { withoutTestAccounts } from '../../../lib/testAccounts';
 import { claimFor, describeClockRecord, indexClaims } from '../../../lib/clockIn';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
@@ -605,7 +606,7 @@ export default function AdminRota() {
     const { data: templatesData } = await supabase
       .from('job_templates').select('id, name, job_template_items(id, description, sort_order)').order('name');
 
-    setCleaners(cleanersData || []);
+    setCleaners(withoutTestAccounts(cleanersData));
     setClients(clientsData || []);
     setProperties(propertiesData || []);
     setTemplates((templatesData || []).map((t) => ({
