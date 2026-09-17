@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { latestUpdate, stockLastUpdatedLine } from '../lib/inventory';
+import { latestUpdate, stockLastUpdatedLine, loadProducts, PRODUCT_AUDIT_FIELDS } from '../lib/inventory';
 
 describe('latestUpdate', () => {
   it('returns null when no product carries a timestamp', () => {
@@ -45,5 +45,57 @@ describe('stockLastUpdatedLine', () => {
 
   it('still gives the time when the updater is unknown', () => {
     expect(stockLastUpdatedLine([{ updated_at: '2026-01-05T08:30:00Z' }])).toMatch(/^Stock last updated 5 Jan 2026, 08:30$/);
+  });
+});
+
+describe('loadProducts', () => {
+  const fakeClient = (responses) => {
+    const calls = [];
+    return {
+      calls,
+      from: () => ({
+        select: (fields) => ({
+          order: async () => {
+            calls.push(fields);
+            return responses.shift();
+          },
+        }),
+      }),
+    };
+  };
+
+  it('returns the audited rows when the database has the columns', async () => {
+    const rows = [{ id: 'a', updated_at: '2026-09-17T15:02:00Z' }];
+    const client = fakeClient([{ data: rows, error: null }]);
+    const result = await loadProducts(client, 'id, name');
+    expect(result).toEqual({ data: rows, error: null, auditAvailable: true });
+    expect(client.calls).toEqual(['id, name, ' + PRODUCT_AUDIT_FIELDS]);
+  });
+
+  it('falls back to the bare columns when the migration has not been applied', async () => {
+    const rows = [{ id: 'a', name: 'Bleach' }];
+    const client = fakeClient([
+      { data: null, error: { code: 'PGRST200', message: 'Could not find a relationship' } },
+      { data: rows, error: null },
+    ]);
+    const result = await loadProducts(client, 'id, name');
+    expect(result).toEqual({ data: rows, error: null, auditAvailable: false });
+    expect(client.calls).toEqual(['id, name, ' + PRODUCT_AUDIT_FIELDS, 'id, name']);
+  });
+
+  it('treats an unknown column the same way', async () => {
+    const client = fakeClient([
+      { data: null, error: { code: '42703', message: 'column products.updated_at does not exist' } },
+      { data: [], error: null },
+    ]);
+    expect((await loadProducts(client, 'id')).auditAvailable).toBe(false);
+  });
+
+  it('reports any other error instead of hiding it behind an empty list', async () => {
+    const error = { code: '42501', message: 'permission denied' };
+    const client = fakeClient([{ data: null, error }]);
+    const result = await loadProducts(client, 'id');
+    expect(result.error).toBe(error);
+    expect(client.calls).toHaveLength(1);
   });
 });

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
 import { supabaseAdmin } from '../../../../../lib/supabaseAdmin';
-import { needsReorder, stockLastUpdatedLine } from '../../../../../lib/inventory';
+import { needsReorder, stockLastUpdatedLine, loadProducts } from '../../../../../lib/inventory';
 
 export const runtime = 'nodejs';
 
@@ -22,10 +22,8 @@ export async function GET(request) {
   const user = await requireStaff(request);
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const { data: products } = await supabaseAdmin
-    .from('products')
-    .select('name, stock_level, reorder_threshold, location, supplier, unit_price, updated_at, updater:profiles!products_updated_by_fkey(full_name)')
-    .order('name');
+  const { data: products, error } = await loadProducts(supabaseAdmin, 'name, stock_level, reorder_threshold, location, supplier, unit_price');
+  if (error) return NextResponse.json({ error: 'products_unavailable' }, { status: 502 });
 
   const lowStock = (products || []).filter(needsReorder);
   const lastUpdated = stockLastUpdatedLine(products);

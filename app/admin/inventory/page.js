@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Plus, Minus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
-import { needsReorder, latestUpdate } from '../../../lib/inventory';
+import { needsReorder, latestUpdate, loadProducts, PRODUCT_AUDIT_FIELDS } from '../../../lib/inventory';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
 import BackButton from '../../components/BackButton';
@@ -18,7 +18,12 @@ function formatQty(n) {
 // changed it. The updater embed is hinted with the foreign key by name, as
 // the Documents page had to be: a bare profiles(full_name) is refused as
 // soon as PostgREST can see more than one route from a table to profiles.
-const PRODUCT_FIELDS = 'id, name, stock_level, reorder_threshold, location, supplier, unit_price, updated_at, updater:profiles!products_updated_by_fkey(full_name)';
+//
+// The audit columns are asked for separately so that a database that has
+// not had migration 0100 run against it still returns the list - the page
+// went blank on the live project for exactly that reason on 2026-09-17.
+const PRODUCT_BASE_FIELDS = 'id, name, stock_level, reorder_threshold, location, supplier, unit_price';
+const PRODUCT_FIELDS = `${PRODUCT_BASE_FIELDS}, ${PRODUCT_AUDIT_FIELDS}`;
 
 // "3 Sep, 14:10" - the year is only spelt out when it is not this one.
 function formatWhen(value) {
@@ -56,6 +61,7 @@ export default function AdminInventory() {
   const [shoppingListOpen, setShoppingListOpen] = useState(false);
   const [draft, setDraft] = useState({});
   const [saving, setSaving] = useState(false);
+  const [auditAvailable, setAuditAvailable] = useState(true);
 
   useEffect(() => {
     load();
@@ -65,11 +71,10 @@ export default function AdminInventory() {
     const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
-    const { data } = await supabase
-      .from('products')
-      .select(PRODUCT_FIELDS)
-      .order('name');
-    setProducts(data || []);
+    const { data, error, auditAvailable: hasAudit } = await loadProducts(supabase, PRODUCT_BASE_FIELDS);
+    if (error) toast.error('Could not load the inventory.');
+    setProducts(data);
+    setAuditAvailable(hasAudit);
     setLoading(false);
   };
 
@@ -96,8 +101,9 @@ export default function AdminInventory() {
     if (entries.length === 0) return;
 
     setSaving(true);
+    const fields = auditAvailable ? PRODUCT_FIELDS : PRODUCT_BASE_FIELDS;
     const results = await Promise.all(entries.map(([id, level]) =>
-      supabase.from('products').update({ stock_level: level }).eq('id', id).select(PRODUCT_FIELDS).single()
+      supabase.from('products').update({ stock_level: level }).eq('id', id).select(fields).single()
     ));
     setSaving(false);
 
@@ -140,7 +146,7 @@ export default function AdminInventory() {
         supplier: newSupplier.trim() || null,
         unit_price: newUnitPrice === '' ? null : Number(newUnitPrice),
       })
-      .select(PRODUCT_FIELDS)
+      .select(auditAvailable ? PRODUCT_FIELDS : PRODUCT_BASE_FIELDS)
       .single();
 
     if (error) { toast.error('Could not add product - it may already exist.'); return; }
@@ -273,6 +279,12 @@ export default function AdminInventory() {
             </div>
           </form>
         </div>
+      )}
+
+      {!auditAvailable && (
+        <p className="empty-state" title="Run supabase/migrations/0100_products_last_updated.sql in the Supabase SQL Editor">
+          Who last updated the stock is not being recorded yet - the database needs migration 0100.
+        </p>
       )}
 
       {products.length === 0 && <p className="empty-state">No products tracked yet - add one to get started.</p>}
