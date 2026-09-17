@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, HeadingLevel, ShadingType } from 'docx';
 import { supabaseAdmin } from '../../../../../lib/supabaseAdmin';
-import { needsReorder } from '../../../../../lib/inventory';
+import { needsReorder, stockLastUpdatedLine } from '../../../../../lib/inventory';
 import { COMPANY } from '../../../../../lib/companyBranding';
 
 export const runtime = 'nodejs';
@@ -37,10 +37,11 @@ export async function GET(request) {
 
   const { data: products } = await supabaseAdmin
     .from('products')
-    .select('name, stock_level, reorder_threshold, location, supplier')
+    .select('name, stock_level, reorder_threshold, location, supplier, updated_at, updater:profiles!products_updated_by_fkey(full_name)')
     .order('name');
 
   const lowStock = (products || []).filter(needsReorder);
+  const lastUpdated = stockLastUpdatedLine(products);
   const widths = [3600, 1600, 1600, 2200, 1600];
 
   const rows = [
@@ -65,7 +66,8 @@ export async function GET(request) {
       children: [
         new Paragraph({ children: [new TextRun({ text: COMPANY.name, bold: true, size: 28, color: COMPANY.brandColor.replace('#', '') })], spacing: { after: 40 } }),
         new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun({ text: 'Shopping List' })], spacing: { after: 40 } }),
-        new Paragraph({ children: [new TextRun({ text: new Date().toLocaleDateString('en-GB'), size: 18, color: '555555' })], spacing: { after: 240 } }),
+        new Paragraph({ children: [new TextRun({ text: new Date().toLocaleDateString('en-GB'), size: 18, color: '555555' })], spacing: { after: lastUpdated ? 40 : 240 } }),
+        ...(lastUpdated ? [new Paragraph({ children: [new TextRun({ text: lastUpdated, size: 18, color: '555555' })], spacing: { after: 240 } })] : []),
         lowStock.length === 0
           ? new Paragraph({ children: [new TextRun({ text: 'Nothing needs reordering right now.' })] })
           : new Table({ width: { size: 10600, type: WidthType.DXA }, rows }),

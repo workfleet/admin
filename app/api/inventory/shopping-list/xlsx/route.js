@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
 import { supabaseAdmin } from '../../../../../lib/supabaseAdmin';
-import { needsReorder } from '../../../../../lib/inventory';
+import { needsReorder, stockLastUpdatedLine } from '../../../../../lib/inventory';
 
 export const runtime = 'nodejs';
 
@@ -24,10 +24,11 @@ export async function GET(request) {
 
   const { data: products } = await supabaseAdmin
     .from('products')
-    .select('name, stock_level, reorder_threshold, location, supplier, unit_price')
+    .select('name, stock_level, reorder_threshold, location, supplier, unit_price, updated_at, updater:profiles!products_updated_by_fkey(full_name)')
     .order('name');
 
   const lowStock = (products || []).filter(needsReorder);
+  const lastUpdated = stockLastUpdatedLine(products);
 
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Shopping List');
@@ -41,9 +42,6 @@ export async function GET(request) {
     { header: 'Unit Price', key: 'unit_price', width: 12 },
   ];
 
-  sheet.getRow(1).font = { bold: true };
-  sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0FDFD' } };
-
   lowStock.forEach((p) => {
     sheet.addRow({
       name: p.name,
@@ -54,6 +52,18 @@ export async function GET(request) {
       unit_price: p.unit_price != null ? Number(p.unit_price) : '',
     });
   });
+
+  // The count behind the list sits above it as a title, with a blank row
+  // between, rather than as a trailing row that a sort would shuffle in
+  // with the products.
+  if (lastUpdated) {
+    sheet.spliceRows(1, 0, [lastUpdated], []);
+    sheet.mergeCells(1, 1, 1, sheet.columns.length);
+    sheet.getCell(1, 1).font = { italic: true, color: { argb: 'FF555555' } };
+  }
+  const headerRow = sheet.getRow(lastUpdated ? 3 : 1);
+  headerRow.font = { bold: true };
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0FDFD' } };
 
   sheet.getColumn('unit_price').numFmt = '£#,##0.00';
 

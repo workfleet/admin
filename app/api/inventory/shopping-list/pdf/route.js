@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Document, Page, View, Text, StyleSheet, renderToBuffer } from '@react-pdf/renderer';
 import { supabaseAdmin } from '../../../../../lib/supabaseAdmin';
-import { needsReorder } from '../../../../../lib/inventory';
+import { needsReorder, stockLastUpdatedLine } from '../../../../../lib/inventory';
 import { COMPANY } from '../../../../../lib/companyBranding';
 
 // @react-pdf/renderer needs real Node APIs (fs, fontkit) - not the edge runtime.
@@ -24,7 +24,8 @@ const styles = StyleSheet.create({
   page: { padding: 40, fontSize: 10, fontFamily: 'Helvetica', color: '#1e2526' },
   companyName: { fontSize: 16, fontWeight: 700, color: COMPANY.brandColor, marginBottom: 2 },
   title: { fontSize: 20, fontWeight: 700, marginTop: 12, marginBottom: 4 },
-  subtitle: { fontSize: 10, color: '#555', marginBottom: 20 },
+  meta: { marginBottom: 20 },
+  subtitle: { fontSize: 10, color: '#555', marginBottom: 2 },
   tableHeader: { flexDirection: 'row', backgroundColor: '#f0fdfd', paddingVertical: 6, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
   tableRow: { flexDirection: 'row', paddingVertical: 6, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   headerCell: { fontSize: 9, fontWeight: 700, color: '#555', textTransform: 'uppercase' },
@@ -36,13 +37,16 @@ const styles = StyleSheet.create({
   empty: { fontSize: 11, color: '#555', marginTop: 20 },
 });
 
-function ShoppingListPdf({ items }) {
+function ShoppingListPdf({ items, lastUpdated }) {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
         <Text style={styles.companyName}>{COMPANY.name}</Text>
         <Text style={styles.title}>Shopping List</Text>
-        <Text style={styles.subtitle}>{new Date().toLocaleDateString('en-GB')}</Text>
+        <View style={styles.meta}>
+          <Text style={styles.subtitle}>{new Date().toLocaleDateString('en-GB')}</Text>
+          {lastUpdated && <Text style={styles.subtitle}>{lastUpdated}</Text>}
+        </View>
 
         {items.length === 0 ? (
           <Text style={styles.empty}>Nothing needs reordering right now.</Text>
@@ -77,12 +81,13 @@ export async function GET(request) {
 
   const { data: products } = await supabaseAdmin
     .from('products')
-    .select('name, stock_level, reorder_threshold, location, supplier')
+    .select('name, stock_level, reorder_threshold, location, supplier, updated_at, updater:profiles!products_updated_by_fkey(full_name)')
     .order('name');
 
   const lowStock = (products || []).filter(needsReorder);
+  const lastUpdated = stockLastUpdatedLine(products);
 
-  const buffer = await renderToBuffer(<ShoppingListPdf items={lowStock} />);
+  const buffer = await renderToBuffer(<ShoppingListPdf items={lowStock} lastUpdated={lastUpdated} />);
   const stamp = new Date().toISOString().slice(0, 10);
 
   return new NextResponse(buffer, {
