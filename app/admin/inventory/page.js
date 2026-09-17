@@ -5,13 +5,37 @@ import { useRouter } from 'next/navigation';
 import { Plus, Minus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
-import { needsReorder } from '../../../lib/inventory';
+import { needsReorder, latestUpdate } from '../../../lib/inventory';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
 import BackButton from '../../components/BackButton';
 
 function formatQty(n) {
   return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+}
+
+// Every read of a product asks for the same columns, including who last
+// changed it. The updater embed is hinted with the foreign key by name, as
+// the Documents page had to be: a bare profiles(full_name) is refused as
+// soon as PostgREST can see more than one route from a table to profiles.
+const PRODUCT_FIELDS = 'id, name, stock_level, reorder_threshold, location, supplier, unit_price, updated_at, updater:profiles!products_updated_by_fkey(full_name)';
+
+// "3 Sep, 14:10" - the year is only spelt out when it is not this one.
+function formatWhen(value) {
+  const d = new Date(value);
+  const thisYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleString(undefined, {
+    day: 'numeric', month: 'short', ...(thisYear ? {} : { year: 'numeric' }), hour: '2-digit', minute: '2-digit',
+  });
+}
+
+// "3 Sep, 14:10 by Jess Kidwell". The name is left off when the row was
+// written by the service role, by someone since removed, or by a profile
+// this viewer is not allowed to read - the time still stands.
+function describeUpdate(product) {
+  if (!product?.updated_at) return '';
+  const who = product.updater?.full_name;
+  return `${formatWhen(product.updated_at)}${who ? ` by ${who}` : ''}`;
 }
 
 export default function AdminInventory() {
@@ -43,7 +67,7 @@ export default function AdminInventory() {
 
     const { data } = await supabase
       .from('products')
-      .select('id, name, stock_level, reorder_threshold, location, supplier, unit_price')
+      .select(PRODUCT_FIELDS)
       .order('name');
     setProducts(data || []);
     setLoading(false);
@@ -73,7 +97,7 @@ export default function AdminInventory() {
 
     setSaving(true);
     const results = await Promise.all(entries.map(([id, level]) =>
-      supabase.from('products').update({ stock_level: level }).eq('id', id)
+      supabase.from('products').update({ stock_level: level }).eq('id', id).select(PRODUCT_FIELDS).single()
     ));
     setSaving(false);
 
@@ -85,7 +109,10 @@ export default function AdminInventory() {
       return;
     }
 
-    setProducts((prev) => prev.map((p) => (p.id in draft ? { ...p, stock_level: draft[p.id] } : p)));
+    // Each row comes back stamped with when it was saved and by whom, so the
+    // list can say so without another round trip.
+    const savedById = Object.fromEntries(results.map((r) => [r.data.id, r.data]));
+    setProducts((prev) => prev.map((p) => savedById[p.id] ?? p));
     setDraft({});
     toast.success(`Stock saved for ${entries.length} product${entries.length === 1 ? '' : 's'}.`);
   };
@@ -113,7 +140,7 @@ export default function AdminInventory() {
         supplier: newSupplier.trim() || null,
         unit_price: newUnitPrice === '' ? null : Number(newUnitPrice),
       })
-      .select()
+      .select(PRODUCT_FIELDS)
       .single();
 
     if (error) { toast.error('Could not add product - it may already exist.'); return; }
@@ -180,6 +207,9 @@ export default function AdminInventory() {
   const shoppingListItems = viewProducts.filter(needsReorder);
   const lowStockCount = shoppingListItems.length;
   const unsavedCount = Object.keys(draft).length;
+  // Read off the saved rows, not the draft: a count nobody has pressed Save
+  // on has not updated anything yet.
+  const latest = latestUpdate(products);
 
   return (
     <div className="page-inner">
@@ -190,6 +220,11 @@ export default function AdminInventory() {
           <p className="page-subtitle">
             {products.length} product{products.length === 1 ? '' : 's'} tracked
             {lowStockCount > 0 && ` · ${lowStockCount} low on stock`}
+            {latest && (
+              <span style={{ display: 'block' }} title={new Date(latest.updated_at).toLocaleString()}>
+                Last updated {describeUpdate(latest)}
+              </span>
+            )}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -315,6 +350,11 @@ export default function AdminInventory() {
                   {p.supplier && ` · ${p.supplier}`}
                   {p.unit_price != null && ` · £${Number(p.unit_price).toFixed(2)}`}
                 </div>
+                {p.updated_at && (
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }} title={new Date(p.updated_at).toLocaleString()}>
+                    Updated {describeUpdate(p)}
+                  </div>
+                )}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <button type="button" className="btn-secondary" onClick={() => adjustStock(p, -1)} style={{ padding: '6px 8px' }} aria-label="Decrease" title="Take one off the stock count - not saved until you press Save stock">
