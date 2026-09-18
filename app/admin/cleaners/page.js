@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { withoutTestAccounts } from '../../../lib/testAccounts';
 import { getSessionWithRetry } from '../../../lib/authGate';
-import { flattenPrivate } from '../../../lib/profilePrivate';
+import { fetchEmploymentTypes, flattenPrivate, isSubcontractor } from '../../../lib/profilePrivate';
 import { missingEssentials } from '../../../lib/staffDetails';
 import { assignmentMinutes } from '../../../lib/hoursWorked';
 import { useConfirm } from '../../components/ConfirmProvider';
@@ -61,6 +61,9 @@ export default function AdminCleaners() {
   const [bankIds, setBankIds] = useState(() => new Set());
   const [loading, setLoading] = useState(true);
 
+  // Who is a subcontractor (0104), by id - read separately from the
+  // profiles embed so a database without the column still lists everyone.
+  const [employmentTypes, setEmploymentTypes] = useState({});
   const [editingAdjustmentId, setEditingAdjustmentId] = useState(null);
   const [adjustmentInput, setAdjustmentInput] = useState('');
 
@@ -107,6 +110,7 @@ export default function AdminCleaners() {
     (detailsData || []).forEach((d) => { byId[d.profile_id] = d; });
 
     setCleaners(withoutTestAccounts(cleanersData).map(flattenPrivate));
+    setEmploymentTypes(await fetchEmploymentTypes());
     setJobs(assignmentsData || []);
     setTimeOffRequests(timeOffData || []);
     setDetailsById(byId);
@@ -309,6 +313,7 @@ export default function AdminCleaners() {
           const used = holidayHoursUsed(c.id, timeOffRequests);
           const remaining = accrued - used;
           const isEditingAdjustment = editingAdjustmentId === c.id;
+          const subcontractor = isSubcontractor(employmentTypes[c.id]);
           const cJobCount = jobCount(c.id, jobs);
           const cDetails = detailsById[c.id] || null;
           const missing = c.active === false ? [] : missingEssentials(cDetails);
@@ -330,6 +335,9 @@ export default function AdminCleaners() {
                     {c.role === 'inventory' && (
                       <span className="badge scheduled" style={{ marginLeft: 8, verticalAlign: 'middle' }}>inventory only</span>
                     )}
+                    {subcontractor && (
+                      <span className="badge scheduled" style={{ marginLeft: 8, verticalAlign: 'middle' }} title="Invoices for their hours; no holiday accrues">subcontractor</span>
+                    )}
                   </h2>
                   <p className="job-time">
                     Joined {new Date(c.created_at).toLocaleDateString()}
@@ -346,6 +354,9 @@ export default function AdminCleaners() {
                       No bank details on file
                     </p>
                   )}
+                  {subcontractor ? (
+                    <p className="job-time" title="Change this on their page, under Holiday">Subcontractor · no holiday accrues</p>
+                  ) : (
                   <p className="job-time">
                     Holiday: {remaining.toFixed(1)} of {accrued.toFixed(1)} hours remaining
                     {' '}(12.07% of {worked.toFixed(1)}h worked
@@ -360,6 +371,7 @@ export default function AdminCleaners() {
                       {isEditingAdjustment ? 'Cancel' : 'Adjust'}
                     </button>
                   </p>
+                  )}
                   {c.active === false && <span className="badge missed">deactivated</span>}
                 </div>
                 <button

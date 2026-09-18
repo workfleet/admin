@@ -15,6 +15,7 @@ import BackButton from '../components/BackButton';
 import Logo from '../components/Logo';
 import { KIT_PRODUCTS } from '../../lib/kitProducts';
 import { HOLIDAY_ACCRUAL_RATE, assignedJob, fetchAssigneeCounts, hoursWorked, formatHours } from '../../lib/hoursWorked';
+import { fetchEmploymentTypes, isSubcontractor } from '../../lib/profilePrivate';
 import {
   greetingFor, firstNameOf, splitJobsForHome, hoursThisWeek, hoursLeftThisWeek,
   jobsCompletedThisMonth, daySummary, unreadMessageCount, unreadSince, ratingSummary,
@@ -70,6 +71,8 @@ export default function CleanerDashboard() {
   const [coverCounts, setCoverCounts] = useState({ mine: 0, available: 0 });
   const [coverSeed, setCoverSeed] = useState(null);
   const [feedback, setFeedback] = useState(null);
+  // A subcontractor (0104) accrues no holiday, so the tile goes.
+  const [subcontractor, setSubcontractor] = useState(false);
 
   const [requestType, setRequestType] = useState(null); // null | 'kit_topup' | 'issue'
   const [requestJobId, setRequestJobId] = useState('');
@@ -113,7 +116,11 @@ export default function CleanerDashboard() {
       .filter(Boolean)
       .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
 
-    const counts = await fetchAssigneeCounts(jobsData.map((j) => j.id));
+    const [counts, employmentTypes] = await Promise.all([
+      fetchAssigneeCounts(jobsData.map((j) => j.id)),
+      fetchEmploymentTypes(),
+    ]);
+    setSubcontractor(isSubcontractor(employmentTypes[session.user.id]));
 
     // Same sum as the rota's Time Off card: accrued plus any adjustment,
     // less what has been approved. Pending requests are not taken off here -
@@ -403,7 +410,7 @@ export default function CleanerDashboard() {
       {/* Three figures they'd otherwise go to Hours and Rota for. Same tiled
           icon style as the hours page so the two read as one app. Hours and
           jobs link to the hours page; holiday to the rota, where it's booked. */}
-      <div className="stat-row" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
+      <div className="stat-row" style={{ gridTemplateColumns: `repeat(${subcontractor ? 2 : 3}, minmax(0, 1fr))`, gap: 10 }}>
         <Link href="/cleaner/hours" className="stat-card stat-hours" style={{ padding: '12px 12px' }} title="Hours from completed jobs this week, Monday to Sunday">
           <div className="stat-card-top" style={{ marginBottom: 6 }}>
             <div className="stat-card-icon" style={{ width: 30, height: 30 }}><Clock size={16} /></div>
@@ -412,6 +419,7 @@ export default function CleanerDashboard() {
           <div className="stat-label">This week</div>
           <div className="stat-sublabel" style={{ fontSize: 12 }}>{weekLeft > 0 ? `${formatHours(weekLeft)} to go` : 'nothing more booked'}</div>
         </Link>
+        {!subcontractor && (
         <Link href="/cleaner/rota" className="stat-card" style={{ padding: '12px 12px' }} title="Holiday hours accrued and not yet taken - request time off on the rota">
           <div className="stat-card-top" style={{ marginBottom: 6 }}>
             <div className="stat-card-icon" style={{ width: 30, height: 30 }}><TreePalm size={16} /></div>
@@ -420,6 +428,7 @@ export default function CleanerDashboard() {
           <div className="stat-label">Holiday left</div>
           <div className="stat-sublabel" style={{ fontSize: 12 }}>request on rota</div>
         </Link>
+        )}
         <Link href="/cleaner/hours" className="stat-card stat-jobs" style={{ padding: '12px 12px' }} title="Jobs you've completed this calendar month">
           <div className="stat-card-top" style={{ marginBottom: 6 }}>
             <div className="stat-card-icon" style={{ width: 30, height: 30 }}><CalendarDays size={16} /></div>

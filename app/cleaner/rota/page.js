@@ -7,6 +7,7 @@ import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
 import { HOLIDAY_ACCRUAL_RATE, assignedJob, fetchAssigneeCounts, hoursWorked } from '../../../lib/hoursWorked';
+import { fetchEmploymentTypes, isSubcontractor } from '../../../lib/profilePrivate';
 import BackButton from '../../components/BackButton';
 
 function groupByDate(jobs) {
@@ -66,6 +67,9 @@ export default function CleanerRota() {
   const [assigneeCounts, setAssigneeCounts] = useState({});
   const [timeOff, setTimeOff] = useState([]);
   const [adjustmentHours, setAdjustmentHours] = useState(0);
+  // A subcontractor (0104) accrues no holiday: no balance is shown and the
+  // request form only offers 'unavailable'.
+  const [subcontractor, setSubcontractor] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const [showForm, setShowForm] = useState(false);
@@ -81,7 +85,7 @@ export default function CleanerRota() {
     const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
-    const [{ data: assignmentRows }, { data: timeOffData }, { data: profileData }] = await Promise.all([
+    const [{ data: assignmentRows }, { data: timeOffData }, { data: profileData }, employmentTypes] = await Promise.all([
       supabase
         .from('job_assignments')
         .select('paid_minutes, jobs(id, scheduled_at, status, duration_minutes, properties(address))')
@@ -91,6 +95,7 @@ export default function CleanerRota() {
         .select('id, type, start_date, end_date, hours, reason, status, admin_note, created_at')
         .order('start_date', { ascending: false }),
       supabase.from('profile_private').select('holiday_adjustment_hours').eq('profile_id', session.user.id).maybeSingle(),
+      fetchEmploymentTypes(),
     ]);
 
     const jobsData = (assignmentRows || [])
@@ -113,6 +118,7 @@ export default function CleanerRota() {
     setAssigneeCounts(counts);
     setTimeOff(timeOffData || []);
     setAdjustmentHours(profileData?.holiday_adjustment_hours ?? 0);
+    setSubcontractor(isSubcontractor(employmentTypes[session.user.id]));
     setLoading(false);
   };
 
@@ -160,7 +166,7 @@ export default function CleanerRota() {
 
     if (data) {
       setTimeOff((prev) => [data, ...prev]);
-      setForm(EMPTY_FORM);
+      setForm(emptyForm());
       setShowForm(false);
 
       const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', session.user.id).single();
@@ -176,6 +182,8 @@ export default function CleanerRota() {
   };
 
   if (loading) return <div className="container">Loading...</div>;
+
+  const emptyForm = () => ({ ...EMPTY_FORM, type: subcontractor ? 'unavailable' : 'holiday' });
 
   const upcoming = jobs.filter((j) => j.status === 'scheduled' || j.status === 'in_progress');
   const missed = jobs.filter((j) => j.status === 'missed');
@@ -199,19 +207,27 @@ export default function CleanerRota() {
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 style={{ margin: 0 }}>Time Off</h2>
-          <button className="btn-secondary" onClick={() => { setShowForm((s) => !s); setForm(EMPTY_FORM); setFormError(''); }} title="Request holiday, or tell the office you are unavailable on certain days">
+          <button className="btn-secondary" onClick={() => { setShowForm((s) => !s); setForm(emptyForm()); setFormError(''); }} title="Request holiday, or tell the office you are unavailable on certain days">
             {showForm ? 'Cancel' : '+ Request'}
           </button>
         </div>
 
-        <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>
-          {available.toFixed(1)} hours available to request
-        </p>
-        <p style={{ fontSize: 12, color: 'var(--muted)', margin: '2px 0 0' }}>
-          {accrued.toFixed(1)}h accrued at 12.07% of hours worked ({worked.toFixed(1)}h so far{adjustmentHours ? `, plus a ${adjustmentHours}h adjustment` : ''})
-          {used > 0 && ` · ${used.toFixed(1)}h taken`}
-          {pending > 0 && ` · ${pending.toFixed(1)}h pending approval`}
-        </p>
+        {subcontractor ? (
+          <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>
+            You're set up as a subcontractor, so no holiday is tracked here. Use the form to tell the office when you're unavailable.
+          </p>
+        ) : (
+          <>
+            <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>
+              {available.toFixed(1)} hours available to request
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--muted)', margin: '2px 0 0' }}>
+              {accrued.toFixed(1)}h accrued at 12.07% of hours worked ({worked.toFixed(1)}h so far{adjustmentHours ? `, plus a ${adjustmentHours}h adjustment` : ''})
+              {used > 0 && ` · ${used.toFixed(1)}h taken`}
+              {pending > 0 && ` · ${pending.toFixed(1)}h pending approval`}
+            </p>
+          </>
+        )}
         <p style={{ fontSize: 12.5, margin: '6px 0 0' }}>
           <Link href="/cleaner/hours" style={{ color: 'var(--brand-link)', fontWeight: 600, textDecoration: 'none' }}>
             See all your hours, month by month →
@@ -227,7 +243,7 @@ export default function CleanerRota() {
             )}
             <label>Type</label>
             <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}>
-              <option value="holiday">Holiday</option>
+              {!subcontractor && <option value="holiday">Holiday</option>}
               <option value="unavailable">Unavailable</option>
             </select>
 

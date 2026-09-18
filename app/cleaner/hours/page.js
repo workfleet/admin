@@ -14,6 +14,7 @@ import {
   formatHours,
 } from '../../../lib/hoursWorked';
 import { unpaidMissedJobs } from '../../../lib/missedClockin';
+import { fetchEmploymentTypes, isSubcontractor } from '../../../lib/profilePrivate';
 import { periodLabel, monthLabelIfWhole, parseLocalDate } from '../../../lib/payroll';
 import BackButton from '../../components/BackButton';
 
@@ -112,6 +113,9 @@ export default function CleanerHours() {
   // to be visible rather than merely absent.
   const [missed, setMissed] = useState([]);
   const [payroll, setPayroll] = useState({ sent: [], pending: [] });
+  // A subcontractor (0104) accrues no holiday, so the line that says these
+  // hours build it up would be untrue for them.
+  const [subcontractor, setSubcontractor] = useState(false);
 
   useEffect(() => {
     load();
@@ -127,7 +131,11 @@ export default function CleanerHours() {
       .eq('cleaner_id', session.user.id);
 
     const jobs = (assignmentRows || []).map(assignedJob).filter(Boolean);
-    const assigneeCounts = await fetchAssigneeCounts(jobs.map((j) => j.id));
+    const [assigneeCounts, employmentTypes] = await Promise.all([
+      fetchAssigneeCounts(jobs.map((j) => j.id)),
+      fetchEmploymentTypes(),
+    ]);
+    setSubcontractor(isSubcontractor(employmentTypes[session.user.id]));
 
     const completed = jobs.filter((j) => j.status === 'completed');
     const grouped = groupByMonth(completed, assigneeCounts);
@@ -233,6 +241,7 @@ export default function CleanerHours() {
         </div>
       </div>
 
+      {!subcontractor && (
       <div className="card" style={{ background: 'var(--wf-ash)' }}>
         <p style={{ fontSize: 13, margin: 0 }}>
           These hours build up your holiday at {(HOLIDAY_ACCRUAL_RATE * 100).toFixed(2)}% —
@@ -244,6 +253,7 @@ export default function CleanerHours() {
           </Link>
         </p>
       </div>
+      )}
 
       {/* What the office has actually sent. Once a period is here it is
           locked: a change to it does not alter the figure shown, it arrives

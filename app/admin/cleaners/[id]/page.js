@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '../../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../../lib/authGate';
-import { flattenPrivate } from '../../../../lib/profilePrivate';
+import { fetchEmploymentTypes, flattenPrivate, isSubcontractor } from '../../../../lib/profilePrivate';
 import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 import { claimFor, describeClockRecord, indexClaims, lateMinutes } from '../../../../lib/clockIn';
@@ -62,6 +62,10 @@ export default function CleanerProfile() {
   const [submission, setSubmission] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Employee or subcontractor (0104). Read separately from the profiles
+  // embed so a database without the column still opens the page.
+  const [employmentType, setEmploymentType] = useState('employee');
+  const [savingEmployment, setSavingEmployment] = useState(false);
   const [editingAdjustment, setEditingAdjustment] = useState(false);
   const [adjustmentInput, setAdjustmentInput] = useState('');
 
@@ -135,6 +139,7 @@ export default function CleanerProfile() {
       .then((res) => ({ ...res, data: flattenPrivate(res.data) }));
 
     if (!cleanerData) { router.push('/admin/cleaners'); return; }
+    fetchEmploymentTypes().then((types) => setEmploymentType(types[id] || 'employee'));
 
     fetch(`/api/admin/cleaners/${id}/account`, { headers: { Authorization: `Bearer ${session.access_token}` } })
       .then((res) => (res.ok ? res.json() : null))
@@ -573,6 +578,33 @@ export default function CleanerProfile() {
     toast.error("Couldn't remove this account. Please try again.");
   };
 
+  // Switching someone to subcontractor hides their balance and turns off
+  // holiday requests on their rota; their hours and pay are untouched.
+  // Switching back gives them holiday on every hour they have worked here,
+  // because the balance is always worked out from the whole history.
+  const setSubcontractorStatus = async (subcontractor) => {
+    const name = cleaner.full_name || 'this person';
+    const ok = await confirm(
+      subcontractor
+        ? `Mark ${name} as a subcontractor? Holiday stops accruing and the holiday balance disappears from their rota. Their hours and pay are not affected.`
+        : `Mark ${name} as an employee? Holiday accrues on all the hours they have worked here, so a balance appears on their rota again.`,
+      { title: subcontractor ? 'Mark as subcontractor' : 'Mark as employee', confirmLabel: 'Confirm' }
+    );
+    if (!ok) return;
+    const next = subcontractor ? 'subcontractor' : 'employee';
+    setSavingEmployment(true);
+    const { error } = await supabase
+      .from('profile_private').update({ employment_type: next, updated_at: new Date().toISOString() }).eq('profile_id', id);
+    setSavingEmployment(false);
+    if (error) {
+      toast.error("Couldn't save that. If migration 0104 has not been run on the database yet, run it first.");
+      return;
+    }
+    setEmploymentType(next);
+    setEditingAdjustment(false);
+    toast.success(subcontractor ? `${name} is now a subcontractor.` : `${name} is now an employee.`);
+  };
+
   const startEditAdjustment = () => {
     setAdjustmentInput(String(cleaner.holiday_adjustment_hours));
     setEditingAdjustment(true);
@@ -965,16 +997,35 @@ export default function CleanerProfile() {
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="page-header-row" style={{ marginBottom: editingAdjustment ? 12 : 0 }}>
           <h2 style={{ margin: 0 }}>Holiday</h2>
-          <button className="btn-secondary" onClick={() => (editingAdjustment ? setEditingAdjustment(false) : startEditAdjustment())} title="Manually adjust their holiday balance up or down">
-            {editingAdjustment ? 'Cancel' : 'Adjust'}
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {isSubcontractor(employmentType) ? (
+              <button className="btn-secondary" onClick={() => setSubcontractorStatus(false)} disabled={savingEmployment} title="Put them back on holiday accrual">
+                Mark as employee
+              </button>
+            ) : (
+              <>
+                <button className="btn-secondary" onClick={() => setSubcontractorStatus(true)} disabled={savingEmployment} title="Subcontractors invoice for their hours and accrue no holiday - this hides the balance and turns off holiday requests on their rota">
+                  Mark as subcontractor
+                </button>
+                <button className="btn-secondary" onClick={() => (editingAdjustment ? setEditingAdjustment(false) : startEditAdjustment())} title="Manually adjust their holiday balance up or down">
+                  {editingAdjustment ? 'Cancel' : 'Adjust'}
+                </button>
+              </>
+            )}
+          </div>
         </div>
+        {isSubcontractor(employmentType) ? (
+          <p className="job-time" style={{ marginTop: 8 }}>
+            Subcontractor - no holiday accrues, and holiday requests are turned off on their rota. They can still tell the office when they are unavailable.
+          </p>
+        ) : (
         <p className="job-time" style={{ marginTop: editingAdjustment ? 0 : 8 }}>
           {remaining.toFixed(1)} of {accrued.toFixed(1)} hours remaining
           {' '}(12.07% of {worked.toFixed(1)}h worked
           {cleaner.holiday_adjustment_hours ? `, ${cleaner.holiday_adjustment_hours > 0 ? '+' : ''}${cleaner.holiday_adjustment_hours}h adjustment` : ''})
         </p>
-        {editingAdjustment && (
+        )}
+        {editingAdjustment && !isSubcontractor(employmentType) && (
           <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--hairline)', display: 'flex', gap: 8, alignItems: 'center' }}>
             <label style={{ margin: 0 }}>Manual adjustment (hours, +/-)</label>
             <input
