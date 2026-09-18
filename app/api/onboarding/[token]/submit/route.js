@@ -40,6 +40,9 @@ export async function POST(request, { params }) {
     password,
     email_confirm: true,
     user_metadata: { full_name: fullName },
+    // Read by handle_new_user() (0106): only an account the office made
+    // starts active. app_metadata cannot be set by a self-signup.
+    app_metadata: { created_by_office: true },
   });
 
   if (createUserError) {

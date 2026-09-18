@@ -4,9 +4,8 @@ import { supabaseAdmin } from '../../../lib/supabaseAdmin';
 import { sendPushToSubscriptions } from '../../../lib/webPush';
 import { rankCandidates, isGoodMatch, topReason } from '../../../lib/coverRanking';
 
-// Any signed-in user may trigger a notification (a client sending a
-// message needs to notify admin), but we still require a valid session
-// so this can't be used as an open email-relay.
+// A valid session is the first gate; what that session may send is
+// decided per type in POST below (0106), so this is not an open relay.
 async function requireUser(request) {
   const authHeader = request.headers.get('authorization') || '';
   const token = authHeader.replace('Bearer ', '');
@@ -71,6 +70,20 @@ async function pushToUserIds(userIds, payload) {
     await supabaseAdmin.from('push_subscriptions').delete().in('endpoint', gone);
   }
 }
+
+// Sent by the office about someone: the recipient is named in the request,
+// so nobody but the office may send them.
+const OFFICE_ONLY_TYPES = new Set([
+  'shift_assigned', 'shift_rescheduled', 'request_resolved', 'admin_reply',
+  'missed_clockin_decided', 'time_off_decided', 'time_extension_decided',
+  'payroll_closed', 'emergency_alert_acknowledged', 'staff_invite',
+]);
+// Raised by a cleaner about themselves (the office may raise them too).
+const CLEANER_RAISED_TYPES = new Set([
+  'missed_clockin_claimed', 'short_shift_checkout', 'time_off_requested',
+  'time_extension_requested', 'emergency_alert', 'shift_cover_needed',
+  'shift_cover_filled', 'cleaner_arrived',
+]);
 
 const BELL_URL_BY_ROLE = {
   admin: '/admin/notifications',
@@ -264,6 +277,59 @@ export async function POST(request) {
 
   const payload = await request.json();
 
+  // Who may send what. Until 0106 every type below was reachable by any
+  // signed-in account: a client login could push "Emergency Alert" to every
+  // office phone with any name in it, or email another client as the
+  // company. The office may send anything. A cleaner may raise their own
+  // events, and they go out under the cleaner's own name, not whatever the
+  // request said. A client may only message the office, under their own
+  // client's name. Chat and the pending-push sweep are open to any login
+  // because their recipients are looked up, never taken from the request.
+  const { data: callerProfile } = await supabaseAdmin
+    .from('profiles').select('role, full_name, client_id').eq('id', user.id).single();
+  const role = callerProfile?.role || null;
+  const office = role === 'admin' || role === 'supervisor';
+  const forbidden = () => NextResponse.json({ error: 'forbidden' }, { status: 403 });
+
+  if (OFFICE_ONLY_TYPES.has(payload.type) && !office) return forbidden();
+  if (CLEANER_RAISED_TYPES.has(payload.type) && !office && role !== 'cleaner') return forbidden();
+  if (payload.type === 'client_message' && role !== 'client') return forbidden();
+
+  if (!office && CLEANER_RAISED_TYPES.has(payload.type)) {
+    payload.cleanerName = callerProfile?.full_name || 'A cleaner';
+  }
+  if (payload.type === 'client_message') {
+    const { data: clientRow } = callerProfile?.client_id
+      ? await supabaseAdmin.from('clients').select('name').eq('id', callerProfile.client_id).maybeSingle()
+      : { data: null };
+    payload.clientName = clientRow?.name || 'A client';
+  }
+  if (!office && payload.type === 'emergency_alert') {
+    // The button writes the alert row first; a push with no row behind it
+    // is not an emergency.
+    const { data: alert } = await supabaseAdmin
+      .from('emergency_alerts').select('id').eq('cleaner_id', user.id)
+      .gte('created_at', new Date(Date.now() - 2 * 60000).toISOString())
+      .limit(1).maybeSingle();
+    if (!alert) return forbidden();
+  }
+  if (!office && payload.type === 'shift_cover_needed') {
+    if (!payload.offerId) return forbidden();
+    const { data: offer } = await supabaseAdmin
+      .from('shift_offers').select('released_by').eq('id', payload.offerId).maybeSingle();
+    if (!offer || offer.released_by !== user.id) return forbidden();
+    payload.releasedByCleanerId = user.id;
+  }
+  if (!office && payload.type === 'shift_cover_filled') {
+    // Only the person who just took the shift may tell the releaser.
+    if (!payload.releasedByCleanerId) return forbidden();
+    const { data: offer } = await supabaseAdmin
+      .from('shift_offers').select('id')
+      .eq('filled_by', user.id).eq('released_by', payload.releasedByCleanerId)
+      .limit(1).maybeSingle();
+    if (!offer) return forbidden();
+  }
+
   // Nothing to say, just "push whatever is waiting". Called on a timer by
   // any open app (see PresenceIndicator) so trigger-written bell rows reach
   // phones without waiting for the next event.
@@ -423,21 +489,22 @@ export async function POST(request) {
       subject = 'New message from CrewConnect Cleaning';
       text = payload.body;
     } else if (payload.type === 'chat_message' || payload.type === 'direct_message') {
-      // Email only for a one-to-one message. A group post has already pushed
-      // and gone in the bell; emailing a whole room for every line would get
-      // the emails switched off. The recipient is looked up from the
-      // conversation, not trusted from the payload.
-      if (!payload.toProfileId && payload.conversationId) {
-        const { data: others } = await supabaseAdmin
-          .from('conversation_participants')
-          .select('profile_id, conversations!inner(type)')
-          .eq('conversation_id', payload.conversationId)
-          .neq('profile_id', user.id);
-        const direct = others?.length === 1 && others[0].conversations?.type === 'direct';
-        if (!direct) return NextResponse.json({ skipped: 'group_message' });
-        payload.toProfileId = others[0].profile_id;
-      }
-      const email = await emailForUserId(payload.toProfileId);
+      // Email only for a one-to-one message, and only to the other person
+      // in a conversation the sender is actually in. A group post has
+      // already pushed and gone in the bell; emailing a whole room for
+      // every line would get the emails switched off. The recipient is
+      // always looked up from the conversation; a recipient named in the
+      // request is ignored, so this cannot be pointed at any account.
+      if (!payload.conversationId) return NextResponse.json({ skipped: 'no_conversation' });
+      const { data: members } = await supabaseAdmin
+        .from('conversation_participants')
+        .select('profile_id, conversations!inner(type)')
+        .eq('conversation_id', payload.conversationId);
+      if (!(members || []).some((m) => m.profile_id === user.id)) return forbidden();
+      const others = (members || []).filter((m) => m.profile_id !== user.id);
+      const direct = others.length === 1 && others[0].conversations?.type === 'direct';
+      if (!direct) return NextResponse.json({ skipped: 'group_message' });
+      const email = await emailForUserId(others[0].profile_id);
       if (!email) return NextResponse.json({ skipped: 'no_email' });
       const { data: senderProfile } = await supabaseAdmin.from('profiles').select('full_name').eq('id', user.id).single();
       to = [email];
