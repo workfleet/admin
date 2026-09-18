@@ -13,6 +13,7 @@ import ShiftCoverCard, { fetchOpenOffers, fetchDeclined } from '../components/Sh
 import KeyHoldingsCard from '../components/KeyHoldingsCard';
 import BackButton from '../components/BackButton';
 import Logo from '../components/Logo';
+import { COMPANY, companyFromSettings } from '../../lib/companyBranding';
 import { KIT_PRODUCTS } from '../../lib/kitProducts';
 import { HOLIDAY_ACCRUAL_RATE, assignedJob, fetchAssigneeCounts, hoursWorked, formatHours } from '../../lib/hoursWorked';
 import { fetchEmploymentTypes, isSubcontractor } from '../../lib/profilePrivate';
@@ -70,6 +71,7 @@ export default function CleanerDashboard() {
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [coverCounts, setCoverCounts] = useState({ mine: 0, available: 0 });
   const [coverSeed, setCoverSeed] = useState(null);
+  const [companyName, setCompanyName] = useState(COMPANY.name);
   const [feedback, setFeedback] = useState(null);
   // A subcontractor (0104) accrues no holiday, so the tile goes.
   const [subcontractor, setSubcontractor] = useState(false);
@@ -145,7 +147,7 @@ export default function CleanerDashboard() {
 
     const [
       { data: requestsData }, { data: participantRows }, { data: ratingRows },
-      { data: offerRows }, { data: responseRows },
+      { data: offerRows }, { data: responseRows }, { data: settingsRow },
     ] = await Promise.all([
       supabase
         .from('staff_requests')
@@ -168,7 +170,10 @@ export default function CleanerDashboard() {
       // later and shoving the Open job button under someone's thumb.
       fetchOpenOffers(),
       fetchDeclined(session.user.id),
+      // The trading name the office set, so a rename never needs a deploy.
+      supabase.from('company_settings').select('trading_name').limit(1).maybeSingle(),
     ]);
+    setCompanyName(companyFromSettings(settingsRow).name);
 
     // Unread chat: only messages that could be newer than some
     // conversation's read mark - not the whole history. Which of those
@@ -274,10 +279,20 @@ export default function CleanerDashboard() {
     <div className="container">
       <BackButton />
       {anniversary && <WorkAnniversaryPopup name={anniversary.name} years={anniversary.years} />}
-      {/* The mark sits above the greeting, dark on the ash page like the
-          onboarding pages, and short of the fixed push-toggle top right. */}
+      {/* Whose app this is, then whose software: the cleaning company's
+          name on top, WorkFleet as the "powered by" credit beneath - the
+          same split as the quote documents. Kept short of the fixed
+          push-toggle top right. */}
       <div style={{ marginBottom: 18, paddingRight: 56 }}>
-        <Logo size={30} showWordmark />
+        <p style={{ fontFamily: 'var(--wf-display)', fontSize: 20, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.2, margin: 0 }}>
+          {companyName}
+        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 5 }}>
+          <span style={{ fontFamily: 'var(--wf-data)', fontSize: 10.5, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)' }}>
+            Powered by
+          </span>
+          <Logo size={20} showWordmark />
+        </div>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
         <div>
