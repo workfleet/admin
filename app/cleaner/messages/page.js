@@ -117,7 +117,11 @@ export default function CleanerMessages() {
   const openDirectory = async () => {
     setShowDirectory(true);
     if (directory === null) {
-      const { data } = await supabase.from('profiles').select('id, full_name, role').neq('id', myId).in('role', ['admin', 'cleaner']);
+      // Office staff only. A cleaner's Messages is theirs and the office's;
+      // the rest of the team are not listed for them to browse or pick. The
+      // office can still open a chat with anyone from its own Messages page,
+      // and a chat that already exists stays in the list below.
+      const { data } = await supabase.from('profiles').select('id, full_name, role').neq('id', myId).in('role', ['admin', 'supervisor']).eq('active', true).order('full_name');
       setDirectory(withoutTestAccounts(data));
     }
   };
@@ -189,7 +193,7 @@ export default function CleanerMessages() {
       <BackButton />
       <div className="page-header-row" style={{ marginBottom: 12 }}>
         <h1 style={{ margin: 0 }}>Chats</h1>
-        <button className="btn-secondary" onClick={() => (showDirectory ? setShowDirectory(false) : openDirectory())} title="Start a new conversation with someone on the team">
+        <button className="btn-secondary" onClick={() => (showDirectory ? setShowDirectory(false) : openDirectory())} title="Start a new conversation with the office">
           {showDirectory ? 'Cancel' : '+ New Chat'}
         </button>
       </div>
@@ -198,7 +202,7 @@ export default function CleanerMessages() {
         <div className="card" style={{ marginBottom: 12 }}>
           <h2>Start a chat with...</h2>
           {directory === null && <p className="empty-state">Loading...</p>}
-          {directory?.length === 0 && <p className="empty-state">No one else on the team yet.</p>}
+          {directory?.length === 0 && <p className="empty-state">No one in the office to message yet.</p>}
           {directory?.map((p) => (
             <div key={p.id} className="task-row" onClick={() => startChat(p.id)} style={{ cursor: 'pointer' }}>
               <span style={{ flex: 1 }}>{p.full_name || 'Unnamed'}</span>
@@ -208,7 +212,7 @@ export default function CleanerMessages() {
         </div>
       )}
 
-      {conversations.length === 0 && <p className="empty-state">No chats yet. Use + New Chat to message the office or someone on your team.</p>}
+      {conversations.length === 0 && <p className="empty-state">No chats yet. Use + New Chat to message the office.</p>}
 
       {conversations.map((c) => (
         <div key={c.id} className="card" onClick={() => openConversation(c.id)} style={{ cursor: 'pointer' }}>
