@@ -73,7 +73,7 @@ export default function ClientLayout({ children }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {/* Arrival and departure alerts reach the phone only once the
               client has enabled notifications here (0090). */}
-          <EnablePush iconColor="white" />
+          <EnablePush iconColor="white" describe="your cleaner arriving and finishing" />
           <button type="button" className="client-topbar-menu-btn" onClick={() => setDrawerOpen(true)} aria-label="Open menu" title="Open the menu">
             <Menu size={20} />
           </button>

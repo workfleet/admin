@@ -62,7 +62,7 @@ export default function CleanerLayout({ children }) {
     <div className="cleaner-shell">
       <PresenceIndicator />
       <div style={{ position: 'fixed', top: 12, right: 12, zIndex: 60, background: 'white', borderRadius: '50%', boxShadow: 'var(--shadow-md)' }}>
-        <EnablePush />
+        <EnablePush describe="shift updates and messages" />
       </div>
       <EmergencyButton />
       <InstallPrompt />
