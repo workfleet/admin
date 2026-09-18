@@ -3,21 +3,22 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { X, Clock, CalendarDays, TreePalm, ChevronRight, MapPin } from 'lucide-react';
+import { X, Clock, CalendarDays, TreePalm, ChevronRight, MapPin, MessageCircle, LifeBuoy, Star } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../lib/authGate';
 import { purgeOldNotifications } from '../../lib/notifications';
 import { getWorkAnniversaryYears } from '../../lib/workAnniversary';
 import WorkAnniversaryPopup from '../components/WorkAnniversaryPopup';
-import ShiftCoverCard from '../components/ShiftCoverCard';
+import ShiftCoverCard, { fetchOpenOffers, fetchDeclined } from '../components/ShiftCoverCard';
 import KeyHoldingsCard from '../components/KeyHoldingsCard';
 import BackButton from '../components/BackButton';
 import { KIT_PRODUCTS } from '../../lib/kitProducts';
 import { HOLIDAY_ACCRUAL_RATE, assignedJob, fetchAssigneeCounts, hoursWorked, formatHours } from '../../lib/hoursWorked';
 import {
   greetingFor, firstNameOf, splitJobsForHome, hoursThisWeek, hoursLeftThisWeek,
-  jobsCompletedThisMonth, daySummary,
+  jobsCompletedThisMonth, daySummary, unreadMessageCount, unreadSince, ratingSummary,
 } from '../../lib/homeSummary';
+import { liveOffers, splitOffers } from '../../lib/shiftOffers';
 
 function clock(value) {
   return new Date(value).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -26,6 +27,32 @@ function clock(value) {
 function statusWord(status) {
   return status.replace('_', ' ');
 }
+
+// Same amber, filled-or-outlined stars the client sees when they rate a
+// job, so the two sides of the same rating look the same.
+function Stars({ rating, size = 18 }) {
+  return (
+    <span role="img" style={{ display: 'inline-flex', gap: 2 }} aria-label={`${rating} out of 5 stars`}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Star key={n} size={size} fill={n <= rating ? '#f59e0b' : 'none'} color="#f59e0b" />
+      ))}
+    </span>
+  );
+}
+
+// A small link-shaped pill for the attention row under the greeting: the
+// time-sensitive things (unread chat, shifts up for grabs) that would
+// otherwise sit below the fold on a phone. Text in ink on the card
+// surface, like the stat tiles: the hue goes on the icon only, so the
+// words pass contrast on the ash page background and coral stays for
+// the one primary button.
+const pillStyle = {
+  display: 'inline-flex', alignItems: 'center', gap: 6,
+  padding: '6px 12px', borderRadius: 999,
+  fontSize: 13, fontWeight: 600, textDecoration: 'none',
+  background: 'var(--surface)', color: 'var(--ink)',
+  border: '1px solid var(--hairline)', boxShadow: 'var(--shadow-sm)',
+};
 
 export default function CleanerDashboard() {
   const router = useRouter();
@@ -38,6 +65,10 @@ export default function CleanerDashboard() {
   const [firstName, setFirstName] = useState('there');
   const [assigneeCounts, setAssigneeCounts] = useState({});
   const [holidayRemaining, setHolidayRemaining] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [coverCounts, setCoverCounts] = useState({ mine: 0, available: 0 });
+  const [coverSeed, setCoverSeed] = useState(null);
+  const [feedback, setFeedback] = useState(null);
 
   const [requestType, setRequestType] = useState(null); // null | 'kit_topup' | 'issue'
   const [requestJobId, setRequestJobId] = useState('');
@@ -104,11 +135,56 @@ export default function CleanerDashboard() {
       .order('created_at', { ascending: false })
       .limit(5);
 
-    const { data: requestsData } = await supabase
-      .from('staff_requests')
-      .select('id, type, description, status, created_at, resolution_note')
-      .order('created_at', { ascending: false })
-      .limit(10);
+    const [
+      { data: requestsData }, { data: participantRows }, { data: ratingRows },
+      { data: offerRows }, { data: responseRows },
+    ] = await Promise.all([
+      supabase
+        .from('staff_requests')
+        .select('id, type, description, status, created_at, resolution_note')
+        .order('created_at', { ascending: false })
+        .limit(10),
+      supabase
+        .from('conversation_participants')
+        .select('conversation_id, last_read_at')
+        .eq('profile_id', session.user.id),
+      // Only ratings on jobs this cleaner was on come back (0087). Newest
+      // first: the card leads with the latest and averages the rest.
+      supabase
+        .from('job_ratings')
+        .select('rating, comment, created_at, jobs(scheduled_at, properties(address))')
+        .order('created_at', { ascending: false })
+        .limit(20),
+      // Open cover shifts, read here rather than in the card so the pill
+      // under the greeting is there at first paint instead of arriving
+      // later and shoving the Open job button under someone's thumb.
+      fetchOpenOffers(),
+      fetchDeclined(session.user.id),
+    ]);
+
+    // Unread chat: only messages that could be newer than some
+    // conversation's read mark - not the whole history. Which of those
+    // count (not mine, after that conversation's own mark) is decided in
+    // unreadMessageCount, the same rule as the messages page.
+    const convIds = (participantRows || []).map((p) => p.conversation_id);
+    let unread = 0;
+    if (convIds.length > 0) {
+      let query = supabase
+        .from('chat_messages')
+        .select('conversation_id, sender_id, created_at')
+        .in('conversation_id', convIds);
+      const since = unreadSince(participantRows);
+      if (since) query = query.gt('created_at', since);
+      const { data: messageRows } = await query;
+      unread = unreadMessageCount(participantRows, messageRows, session.user.id);
+    }
+    setUnreadMessages(unread);
+    setFeedback(ratingSummary(ratingRows));
+
+    const declined = (responseRows || []).map((r) => r.offer_id);
+    const split = splitOffers(liveOffers(offerRows), declined, session.user.id);
+    setCoverCounts({ mine: split.mine.length, available: split.available.length });
+    setCoverSeed({ offerRows, responseRows });
 
     setJobs(jobsData || []);
     setNotifications(notifData || []);
@@ -208,6 +284,29 @@ export default function CleanerDashboard() {
         </div>
       </div>
 
+      {/* Time-sensitive things first, as pills under the greeting. Each is
+          a way to the thing itself, not a copy of it. */}
+      {(unreadMessages > 0 || coverCounts.available > 0) && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12, marginBottom: 16 }}>
+          {unreadMessages > 0 && (
+            <Link href="/cleaner/messages" style={pillStyle} title="Open your messages">
+              <MessageCircle size={15} style={{ color: 'var(--wf-azure)' }} />
+              {unreadMessages} unread {unreadMessages === 1 ? 'message' : 'messages'}
+            </Link>
+          )}
+          {coverCounts.available > 0 && (
+            <a
+              href="#shifts-needing-cover"
+              style={pillStyle}
+              title="Jump to the shifts up for grabs - first to accept gets it"
+            >
+              <LifeBuoy size={15} style={{ color: 'var(--wf-teal-ink)' }} />
+              {coverCounts.available} {coverCounts.available === 1 ? 'shift needs' : 'shifts need'} cover
+            </a>
+          )}
+        </div>
+      )}
+
       {/* The job they are on right now goes ahead of everything, in the
           verified green the rest of the app uses for "clocked in". */}
       {day.current && (
@@ -259,7 +358,7 @@ export default function CleanerDashboard() {
       )}
 
       {day.today.length > 0 && (
-        <div className="card">
+        <div className="card" style={{ marginTop: day.current || day.upNext ? 0 : 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
             <h2 style={{ margin: 0 }}>Today</h2>
             <Link href="/cleaner/rota" style={{ fontSize: 13, fontWeight: 600, color: 'var(--brand-link)', textDecoration: 'none' }}>
@@ -344,7 +443,32 @@ export default function CleanerDashboard() {
         </div>
       )}
 
-      <ShiftCoverCard userId={userId} onChange={loadData} />
+      <div id="shifts-needing-cover" style={{ scrollMarginTop: 16 }}>
+        <ShiftCoverCard userId={userId} onChange={loadData} onCounts={setCoverCounts} preloaded={coverSeed} />
+      </div>
+
+      {/* The latest word from a client about a job they did. Ratings reach
+          the office as a reliability score; this is the one place the
+          cleaner hears it themselves. Silent until there is one. */}
+      {feedback && (
+        <div className="card">
+          <h2>What clients said</h2>
+          <Stars rating={feedback.latest.rating} />
+          {feedback.count > 1 && (
+            <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '4px 0 0' }}>
+              Average {feedback.average.toFixed(1)} from {feedback.count} ratings
+            </p>
+          )}
+          {feedback.latest.comment && (
+            <p style={{ fontSize: 15, margin: '8px 0 0', lineHeight: 1.4 }}>"{feedback.latest.comment}"</p>
+          )}
+          <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '6px 0 0' }}>
+            {feedback.latest.jobs?.properties?.address || 'A recent job'}
+            {feedback.latest.jobs?.scheduled_at
+              && ` · ${new Date(feedback.latest.jobs.scheduled_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`}
+          </p>
+        </div>
+      )}
 
       <KeyHoldingsCard userId={userId} />
 

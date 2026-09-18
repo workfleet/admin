@@ -8,6 +8,9 @@ import {
   hoursLeftThisWeek,
   jobsCompletedThisMonth,
   daySummary,
+  unreadMessageCount,
+  unreadSince,
+  ratingSummary,
 } from '../lib/homeSummary';
 
 // Wednesday 17 September 2026, 10:30 local.
@@ -151,5 +154,112 @@ describe('daySummary', () => {
   it('leads with the job they are on', () => {
     const split = splitJobsForHome([job('on', at(17, 9), 'in_progress', 120, '12 High St')], NOW);
     expect(daySummary(split, NOW)).toBe("You're clocked in at 12 High St");
+  });
+});
+
+describe('unreadMessageCount', () => {
+  const me = 'me';
+  const participants = [
+    { conversation_id: 'office', last_read_at: at(17, 9) },
+    { conversation_id: 'team', last_read_at: at(16, 18) },
+  ];
+  const msg = (conv, sender, when) => ({ conversation_id: conv, sender_id: sender, created_at: when });
+
+  it('counts messages from others after each conversation\'s own read mark', () => {
+    const messages = [
+      msg('office', 'boss', at(17, 8)),   // read
+      msg('office', 'boss', at(17, 10)),  // unread
+      msg('team', 'sam', at(17, 7)),      // unread - team was read yesterday evening
+      msg('team', 'sam', at(16, 12)),     // read
+    ];
+    expect(unreadMessageCount(participants, messages, me)).toBe(2);
+  });
+
+  it('never counts my own messages', () => {
+    const messages = [msg('office', me, at(17, 10)), msg('office', me, at(17, 11))];
+    expect(unreadMessageCount(participants, messages, me)).toBe(0);
+  });
+
+  it('counts a message whose sender account has since been deleted', () => {
+    // sender_id goes null when a profile is removed; the messages page
+    // still shows and counts it, so this must too.
+    const messages = [msg('office', null, at(17, 10))];
+    expect(unreadMessageCount(participants, messages, me)).toBe(1);
+  });
+
+  it('does not count a message stamped exactly at the read mark', () => {
+    const messages = [msg('office', 'boss', at(17, 9))];
+    expect(unreadMessageCount(participants, messages, me)).toBe(0);
+  });
+
+  it('handles the microsecond timestamps Postgres actually sends', () => {
+    // JS keeps milliseconds and drops the rest, so a message a few
+    // microseconds before the read mark lands on the same millisecond
+    // and reads as not-after - matching the messages page's comparison.
+    const rows = [{ conversation_id: 'office', last_read_at: '2026-09-17T09:00:00.123456+00:00' }];
+    const messages = [
+      msg('office', 'boss', '2026-09-17T09:00:00.123400+00:00'),
+      msg('office', 'boss', '2026-09-17T09:00:00.124001+00:00'),
+    ];
+    expect(unreadMessageCount(rows, messages, me)).toBe(1);
+  });
+
+  it('ignores conversations I am not in', () => {
+    expect(unreadMessageCount(participants, [msg('other', 'x', at(17, 10))], me)).toBe(0);
+  });
+
+  it('treats a missing read mark as never read, like the messages page', () => {
+    const withNull = [...participants, { conversation_id: 'nomark', last_read_at: null }];
+    expect(unreadMessageCount(withNull, [msg('nomark', 'x', at(1, 10))], me)).toBe(1);
+  });
+
+  it('copes with nothing loaded', () => {
+    expect(unreadMessageCount(null, null, me)).toBe(0);
+    expect(unreadMessageCount([], [], me)).toBe(0);
+  });
+});
+
+describe('unreadSince', () => {
+  it('returns the earliest read mark as an ISO string', () => {
+    const rows = [
+      { conversation_id: 'a', last_read_at: at(17, 9) },
+      { conversation_id: 'b', last_read_at: at(16, 18) },
+      { conversation_id: 'c', last_read_at: null },
+    ];
+    expect(unreadSince(rows)).toBe(new Date(at(16, 18)).toISOString());
+  });
+
+  it('never lands after the true earliest mark when microseconds are dropped', () => {
+    const rows = [{ conversation_id: 'a', last_read_at: '2026-09-16T18:00:00.123456+00:00' }];
+    expect(unreadSince(rows)).toBe('2026-09-16T18:00:00.123Z');
+  });
+
+  it('is null when there is nothing to bound by', () => {
+    expect(unreadSince([])).toBeNull();
+    expect(unreadSince([{ conversation_id: 'a', last_read_at: null }])).toBeNull();
+    expect(unreadSince(null)).toBeNull();
+  });
+});
+
+describe('ratingSummary', () => {
+  it('leads with the newest rating and averages the rest', () => {
+    const rows = [
+      { rating: 5, comment: 'Spotless', created_at: at(16, 12) },
+      { rating: 4, comment: null, created_at: at(10, 12) },
+      { rating: 3, comment: 'Fine', created_at: at(3, 12) },
+    ];
+    const summary = ratingSummary(rows);
+    expect(summary.latest.comment).toBe('Spotless');
+    expect(summary.average).toBe(4);
+    expect(summary.count).toBe(3);
+  });
+
+  it('skips rows without a usable rating', () => {
+    expect(ratingSummary([{ rating: null }, { rating: 5 }]).count).toBe(1);
+  });
+
+  it('is null with no ratings', () => {
+    expect(ratingSummary([])).toBeNull();
+    expect(ratingSummary(null)).toBeNull();
   });
 });

@@ -7,6 +7,7 @@ import { notify } from '../../lib/notify';
 import { useConfirm } from './ConfirmProvider';
 import { useToast } from './ToastProvider';
 import { rankCandidates, isGoodMatch } from '../../lib/coverRanking';
+import { liveOffers, splitOffers } from '../../lib/shiftOffers';
 
 // Why a claim didn't go through. The database decides — these just put
 // its answer in plain English, so nobody is left guessing why the button
@@ -25,7 +26,30 @@ const CLAIM_MESSAGES = {
 const formatWhen = (value) =>
   new Date(value).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
-export default function ShiftCoverCard({ userId, onChange }) {
+// The two reads behind the card, exported so the home page can run them
+// up front and hand the rows in as `preloaded`.
+export function fetchOpenOffers() {
+  return supabase
+    .from('shift_offers')
+    .select(
+      'id, job_id, reason, released_by, expires_at, created_at,'
+      + ' jobs(scheduled_at, duration_minutes, properties(address)),'
+      + ' releaser:profiles!shift_offers_released_by_fkey(full_name)'
+    )
+    .eq('status', 'open')
+    .order('created_at', { ascending: false });
+}
+
+export function fetchDeclined(userId) {
+  return supabase.from('shift_offer_responses').select('offer_id').eq('cleaner_id', userId).eq('response', 'declined');
+}
+
+// `preloaded` (optional) is { offerRows, responseRows } the page already
+// fetched, so the card's first render needs no round trip of its own and
+// nothing above it moves once it arrives. `onCounts` (optional) is told
+// { mine, available } whenever the offers on show change, so a pill above
+// can stay in step after a "Not me" or a claim.
+export default function ShiftCoverCard({ userId, onChange, onCounts, preloaded }) {
   const toast = useToast();
   const confirm = useConfirm();
   const [offers, setOffers] = useState([]);
@@ -38,26 +62,23 @@ export default function ShiftCoverCard({ userId, onChange }) {
 
   useEffect(() => {
     if (!userId) return;
-    load();
-  }, [userId]);
+    load(preloaded);
+  }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const load = async () => {
-    const [{ data: offerRows }, { data: responseRows }] = await Promise.all([
-      supabase
-        .from('shift_offers')
-        .select(
-          'id, job_id, reason, released_by, expires_at, created_at,'
-          + ' jobs(scheduled_at, duration_minutes, properties(address)),'
-          + ' releaser:profiles!shift_offers_released_by_fkey(full_name)'
-        )
-        .eq('status', 'open')
-        .order('created_at', { ascending: false }),
-      supabase.from('shift_offer_responses').select('offer_id').eq('cleaner_id', userId).eq('response', 'declined'),
-    ]);
+  useEffect(() => {
+    if (!onCounts) return;
+    const { mine, available } = splitOffers(offers, declinedIds, userId);
+    onCounts({ mine: mine.length, available: available.length });
+  }, [offers, declinedIds, userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Drop anything whose job didn't come back with it — an offer whose
-    // shift has since been deleted has nothing to show and nothing to claim.
-    const live = (offerRows || []).filter((o) => o.jobs && (!o.expires_at || new Date(o.expires_at) > new Date()));
+  // `seed` is the page's copy of the rows for the first load; a reload
+  // after a failed claim always goes back to the database.
+  const load = async (seed) => {
+    const [{ data: offerRows }, { data: responseRows }] = seed
+      ? [{ data: seed.offerRows }, { data: seed.responseRows }]
+      : await Promise.all([fetchOpenOffers(), fetchDeclined(userId)]);
+
+    const live = liveOffers(offerRows);
     setOffers(live);
     setDeclinedIds((responseRows || []).map((r) => r.offer_id));
 
@@ -136,10 +157,10 @@ export default function ShiftCoverCard({ userId, onChange }) {
     onChange?.();
   };
 
-  const mine = offers.filter((o) => o.released_by === userId);
+  const split = splitOffers(offers, declinedIds, userId);
+  const mine = split.mine;
   // Best fit for this cleaner first; the rest keep their newest-first order.
-  const available = offers
-    .filter((o) => o.released_by !== userId && !declinedIds.includes(o.id))
+  const available = split.available
     .map((o, index) => ({ offer: o, index, score: fits[o.id]?.score ?? -1 }))
     .sort((a, b) => (b.score !== a.score ? b.score - a.score : a.index - b.index))
     .map((x) => x.offer);
