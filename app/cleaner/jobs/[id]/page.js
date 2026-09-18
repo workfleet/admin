@@ -24,7 +24,7 @@ import {
   isClaimableMissedJob,
 } from '../../../../lib/missedClockin';
 import { shiftShortfall } from '../../../../lib/shortShift';
-import { enqueue, makeId } from '../../../../lib/clockQueue';
+import { enqueue, isCheckinPending, isTransientError, makeId, pendingCheckinFor } from '../../../../lib/clockQueue';
 import { makePhotoPath, pendingPhotos, queuePhoto } from '../../../../lib/photoQueue';
 import { missingAreas } from '../../../../lib/photoCheck';
 import { useConfirm } from '../../../components/ConfirmProvider';
@@ -76,6 +76,10 @@ export default function JobDetailPage() {
   const confirm = useConfirm();
   const toast = useToast();
   const [job, setJob] = useState(null);
+  // Why the job could not be shown, when it could not. Without this the
+  // page sat on 'Loading...' for good whenever the query failed or came
+  // back empty - no signal, a job taken off them, an expired session.
+  const [loadError, setLoadError] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [photos, setPhotos] = useState([]);
   const [checkin, setCheckin] = useState(null);
@@ -190,11 +194,24 @@ export default function JobDetailPage() {
     if (!session) { router.push('/'); return; }
     setUserId(session.user.id);
 
-    const { data: jobData } = await supabase
+    setLoadError(null);
+    const { data: jobData, error: jobError } = await supabase
       .from('jobs')
       .select('id, scheduled_at, status, duration_minutes, property_id, properties(address, notes, access_details, client_access_notes, lat, lng, geofence_radius_m, clients(name))')
       .eq('id', id)
-      .single();
+      .maybeSingle();
+
+    if (jobError) {
+      if (jobError.code === 'PGRST301') { router.push('/'); return; }
+      setLoadError(isTransientError(jobError) ? 'offline' : 'failed');
+      return;
+    }
+    if (!jobData) {
+      // No error but no row: it is not on their rota (any more), or the
+      // link is wrong. Not a retry case.
+      setLoadError('missing');
+      return;
+    }
 
     const { data: checklistData } = jobData?.property_id
       ? await supabase
@@ -275,7 +292,15 @@ export default function JobDetailPage() {
       })).reverse(),
       ...(await withSignedUrls(photoData || [])),
     ]);
-    setCheckin(checkinData);
+    // A check-in still sitting on the phone is the current clock state even
+    // though the server has no row for it yet. Showing Check In again here
+    // got a second shift queued for the same job.
+    const queued = checkinData ? null : pendingCheckinFor(id);
+    setCheckin(checkinData || (queued && {
+      id: queued.id, job_id: id, cleaner_id: session.user.id,
+      checked_in_at: queued.at, checked_out_at: queued.checkedOutAt,
+      lat: queued.lat, lng: queued.lng, pendingSync: true,
+    }));
     setExtensionRequests(extensionData || []);
     setChecklistItems(checklistData || []);
     setCoverOffer(offerData || null);
@@ -336,9 +361,16 @@ export default function JobDetailPage() {
   const getLocation = () =>
     new Promise((resolve) => {
       if (!navigator.geolocation) return resolve({ lat: null, lng: null });
+      // With no timeout, a phone with location off or no fix indoors could
+      // leave this promise open for good and the button on 'Checking
+      // location...' with it. After fifteen seconds the check-in goes ahead
+      // without a position, which is the same path as a phone with no GPS
+      // at all. A fix up to thirty seconds old is fine: they are standing
+      // at the door, not driving.
       navigator.geolocation.getCurrentPosition(
         (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy ?? null }),
-        () => resolve({ lat: null, lng: null, accuracy: null })
+        () => resolve({ lat: null, lng: null, accuracy: null }),
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
       );
     });
 
@@ -438,6 +470,18 @@ export default function JobDetailPage() {
     // goes out when signal returns, stamped with the time they actually
     // tapped rather than the time it synced.
     if (error) {
+      // Only a write that never reached the server is kept for later. One
+      // the server refused - taken off the job, account deactivated, a
+      // second device already checked this shift in - will be refused
+      // again, and 'saved on your phone' would be a lie.
+      if (!isTransientError(error)) {
+        setCheckInError(
+          error.code === '23505'
+            ? "This shift is already checked in - maybe from another phone. Pull down to refresh."
+            : "The office needs to check you in for this one - the app wasn't allowed to. Message them with the time."
+        );
+        return;
+      }
       enqueue({ id: checkinId, kind: 'check_in', jobId: id, at, lat, lng });
       setCheckin({ id: checkinId, job_id: id, cleaner_id: userId, checked_in_at: at, checked_out_at: null, lat, lng, pendingSync: true });
       setJob((j) => ({ ...j, status: 'in_progress' }));
@@ -548,21 +592,45 @@ export default function JobDetailPage() {
     const shortfall = shiftShortfall(job, [{ ...checkin, checked_out_at: at }]);
 
     setCheckingOut(true);
-    const { error } = await supabase
+
+    // If the check-in itself is still on the phone there is no row on the
+    // server to close, so the check-out is queued straight away and the
+    // two go up together when signal returns (lib/clockQueue.js, collapse).
+    // Before this the update below ran anyway, matched nothing, reported
+    // success, and the check-out was lost: the shift then synced open and
+    // was closed at the booked end, paying the booked hours.
+    const queueCheckOut = () => {
+      enqueue({ id: makeId(), kind: 'check_out', checkinId: checkin.id, jobId: id, at });
+      setCheckin((c) => ({ ...c, checked_out_at: at, pendingSync: true }));
+      toast.success('No signal — your check-out is saved on your phone and will send itself.');
+    };
+
+    if (isCheckinPending(checkin.id)) {
+      setCheckingOut(false);
+      queueCheckOut();
+      return;
+    }
+
+    const { data: closed, error } = await supabase
       .from('checkins')
       .update({ checked_out_at: at })
-      .eq('id', checkin.id);
+      .eq('id', checkin.id)
+      .select('id')
+      .maybeSingle();
 
     setCheckingOut(false);
 
     // Same reasoning as check-in, and if anything more important: a check-out
     // that does not save leaves the shift open, which reconcile later closes
     // at the job's allotted end - quietly paying the booked hours instead of
-    // the ones worked.
-    if (error) {
-      enqueue({ id: makeId(), kind: 'check_out', checkinId: checkin.id, jobId: id, at });
-      setCheckin((c) => ({ ...c, checked_out_at: at, pendingSync: true }));
-      toast.success('No signal — your check-out is saved on your phone and will send itself.');
+    // the ones worked. An update that matched no row is the same case: the
+    // check-in has not reached the server yet.
+    if (error || !closed) {
+      if (error && !isTransientError(error)) {
+        toast.error("The app wasn't allowed to check you out - message the office with the time you finished.");
+        return;
+      }
+      queueCheckOut();
       return;
     }
 
@@ -858,6 +926,23 @@ export default function JobDetailPage() {
     setPhotos((prev) => [withUrl, ...prev]);
     setUploading(false);
   };
+
+  if (loadError) {
+    const message = loadError === 'missing'
+      ? "This job isn't on your rota. It may have been moved or taken off you - check the rota, or ask the office."
+      : loadError === 'offline'
+        ? "No signal - this job couldn't be loaded. Try again when you have a bar or two."
+        : "This job couldn't be loaded. Please try again.";
+    return (
+      <div className="container">
+        <p style={{ marginBottom: 12 }}>{message}</p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {loadError !== 'missing' && <button type="button" onClick={loadJob}>Retry</button>}
+          <button type="button" className="btn-secondary" onClick={() => router.push('/cleaner/rota')}>Back to rota</button>
+        </div>
+      </div>
+    );
+  }
 
   if (!job) return <div className="container">Loading...</div>;
 

@@ -66,16 +66,7 @@ export default function PhotoQueueFlusher() {
   if (pending === 0) return null;
 
   return (
-    <div
-      role="status"
-      style={{
-        position: 'fixed', left: 12, right: 12, bottom: 132, zIndex: 55,
-        display: 'flex', alignItems: 'center', gap: 8,
-        background: 'var(--wf-slate)', color: 'var(--wf-white)',
-        borderRadius: 'var(--wf-radius)', padding: '10px 14px',
-        boxShadow: 'var(--shadow-md)', fontSize: 13,
-      }}
-    >
+    <div role="status" className="queue-banner is-photos">
       <ImageUp size={16} aria-hidden />
       <span>
         {pending === 1 ? 'One photo is waiting to send' : `${pending} photos are waiting to send`}

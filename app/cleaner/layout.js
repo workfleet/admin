@@ -71,8 +71,14 @@ export default function CleanerLayout({ children }) {
           it is in front of them. Neither can see a locked phone. */}
       <AutoCheckoutWatcher />
       <ShiftLocationWatcher />
-      <ClockQueueFlusher />
-      <PhotoQueueFlusher />
+      {/* In the page flow, above whatever page is open, so a banner can
+          never sit on top of a button - fixed to the bottom, the clock-in
+          one covered Check Out. Empty (and zero height) when nothing is
+          waiting. */}
+      <div className="queue-banners">
+        <ClockQueueFlusher />
+        <PhotoQueueFlusher />
+      </div>
       {children}
       <nav className="bottom-nav">
         {NAV_ITEMS.map((item) => {

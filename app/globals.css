@@ -2793,6 +2793,60 @@ a.stat-card.is-alert:hover {
   bottom: calc(230px + env(safe-area-inset-bottom) + var(--wf-install-bar-h, 0px));
 }
 
+/* ---- Offline queue banners (cleaner app) ---- */
+/* Clock-ins and photos waiting to send. In the flow at the top of the
+   shell, not fixed, so they push the page down instead of covering it.
+   The wrapper is empty most of the time and takes no space then. */
+.queue-banners {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.queue-banners:not(:empty) {
+  padding: calc(env(safe-area-inset-top) + 8px) 12px 8px;
+}
+.queue-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--wf-graphite);
+  color: var(--wf-white);
+  border-radius: var(--wf-radius);
+  padding: 10px 14px;
+  box-shadow: var(--shadow-md);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.queue-banner.is-photos {
+  background: var(--wf-slate);
+}
+.queue-banner.is-failed {
+  background: var(--wf-overdue-bg);
+  color: var(--wf-graphite);
+  border: 1px solid var(--wf-overdue);
+}
+.queue-banner.is-failed svg:first-child {
+  color: var(--wf-overdue);
+  flex-shrink: 0;
+}
+.queue-banner-dismiss {
+  background: transparent;
+  border: none;
+  color: inherit;
+  padding: 6px;
+  margin: -6px -8px -6px 0;
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: var(--wf-radius-sm);
+}
+.queue-banner-dismiss:focus-visible {
+  outline: 2px solid var(--wf-coral);
+}
+
 /* ---- Install to home screen (cleaner app) ---- */
 /* Sits above the bottom nav. --wf-install-bar-h is set on <body> by
    InstallPrompt from the bar's measured height, so the shell padding and

@@ -3,7 +3,12 @@ import {
   QUEUE_VERSION,
   collapse,
   enqueue,
+  failedEntries,
+  isCheckinPending,
+  isTransientError,
   makeId,
+  markFailed,
+  pendingCheckinFor,
   pendingCount,
   readQueue,
   removeFromQueue,
@@ -145,5 +150,92 @@ describe('collapse', () => {
 
   it('passes an empty queue straight through', () => {
     expect(collapse([])).toEqual([]);
+  });
+});
+
+describe('isTransientError', () => {
+  // The line between 'keep it and try again' and 'tell the office'. Getting
+  // it wrong one way retries a refusal for ever with a reassuring banner over
+  // it; wrong the other way throws away a clock-in that only needed signal.
+  it('treats a network failure as worth retrying', () => {
+    // supabase-js reports a failed fetch with an empty code and status 0.
+    expect(isTransientError({ message: 'TypeError: Failed to fetch', code: '' })).toBe(true);
+    expect(isTransientError({ message: 'x' })).toBe(true);
+  });
+
+  it('treats an expired session as worth retrying', () => {
+    expect(isTransientError({ code: 'PGRST301', message: 'JWT expired' })).toBe(true);
+  });
+
+  it('treats a policy refusal, a missing job and a bad value as final', () => {
+    expect(isTransientError({ code: '42501', message: 'new row violates row-level security policy' })).toBe(false);
+    expect(isTransientError({ code: '23503', message: 'violates foreign key constraint' })).toBe(false);
+    expect(isTransientError({ code: '23514', message: 'violates check constraint' })).toBe(false);
+  });
+
+  it('is false for no error at all', () => {
+    expect(isTransientError(null)).toBe(false);
+    expect(isTransientError(undefined)).toBe(false);
+  });
+});
+
+describe('markFailed and failedEntries', () => {
+  it('keeps a refused entry, with its time, and takes it out of the pending count', () => {
+    // The tap time is still the truth about the shift; the office wants it.
+    enqueue(checkIn(), store);
+    markFailed('in-1', 'row-level security', store);
+    expect(pendingCount(store)).toBe(0);
+    expect(failedEntries(store)).toHaveLength(1);
+    expect(failedEntries(store)[0].at).toBe('2026-09-02T09:00:00.000Z');
+    expect(failedEntries(store)[0].failReason).toBe('row-level security');
+  });
+
+  it('marks only the entry named', () => {
+    enqueue(checkIn({ id: 'a' }), store);
+    enqueue(checkIn({ id: 'b', jobId: 'job-2' }), store);
+    markFailed('a', 'x', store);
+    expect(pendingCount(store)).toBe(1);
+    expect(failedEntries(store).map((e) => e.id)).toEqual(['a']);
+  });
+
+  it('a failed entry can still be removed once the cleaner dismisses it', () => {
+    enqueue(checkIn(), store);
+    markFailed('in-1', 'x', store);
+    removeFromQueue('in-1', store);
+    expect(failedEntries(store)).toHaveLength(0);
+  });
+});
+
+describe('pendingCheckinFor', () => {
+  it('finds the check-in waiting for a job so a reload does not offer Check In again', () => {
+    enqueue(checkIn(), store);
+    const found = pendingCheckinFor('job-1', store);
+    expect(found).toMatchObject({ id: 'in-1', at: '2026-09-02T09:00:00.000Z', checkedOutAt: null });
+  });
+
+  it('folds in a check-out queued against it', () => {
+    enqueue(checkIn(), store);
+    enqueue({ id: 'out-1', kind: 'check_out', checkinId: 'in-1', jobId: 'job-1', at: '2026-09-02T11:00:00.000Z' }, store);
+    expect(pendingCheckinFor('job-1', store).checkedOutAt).toBe('2026-09-02T11:00:00.000Z');
+  });
+
+  it('is null for a job with nothing waiting, and ignores failed entries', () => {
+    expect(pendingCheckinFor('job-9', store)).toBeNull();
+    enqueue(checkIn(), store);
+    markFailed('in-1', 'x', store);
+    expect(pendingCheckinFor('job-1', store)).toBeNull();
+  });
+});
+
+describe('isCheckinPending', () => {
+  it('is true only while that check-in is still on the phone', () => {
+    // The check-out path reads this to decide between updating a server row
+    // and queueing: an update against a row that is not there yet matches
+    // nothing and reports success, which is how check-outs got lost.
+    enqueue(checkIn(), store);
+    expect(isCheckinPending('in-1', store)).toBe(true);
+    expect(isCheckinPending('server-row', store)).toBe(false);
+    removeFromQueue('in-1', store);
+    expect(isCheckinPending('in-1', store)).toBe(false);
   });
 });
