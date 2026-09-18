@@ -12,6 +12,7 @@ import WorkAnniversaryPopup from '../components/WorkAnniversaryPopup';
 import ShiftCoverCard, { fetchOpenOffers, fetchDeclined } from '../components/ShiftCoverCard';
 import KeyHoldingsCard from '../components/KeyHoldingsCard';
 import BackButton from '../components/BackButton';
+import Logo from '../components/Logo';
 import { KIT_PRODUCTS } from '../../lib/kitProducts';
 import { HOLIDAY_ACCRUAL_RATE, assignedJob, fetchAssigneeCounts, hoursWorked, formatHours } from '../../lib/hoursWorked';
 import {
@@ -266,6 +267,11 @@ export default function CleanerDashboard() {
     <div className="container">
       <BackButton />
       {anniversary && <WorkAnniversaryPopup name={anniversary.name} years={anniversary.years} />}
+      {/* The mark sits above the greeting, dark on the ash page like the
+          onboarding pages, and short of the fixed push-toggle top right. */}
+      <div style={{ marginBottom: 18, paddingRight: 56 }}>
+        <Logo size={30} showWordmark />
+      </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
         <div>
           <p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 2px' }}>
