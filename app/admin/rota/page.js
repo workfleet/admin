@@ -1846,7 +1846,10 @@ export default function AdminRota() {
             </>
           )}
         </span>
-        <Link href="/admin/rota/history" className="calendar-foot-link">Job history &rarr;</Link>
+        <span style={{ display: 'inline-flex', gap: 14 }}>
+          <Link href="/admin/audit" className="calendar-foot-link">Change log &rarr;</Link>
+          <Link href="/admin/rota/history" className="calendar-foot-link">Job history &rarr;</Link>
+        </span>
       </div>
 
       {selectedJob && (
