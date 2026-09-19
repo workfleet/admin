@@ -378,23 +378,35 @@ export default function AdminRequests() {
   const confirmDecide = async (id) => {
     const target = timeOff.find((t) => t.id === id);
 
+    // Shifts the cleaner is booked on during approved time off go to
+    // Shifts to Cover as released by them, so whoever claims one takes
+    // their place - the same as if they had released it themselves.
+    // Approving used to leave them on the rota for days they were off.
+    let jobsToCover = [];
     if (decidingStatus === 'approved' && target?.cleaner_id) {
       const dayAfterEnd = new Date(target.end_date);
       dayAfterEnd.setDate(dayAfterEnd.getDate() + 1);
 
       const { data: existingAssignments } = await supabase
         .from('job_assignments')
-        .select('jobs!inner(id, scheduled_at, properties(address))')
+        .select('jobs!inner(id, scheduled_at, status, properties(address))')
         .eq('cleaner_id', target.cleaner_id)
         .gte('jobs.scheduled_at', new Date(target.start_date).toISOString())
         .lt('jobs.scheduled_at', dayAfterEnd.toISOString());
 
       const existingJobs = (existingAssignments || []).map((row) => row.jobs).filter(Boolean);
+      jobsToCover = existingJobs
+        .filter((j) => j.status === 'scheduled' && new Date(j.scheduled_at) > new Date())
+        .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
 
       if (existingJobs.length > 0) {
+        const name = target.profiles?.full_name || 'This cleaner';
         const proceed = await confirm(
-          `${target.profiles?.full_name || 'This cleaner'} already has ${existingJobs.length} job${existingJobs.length === 1 ? '' : 's'} scheduled during this period (first: ${existingJobs[0].properties?.address} on ${new Date(existingJobs[0].scheduled_at).toLocaleDateString()}). Approve anyway?`,
-          { title: 'Scheduling conflict', confirmLabel: 'Approve anyway' }
+          `${name} is booked on ${existingJobs.length} shift${existingJobs.length === 1 ? '' : 's'} during this time off (first: ${existingJobs[0].properties?.address} on ${new Date(existingJobs[0].scheduled_at).toLocaleDateString()}).`
+            + (jobsToCover.length > 0
+              ? ` Approving puts ${jobsToCover.length === existingJobs.length ? (jobsToCover.length === 1 ? 'it' : 'all of them') : `the ${jobsToCover.length} still to come`} on Shifts to Cover and offers ${jobsToCover.length === 1 ? 'it' : 'them'} to the other cleaners.`
+              : ''),
+          { title: 'Shifts during this time off', confirmLabel: jobsToCover.length > 0 ? 'Approve and find cover' : 'Approve anyway' }
         );
         if (!proceed) return;
       }
@@ -420,6 +432,34 @@ export default function AdminRequests() {
           endDate: target.end_date,
           note: data.admin_note,
         });
+      }
+
+      if (data.status === 'approved' && jobsToCover.length > 0) {
+        const fmtDay = (d) => new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+        const reason = `${target.type === 'holiday' ? 'Holiday' : 'Unavailable'} approved, ${fmtDay(target.start_date)}${target.end_date !== target.start_date ? ` to ${fmtDay(target.end_date)}` : ''}`;
+        let opened = 0;
+        let alreadyOpen = 0;
+        for (const job of jobsToCover) {
+          // One open offer per job is enforced by the database; a shift
+          // already out for cover is left as it is.
+          const { data: offer, error: offerError } = await supabase
+            .from('shift_offers')
+            .insert({ job_id: job.id, released_by: target.cleaner_id, opened_by: session.user.id, reason })
+            .select('id')
+            .single();
+          if (offerError || !offer) { alreadyOpen += 1; continue; }
+          opened += 1;
+          notify({
+            type: 'shift_cover_needed',
+            offerId: offer.id,
+            jobId: job.id,
+            address: job.properties?.address,
+            scheduledAt: job.scheduled_at,
+            releasedByCleanerId: target.cleaner_id,
+          });
+        }
+        if (opened > 0) toast.success(`${opened} shift${opened === 1 ? '' : 's'} put on Shifts to Cover.`);
+        if (alreadyOpen > 0) toast.success(`${alreadyOpen} shift${alreadyOpen === 1 ? ' was' : 's were'} already out for cover.`);
       }
     }
     setDecidingId(null);
