@@ -66,19 +66,25 @@ function summarise(lines, adjustments) {
   const byCleaner = {};
   const row = (id, name) => {
     const key = id || name || 'unknown';
-    if (!byCleaner[key]) byCleaner[key] = { id: key, cleanerId: id || null, name: name || 'Unknown', jobs: 0, minutes: 0, adjustmentMinutes: 0 };
+    if (!byCleaner[key]) byCleaner[key] = { id: key, cleanerId: id || null, name: name || 'Unknown', jobs: 0, minutes: 0, holidayMinutes: 0, adjustmentMinutes: 0 };
     return byCleaner[key];
   };
+  // Holiday lines (0108) are paid hours but not work: they count towards
+  // the total, shown in their own column, and never as a job.
   lines.forEach((l) => {
     const r = row(l.cleaner_id, l.cleaner_name);
-    r.jobs += 1;
-    r.minutes += Number(l.minutes);
+    if (l.kind === 'holiday') {
+      r.holidayMinutes += Number(l.minutes);
+    } else {
+      r.jobs += 1;
+      r.minutes += Number(l.minutes);
+    }
   });
   adjustments.forEach((a) => {
     row(a.cleaner_id, a.cleaner_name).adjustmentMinutes += Number(a.minutes);
   });
   return Object.values(byCleaner)
-    .map((r) => ({ ...r, totalMinutes: r.minutes + r.adjustmentMinutes }))
+    .map((r) => ({ ...r, totalMinutes: r.minutes + r.holidayMinutes + r.adjustmentMinutes }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -87,6 +93,7 @@ function csvFor(period, rows) {
     { key: 'name', label: 'Cleaner' },
     { key: 'jobs', label: 'Jobs' },
     { key: 'hours', label: 'Hours Worked' },
+    { key: 'holiday', label: 'Holiday Hours' },
     { key: 'adjustments', label: 'Adjustments (h)' },
     { key: 'total', label: 'Total Hours' },
   ];
@@ -94,6 +101,7 @@ function csvFor(period, rows) {
     name: r.name,
     jobs: r.jobs,
     hours: (r.minutes / 60).toFixed(2),
+    holiday: (r.holidayMinutes / 60).toFixed(2),
     adjustments: (r.adjustmentMinutes / 60).toFixed(2),
     total: (r.totalMinutes / 60).toFixed(2),
   }));
@@ -107,8 +115,8 @@ function SummaryTable({ rows, showAdjustments }) {
   const td = { padding: '9px 12px', whiteSpace: 'nowrap' };
   const num = { ...td, textAlign: 'right', fontFamily: 'var(--wf-data)', fontWeight: 600 };
   const totals = rows.reduce((t, r) => ({
-    jobs: t.jobs + r.jobs, minutes: t.minutes + r.minutes, adj: t.adj + r.adjustmentMinutes, total: t.total + r.totalMinutes,
-  }), { jobs: 0, minutes: 0, adj: 0, total: 0 });
+    jobs: t.jobs + r.jobs, minutes: t.minutes + r.minutes, holiday: t.holiday + r.holidayMinutes, adj: t.adj + r.adjustmentMinutes, total: t.total + r.totalMinutes,
+  }), { jobs: 0, minutes: 0, holiday: 0, adj: 0, total: 0 });
 
   return (
     <div style={{ overflowX: 'auto' }}>
@@ -118,8 +126,9 @@ function SummaryTable({ rows, showAdjustments }) {
             <th style={th}>Cleaner</th>
             <th style={{ ...th, textAlign: 'right' }}>Jobs</th>
             <th style={{ ...th, textAlign: 'right' }}>Hours</th>
+            <th style={{ ...th, textAlign: 'right' }}>Holiday</th>
             {showAdjustments && <th style={{ ...th, textAlign: 'right' }}>Adjustments</th>}
-            {showAdjustments && <th style={{ ...th, textAlign: 'right' }}>Total</th>}
+            <th style={{ ...th, textAlign: 'right' }}>Total</th>
           </tr>
         </thead>
         <tbody>
@@ -128,20 +137,24 @@ function SummaryTable({ rows, showAdjustments }) {
               <td style={td}>{r.name}</td>
               <td style={num}>{r.jobs}</td>
               <td style={num}>{formatHours(r.minutes / 60)}</td>
+              <td style={{ ...num, color: r.holidayMinutes === 0 ? 'var(--muted)' : 'inherit' }}>
+                {r.holidayMinutes === 0 ? '–' : formatHours(r.holidayMinutes / 60)}
+              </td>
               {showAdjustments && (
                 <td style={{ ...num, color: r.adjustmentMinutes === 0 ? 'var(--muted)' : 'inherit' }}>
                   {r.adjustmentMinutes === 0 ? '–' : signedHours(r.adjustmentMinutes)}
                 </td>
               )}
-              {showAdjustments && <td style={num}>{formatHours(r.totalMinutes / 60)}</td>}
+              <td style={num}>{formatHours(r.totalMinutes / 60)}</td>
             </tr>
           ))}
           <tr>
             <td style={{ ...td, fontWeight: 600 }}>Total</td>
             <td style={num}>{totals.jobs}</td>
             <td style={num}>{formatHours(totals.minutes / 60)}</td>
+            <td style={num}>{totals.holiday === 0 ? '–' : formatHours(totals.holiday / 60)}</td>
             {showAdjustments && <td style={num}>{totals.adj === 0 ? '–' : signedHours(totals.adj)}</td>}
-            {showAdjustments && <td style={num}>{formatHours(totals.total / 60)}</td>}
+            <td style={num}>{formatHours(totals.total / 60)}</td>
           </tr>
         </tbody>
       </table>
@@ -222,7 +235,7 @@ export default function AdminPayroll() {
         .from('payroll_periods')
         .select('id, period_start, period_end, closed_at, note, closer:profiles!payroll_periods_closed_by_fkey(full_name)')
         .order('period_start', { ascending: false }),
-      supabase.from('payroll_period_lines').select('period_id, cleaner_id, cleaner_name, job_id, job_address, job_date, minutes'),
+      supabase.from('payroll_period_lines').select('period_id, cleaner_id, cleaner_name, job_id, job_address, job_date, minutes, kind'),
       supabase
         .from('payroll_adjustments')
         .select('id, cleaner_id, cleaner_name, job_id, job_address, job_date, minutes, reason, created_at, included_in_period_id')
@@ -263,7 +276,7 @@ export default function AdminPayroll() {
     setPreview(previewRows || []);
 
     // Which of these lines the office has already set by hand, and why.
-    const jobIds = [...new Set((previewRows || []).map((l) => l.job_id))];
+    const jobIds = [...new Set((previewRows || []).filter((l) => l.job_id).map((l) => l.job_id))];
     const { data: assignmentRows } = jobIds.length > 0
       ? await supabase
         .from('job_assignments')
@@ -480,7 +493,7 @@ export default function AdminPayroll() {
             <div style={{ marginTop: 14 }}>
               <h3 style={{ fontSize: 14, margin: '0 0 8px' }}>What will be sent</h3>
               {previewRows.length === 0 ? (
-                <p className="empty-state">No completed jobs in this period.</p>
+                <p className="empty-state">No completed jobs or approved holiday in this period.</p>
               ) : (
                 <SummaryTable rows={previewRows} showAdjustments={pendingAdjustments.length > 0} />
               )}
@@ -518,12 +531,12 @@ export default function AdminPayroll() {
                         <div key={name} style={{ marginBottom: 8 }}>
                           <strong style={{ fontSize: 13 }}>{name}</strong>
                           {cleanerLines.map((line) => {
-                            const key = `${line.job_id}:${line.cleaner_id}`;
-                            const override = overrides[key];
+                            const key = `${line.job_id || `holiday:${line.time_off_id}`}:${line.cleaner_id}`;
+                            const override = line.job_id ? overrides[key] : null;
                             return (
                               <div key={key} style={{ fontSize: 12.5, padding: '3px 0 3px 10px', borderLeft: override ? '2px solid var(--wf-graphite)' : '2px solid var(--hairline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                                 <span style={{ flex: 1, minWidth: 0 }}>
-                                  {shortDay(parseLocalDate(line.job_date))} · {line.job_address || 'Job'}
+                                  {shortDay(parseLocalDate(line.job_date))} · {line.kind === 'holiday' ? 'Holiday (approved)' : (line.job_address || 'Job')}
                                   {override && (
                                     <span style={{ color: 'var(--muted)' }}> — amended{override.paid_minutes_reason ? `: ${override.paid_minutes_reason}` : ''}</span>
                                   )}

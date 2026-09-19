@@ -43,7 +43,8 @@ function groupPayroll(lineRows, adjustmentRows) {
     if (!row.payroll_periods) return;
     const period = periodFor(row.payroll_periods);
     period.minutes += Number(row.minutes);
-    period.jobs += 1;
+    if (row.kind === 'holiday') period.holidayMinutes = (period.holidayMinutes || 0) + Number(row.minutes);
+    else period.jobs += 1;
   });
 
   const pending = [];
@@ -161,7 +162,7 @@ export default function CleanerHours() {
         .eq('cleaner_id', session.user.id),
       supabase
         .from('payroll_period_lines')
-        .select('minutes, payroll_periods(id, period_start, period_end, closed_at)')
+        .select('minutes, kind, payroll_periods(id, period_start, period_end, closed_at)')
         .eq('cleaner_id', session.user.id),
       supabase
         .from('payroll_adjustments')
@@ -280,6 +281,7 @@ export default function CleanerHours() {
                   <span style={{ display: 'block', fontSize: 12.5, color: 'var(--muted)' }}>
                     Sent {period.closedAt.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
                     {period.jobs > 0 ? ` · ${period.jobs} job${period.jobs === 1 ? '' : 's'}` : ''}
+                    {period.holidayMinutes > 0 ? ` · ${formatHours(period.holidayMinutes / 60)} holiday` : ''}
                     {period.adjustments.length > 0
                       ? ` · includes ${period.adjustments.length} adjustment${period.adjustments.length === 1 ? '' : 's'}`
                       : ''}
