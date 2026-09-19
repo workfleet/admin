@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
-import { HOLIDAY_ACCRUAL_RATE, assignedJob, fetchAssigneeCounts, hoursWorked } from '../../../lib/hoursWorked';
+import { HOLIDAY_ACCRUAL_RATE, assignedJob, bookedHoursBetween, fetchAssigneeCounts, hoursWorked } from '../../../lib/hoursWorked';
 import { fetchEmploymentTypes, isSubcontractor } from '../../../lib/profilePrivate';
 import BackButton from '../../components/BackButton';
 
@@ -47,7 +47,7 @@ function DayGroup({ date, jobs, router, dim, jobsMissingPhotos }) {
   );
 }
 
-const EMPTY_FORM = { type: 'holiday', startDate: '', endDate: '', hours: '', reason: '' };
+const EMPTY_FORM = { type: 'holiday', startDate: '', endDate: '', hours: '', hoursTouched: false, reason: '' };
 function holidayHoursUsed(timeOffRequests) {
   return timeOffRequests
     .filter((t) => t.type === 'holiday' && t.status === 'approved')
@@ -80,6 +80,15 @@ export default function CleanerRota() {
   useEffect(() => {
     load();
   }, []);
+
+  // The hours box follows the dates: what they are booked to work on those
+  // days is what the holiday stands in for. It stops following once they
+  // type a figure of their own.
+  const bookedHours = form.type === 'holiday' ? bookedHoursBetween(jobs, assigneeCounts, form.startDate, form.endDate) : 0;
+  useEffect(() => {
+    if (form.type !== 'holiday' || form.hoursTouched) return;
+    setForm((f) => ({ ...f, hours: bookedHours > 0 ? String(bookedHours) : '' }));
+  }, [form.type, form.startDate, form.endDate, form.hoursTouched, bookedHours]);
 
   const load = async () => {
     const session = await getSessionWithRetry();
@@ -168,6 +177,10 @@ export default function CleanerRota() {
       setTimeOff((prev) => [data, ...prev]);
       setForm(emptyForm());
       setShowForm(false);
+
+      // Approved on arrival (0109): the office was told by the database and
+      // there is nothing for the "requested" email to ask them to decide.
+      if (data.status === 'approved') return;
 
       const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', session.user.id).single();
       notify({
@@ -266,10 +279,17 @@ export default function CleanerRota() {
                   min="0.5"
                   step="0.5"
                   value={form.hours}
-                  onChange={(e) => setForm((f) => ({ ...f, hours: e.target.value }))}
-                  placeholder="e.g. 16"
+                  onChange={(e) => setForm((f) => ({ ...f, hours: e.target.value, hoursTouched: true }))}
+                  placeholder={form.startDate && form.endDate ? 'No shifts booked on those days - enter the hours' : 'Pick the dates first'}
                   required
                 />
+                {form.startDate && form.endDate && (
+                  <p style={{ fontSize: 12, color: 'var(--muted)', margin: '-4px 0 10px' }}>
+                    {bookedHours > 0
+                      ? `You're booked for ${bookedHours}h on ${form.startDate === form.endDate ? 'that day' : 'those days'}${form.hoursTouched && Number(form.hours) !== bookedHours ? ' - you\'ve changed it, which is fine' : ', so that\'s filled in for you'}.`
+                      : 'Nothing is on your rota for those days yet, so enter what you would normally work.'}
+                  </p>
+                )}
               </>
             )}
 

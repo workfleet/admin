@@ -12,6 +12,7 @@ import { describeShortfall, shiftShortfall } from '../../../lib/shortShift';
 import { respondToEmergencyAlert } from '../../../lib/emergencyRespond';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
+import CoverSuggestions from '../../components/CoverSuggestions';
 import BackButton from '../../components/BackButton';
 
 const HOLIDAY_ACCRUAL_RATE = 0.1207; // UK statutory: 5.6 weeks / 46.4 working weeks
@@ -369,6 +370,10 @@ export default function AdminRequests() {
     setDecidingPauseId(null);
   };
 
+  // Cover offers opened by the approval just made, shown under that
+  // request with the best people to take each one: { requestId, offers }.
+  const [coverSuggestions, setCoverSuggestions] = useState(null);
+
   const startDecide = (id, status) => {
     setDecidingId(id);
     setDecidingStatus(status);
@@ -389,7 +394,7 @@ export default function AdminRequests() {
 
       const { data: existingAssignments } = await supabase
         .from('job_assignments')
-        .select('jobs!inner(id, scheduled_at, status, properties(address))')
+        .select('jobs!inner(id, scheduled_at, status, duration_minutes, properties(address))')
         .eq('cleaner_id', target.cleaner_id)
         .gte('jobs.scheduled_at', new Date(target.start_date).toISOString())
         .lt('jobs.scheduled_at', dayAfterEnd.toISOString());
@@ -439,6 +444,7 @@ export default function AdminRequests() {
         const reason = `${target.type === 'holiday' ? 'Holiday' : 'Unavailable'} approved, ${fmtDay(target.start_date)}${target.end_date !== target.start_date ? ` to ${fmtDay(target.end_date)}` : ''}`;
         let opened = 0;
         let alreadyOpen = 0;
+        const openedOffers = [];
         for (const job of jobsToCover) {
           // One open offer per job is enforced by the database; a shift
           // already out for cover is left as it is.
@@ -449,6 +455,12 @@ export default function AdminRequests() {
             .single();
           if (offerError || !offer) { alreadyOpen += 1; continue; }
           opened += 1;
+          openedOffers.push({
+            id: offer.id,
+            job_id: job.id,
+            released_by: target.cleaner_id,
+            job: { scheduled_at: job.scheduled_at, address: job.properties?.address, duration_minutes: job.duration_minutes },
+          });
           notify({
             type: 'shift_cover_needed',
             offerId: offer.id,
@@ -460,6 +472,7 @@ export default function AdminRequests() {
         }
         if (opened > 0) toast.success(`${opened} shift${opened === 1 ? '' : 's'} put on Shifts to Cover.`);
         if (alreadyOpen > 0) toast.success(`${alreadyOpen} shift${alreadyOpen === 1 ? ' was' : 's were'} already out for cover.`);
+        if (openedOffers.length > 0) setCoverSuggestions({ requestId: id, offers: openedOffers });
       }
     }
     setDecidingId(null);
@@ -935,7 +948,9 @@ export default function AdminRequests() {
   });
   const pendingPauseCount = pauses.filter((p) => p.status === 'pending').length;
 
-  const filteredTimeOff = timeOff.filter((t) => timeOffFilter === 'all' || t.status === timeOffFilter);
+  // A just-approved request stays in view while its cover suggestions are
+  // open, or they would vanish with it the moment Pending refilters.
+  const filteredTimeOff = timeOff.filter((t) => timeOffFilter === 'all' || t.status === timeOffFilter || coverSuggestions?.requestId === t.id);
   const pendingCount = timeOff.filter((t) => t.status === 'pending').length;
 
   const filteredExtensions = extensions.filter((r) => extensionFilter === 'all' || (extensionFilter === 'decided' ? r.status !== 'pending' : r.status === extensionFilter));
@@ -1190,7 +1205,7 @@ export default function AdminRequests() {
                     <span className={`badge ${t.status === 'approved' ? 'completed' : t.status === 'declined' ? 'missed' : 'scheduled'}`}>{t.status}</span>
                     {t.status !== 'pending' && (
                       <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 4 }}>
-                        {t.status === 'approved' ? 'Approved' : 'Declined'} by {t.decider?.full_name || 'Unknown'}
+                        {t.status === 'approved' ? 'Approved' : 'Declined'} by {t.decider?.full_name || (t.status === 'approved' && !t.decided_by ? 'the app (automatically)' : 'Unknown')}
                       </p>
                     )}
                     {t.status !== 'pending' && t.admin_note && (
@@ -1223,6 +1238,9 @@ export default function AdminRequests() {
                       </button>
                     </div>
                   </div>
+                )}
+                {coverSuggestions?.requestId === t.id && (
+                  <CoverSuggestions offers={coverSuggestions.offers} onDone={() => setCoverSuggestions(null)} />
                 )}
               </div>
             ))}

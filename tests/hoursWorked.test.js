@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { jobShareHours, hoursWorked, formatHours, assignedJob, assignmentMinutes, HOLIDAY_ACCRUAL_RATE } from '../lib/hoursWorked';
+import { jobShareHours, hoursWorked, formatHours, assignedJob, assignmentMinutes, bookedHoursBetween, HOLIDAY_ACCRUAL_RATE } from '../lib/hoursWorked';
 
 // These figures reach staff twice - as the totals on a cleaner's own hours
 // page, and as the holiday balance the rota lets them book against. They also
@@ -97,5 +97,31 @@ describe('HOLIDAY_ACCRUAL_RATE', () => {
     // Hard-coded in the app and again in the database trigger. If this moves,
     // the trigger has to move with it.
     expect(HOLIDAY_ACCRUAL_RATE).toBeCloseTo(5.6 / 46.4, 4);
+  });
+});
+
+describe('bookedHoursBetween', () => {
+  const now = new Date('2026-09-19T12:00');
+  const at = (ymd, hm, minutes, status = 'scheduled', id = ymd + hm) => ({ id, scheduled_at: new Date(`${ymd}T${hm}`).toISOString(), duration_minutes: minutes, status });
+
+  it('adds up the shifts booked on the days requested, as each person\'s share', () => {
+    const jobs = [at('2026-10-05', '10:00', 180), at('2026-10-05', '14:00', 120), at('2026-10-06', '09:00', 60)];
+    expect(bookedHoursBetween(jobs, { '2026-10-0510:00': 2 }, '2026-10-05', '2026-10-05', now)).toBe(3.5);
+    expect(bookedHoursBetween(jobs, {}, '2026-10-05', '2026-10-06', now)).toBe(6);
+  });
+
+  it('ignores days outside the range, shifts already worked, and shifts in the past', () => {
+    const jobs = [at('2026-10-04', '10:00', 180), at('2026-10-05', '10:00', 120, 'completed'), at('2026-09-18', '10:00', 120)];
+    expect(bookedHoursBetween(jobs, {}, '2026-10-05', '2026-10-05', now)).toBe(0);
+    expect(bookedHoursBetween(jobs, {}, '2026-09-18', '2026-09-18', now)).toBe(0);
+  });
+
+  it('rounds to the half hour the form steps in', () => {
+    expect(bookedHoursBetween([at('2026-10-05', '10:00', 100)], {}, '2026-10-05', '2026-10-05', now)).toBe(1.5);
+  });
+
+  it('is zero for an empty or backwards range', () => {
+    expect(bookedHoursBetween([at('2026-10-05', '10:00', 60)], {}, '', '', now)).toBe(0);
+    expect(bookedHoursBetween([at('2026-10-05', '10:00', 60)], {}, '2026-10-06', '2026-10-05', now)).toBe(0);
   });
 });
