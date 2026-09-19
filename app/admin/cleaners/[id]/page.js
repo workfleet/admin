@@ -997,7 +997,14 @@ export default function CleanerProfile() {
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="page-header-row" style={{ marginBottom: editingAdjustment ? 12 : 0 }}>
           <h2 style={{ margin: 0 }}>Holiday</h2>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              className="btn-secondary"
+              onClick={() => router.push(`/admin/requests?section=timeoff&cleaner=${id}`)}
+              title="Mark them as on holiday or unavailable for some dates - it goes in already approved, and any shifts on those days are put out for cover"
+            >
+              Mark time off
+            </button>
             {isSubcontractor(employmentType) ? (
               <button className="btn-secondary" onClick={() => setSubcontractorStatus(false)} disabled={savingEmployment} title="Put them back on holiday accrual">
                 Mark as employee

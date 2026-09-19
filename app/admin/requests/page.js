@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
-import { assignmentMinutes, formatHours } from '../../../lib/hoursWorked';
+import { assignmentMinutes, bookedHoursBetween, formatHours } from '../../../lib/hoursWorked';
+import { fetchEmploymentTypes, isSubcontractor } from '../../../lib/profilePrivate';
 import { isClaimableMissedJob } from '../../../lib/missedClockin';
 import { MISSED_SHIFT_OUTCOMES, isJobWideOutcome, outcomeLabel } from '../../../lib/missedShiftOutcomes';
 import { describeShortfall, shiftShortfall } from '../../../lib/shortShift';
@@ -43,6 +44,21 @@ export default function AdminRequests() {
   const [decidingId, setDecidingId] = useState(null);
   const [decidingStatus, setDecidingStatus] = useState(null);
   const [adminNote, setAdminNote] = useState('');
+
+  // Time off the office enters itself - someone rang in sick, or holiday
+  // was agreed over the phone. It goes in already approved, as if the
+  // cleaner had asked and the office had said yes. `staff` is who can be
+  // picked; `assignments` is every job_assignments row with its job, for
+  // filling in the hours from what that person is booked on.
+  const EMPTY_TIME_OFF = { cleanerId: '', type: 'holiday', startDate: '', endDate: '', hours: '', hoursTouched: false, reason: '', note: '' };
+  const [showAddTimeOff, setShowAddTimeOff] = useState(false);
+  const [addTimeOff, setAddTimeOff] = useState(EMPTY_TIME_OFF);
+  const [addTimeOffError, setAddTimeOffError] = useState('');
+  const [addingTimeOff, setAddingTimeOff] = useState(false);
+  const [staff, setStaff] = useState([]);
+  const [employmentTypes, setEmploymentTypes] = useState({});
+  const [assignments, setAssignments] = useState([]);
+  const [assigneeCountByJob, setAssigneeCountByJob] = useState({});
 
   // time extension requests
   const [extensions, setExtensions] = useState([]);
@@ -140,11 +156,44 @@ export default function AdminRequests() {
     load();
   }, []);
 
+  // A cleaner's profile links here with the form open for them. Read on
+  // mount rather than via useSearchParams, which would need a Suspense
+  // boundary to keep the page prerendering (same as the rota).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('section')) setSection(params.get('section'));
+    const cleanerId = params.get('cleaner');
+    if (cleanerId) {
+      setAddTimeOff({ ...EMPTY_TIME_OFF, cleanerId });
+      setShowAddTimeOff(true);
+    }
+  }, []);
+
+  // The hours box follows the person and the dates - what they are booked
+  // to work on those days is what the holiday stands in for - until the
+  // office types a figure of its own. The same rule as the cleaner's form.
+  const bookedHoursForAdd = addTimeOff.type === 'holiday' && addTimeOff.cleanerId
+    ? bookedHoursBetween(
+        assignments.filter((r) => r.cleaner_id === addTimeOff.cleanerId && r.jobs).map((r) => ({ ...r.jobs, paid_minutes: r.paid_minutes ?? null })),
+        assigneeCountByJob, addTimeOff.startDate, addTimeOff.endDate)
+    : 0;
+  useEffect(() => {
+    if (addTimeOff.type !== 'holiday' || addTimeOff.hoursTouched) return;
+    setAddTimeOff((f) => ({ ...f, hours: bookedHoursForAdd > 0 ? String(bookedHoursForAdd) : '' }));
+  }, [addTimeOff.type, addTimeOff.cleanerId, addTimeOff.startDate, addTimeOff.endDate, addTimeOff.hoursTouched, bookedHoursForAdd]);
+
+  // A subcontractor (0104) accrues no holiday: only 'unavailable' is
+  // offered for them, and the database would refuse a holiday row anyway.
+  const addTimeOffSubcontractor = isSubcontractor(employmentTypes[addTimeOff.cleanerId]);
+  useEffect(() => {
+    if (addTimeOffSubcontractor && addTimeOff.type === 'holiday') setAddTimeOff((f) => ({ ...f, type: 'unavailable' }));
+  }, [addTimeOffSubcontractor]);
+
   const load = async () => {
     const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
-    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, { data: assignmentsData }, { data: extensionsData }, { data: reschedulesData }, { data: clientRequestsData }, { data: pausesData }, { data: emergenciesData }, { data: missedClockinData }, { data: missedShiftData }, { data: shortShiftData }, { data: pinProposalData }] = await Promise.all([
+    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, { data: assignmentsData }, { data: extensionsData }, { data: reschedulesData }, { data: clientRequestsData }, { data: pausesData }, { data: emergenciesData }, { data: missedClockinData }, { data: missedShiftData }, { data: shortShiftData }, { data: pinProposalData }, { data: staffData }, employmentData] = await Promise.all([
       supabase
         .from('staff_requests')
         .select('id, type, description, status, created_at, resolved_at, resolution_note, resolved_by, cleaner_id, profiles!staff_requests_cleaner_id_fkey(full_name), resolver:profiles!staff_requests_resolved_by_fkey(full_name), jobs(scheduled_at, properties(address))')
@@ -156,7 +205,7 @@ export default function AdminRequests() {
       // Adjustments live on profile_private (0088); aliased so the balance
       // maths below still keys on `id`.
       supabase.from('profile_private').select('id:profile_id, holiday_adjustment_hours, profiles!inner(role)').eq('profiles.role', 'cleaner'),
-      supabase.from('job_assignments').select('cleaner_id, paid_minutes, jobs(id, status, duration_minutes)'),
+      supabase.from('job_assignments').select('cleaner_id, paid_minutes, jobs(id, status, duration_minutes, scheduled_at)'),
       supabase
         .from('time_extension_requests')
         .select('id, job_id, requested_minutes, reason, status, admin_note, suggested_scheduled_at, suggested_duration_minutes, created_at, cleaner_id, decided_by, profiles!time_extension_requests_cleaner_id_fkey(full_name), decider:profiles!time_extension_requests_decided_by_fkey(full_name), jobs(scheduled_at, duration_minutes, properties(address))')
@@ -203,6 +252,10 @@ export default function AdminRequests() {
         .select('id, property_id, job_id, lat, lng, accuracy_m, distance_from_pin_m, status, created_at, decided_at, cleaner:profiles!property_location_proposals_cleaner_id_fkey(full_name), decider:profiles!property_location_proposals_decided_by_fkey(full_name), properties(address, lat, lng, clients(name))')
         .order('created_at', { ascending: false })
         .limit(100),
+      // Who the office can enter time off for. Supervisors take shifts
+      // too; inventory staff and clients do not.
+      supabase.from('profiles').select('id, full_name').in('role', ['cleaner', 'supervisor']).eq('active', true).order('full_name'),
+      fetchEmploymentTypes(),
     ]);
 
     // A job's duration is split evenly across everyone assigned to it.
@@ -211,6 +264,10 @@ export default function AdminRequests() {
       if (!row.jobs) return;
       assigneeCounts[row.jobs.id] = (assigneeCounts[row.jobs.id] || 0) + 1;
     });
+    setAssignments(assignmentsData || []);
+    setAssigneeCountByJob(assigneeCounts);
+    setStaff(staffData || []);
+    setEmploymentTypes(employmentData || {});
 
     const balanceMap = {};
     (cleanerProfiles || []).forEach((p) => {
@@ -380,41 +437,89 @@ export default function AdminRequests() {
     setAdminNote('');
   };
 
+  // Shifts the cleaner is booked on during approved time off go to
+  // Shifts to Cover as released by them, so whoever claims one takes
+  // their place - the same as if they had released it themselves.
+  // Approving used to leave them on the rota for days they were off.
+  //
+  // Step one, before anything is saved: find the shifts and ask. Returns
+  // the upcoming ones to put out for cover, or null if the office backed
+  // out. `verb` is what the office is about to do ("Approving", "Saving").
+  const shiftsToCoverFor = async ({ cleaner_id, cleaner_name, type, start_date, end_date }, verb) => {
+    const dayAfterEnd = new Date(end_date);
+    dayAfterEnd.setDate(dayAfterEnd.getDate() + 1);
+
+    const { data: existingAssignments } = await supabase
+      .from('job_assignments')
+      .select('jobs!inner(id, scheduled_at, status, duration_minutes, properties(address))')
+      .eq('cleaner_id', cleaner_id)
+      .gte('jobs.scheduled_at', new Date(start_date).toISOString())
+      .lt('jobs.scheduled_at', dayAfterEnd.toISOString());
+
+    const existingJobs = (existingAssignments || []).map((row) => row.jobs).filter(Boolean);
+    const jobsToCover = existingJobs
+      .filter((j) => j.status === 'scheduled' && new Date(j.scheduled_at) > new Date())
+      .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
+
+    if (existingJobs.length > 0) {
+      const name = cleaner_name || 'This cleaner';
+      const proceed = await confirm(
+        `${name} is booked on ${existingJobs.length} shift${existingJobs.length === 1 ? '' : 's'} during this time off (first: ${existingJobs[0].properties?.address} on ${new Date(existingJobs[0].scheduled_at).toLocaleDateString()}).`
+          + (jobsToCover.length > 0
+            ? ` ${verb} puts ${jobsToCover.length === existingJobs.length ? (jobsToCover.length === 1 ? 'it' : 'all of them') : `the ${jobsToCover.length} still to come`} on Shifts to Cover and offers ${jobsToCover.length === 1 ? 'it' : 'them'} to the other cleaners.`
+            : ''),
+        { title: 'Shifts during this time off', confirmLabel: jobsToCover.length > 0 ? `${verb.replace(/ing$/, 'e')} and find cover` : `${verb.replace(/ing$/, 'e')} anyway` }
+      );
+      if (!proceed) return null;
+    }
+    return jobsToCover;
+  };
+
+  // Step two, once the time off is saved as approved: open the offers and
+  // show the best people for each under the request.
+  const openCoverFor = async (target, jobsToCover, session) => {
+    const fmtDay = (d) => new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    const reason = `${target.type === 'holiday' ? 'Holiday' : 'Unavailable'} approved, ${fmtDay(target.start_date)}${target.end_date !== target.start_date ? ` to ${fmtDay(target.end_date)}` : ''}`;
+    let opened = 0;
+    let alreadyOpen = 0;
+    const openedOffers = [];
+    for (const job of jobsToCover) {
+      // One open offer per job is enforced by the database; a shift
+      // already out for cover is left as it is.
+      const { data: offer, error: offerError } = await supabase
+        .from('shift_offers')
+        .insert({ job_id: job.id, released_by: target.cleaner_id, opened_by: session.user.id, reason })
+        .select('id')
+        .single();
+      if (offerError || !offer) { alreadyOpen += 1; continue; }
+      opened += 1;
+      openedOffers.push({
+        id: offer.id,
+        job_id: job.id,
+        released_by: target.cleaner_id,
+        job: { scheduled_at: job.scheduled_at, address: job.properties?.address, duration_minutes: job.duration_minutes },
+      });
+      notify({
+        type: 'shift_cover_needed',
+        offerId: offer.id,
+        jobId: job.id,
+        address: job.properties?.address,
+        scheduledAt: job.scheduled_at,
+        releasedByCleanerId: target.cleaner_id,
+      });
+    }
+    if (opened > 0) toast.success(`${opened} shift${opened === 1 ? '' : 's'} put on Shifts to Cover.`);
+    if (alreadyOpen > 0) toast.success(`${alreadyOpen} shift${alreadyOpen === 1 ? ' was' : 's were'} already out for cover.`);
+    if (openedOffers.length > 0) setCoverSuggestions({ requestId: target.id, offers: openedOffers });
+  };
+
   const confirmDecide = async (id) => {
     const target = timeOff.find((t) => t.id === id);
 
-    // Shifts the cleaner is booked on during approved time off go to
-    // Shifts to Cover as released by them, so whoever claims one takes
-    // their place - the same as if they had released it themselves.
-    // Approving used to leave them on the rota for days they were off.
     let jobsToCover = [];
     if (decidingStatus === 'approved' && target?.cleaner_id) {
-      const dayAfterEnd = new Date(target.end_date);
-      dayAfterEnd.setDate(dayAfterEnd.getDate() + 1);
-
-      const { data: existingAssignments } = await supabase
-        .from('job_assignments')
-        .select('jobs!inner(id, scheduled_at, status, duration_minutes, properties(address))')
-        .eq('cleaner_id', target.cleaner_id)
-        .gte('jobs.scheduled_at', new Date(target.start_date).toISOString())
-        .lt('jobs.scheduled_at', dayAfterEnd.toISOString());
-
-      const existingJobs = (existingAssignments || []).map((row) => row.jobs).filter(Boolean);
-      jobsToCover = existingJobs
-        .filter((j) => j.status === 'scheduled' && new Date(j.scheduled_at) > new Date())
-        .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
-
-      if (existingJobs.length > 0) {
-        const name = target.profiles?.full_name || 'This cleaner';
-        const proceed = await confirm(
-          `${name} is booked on ${existingJobs.length} shift${existingJobs.length === 1 ? '' : 's'} during this time off (first: ${existingJobs[0].properties?.address} on ${new Date(existingJobs[0].scheduled_at).toLocaleDateString()}).`
-            + (jobsToCover.length > 0
-              ? ` Approving puts ${jobsToCover.length === existingJobs.length ? (jobsToCover.length === 1 ? 'it' : 'all of them') : `the ${jobsToCover.length} still to come`} on Shifts to Cover and offers ${jobsToCover.length === 1 ? 'it' : 'them'} to the other cleaners.`
-              : ''),
-          { title: 'Shifts during this time off', confirmLabel: jobsToCover.length > 0 ? 'Approve and find cover' : 'Approve anyway' }
-        );
-        if (!proceed) return;
-      }
+      jobsToCover = await shiftsToCoverFor({ ...target, cleaner_name: target.profiles?.full_name }, 'Approving');
+      if (!jobsToCover) return;
     }
 
     const { data: { session } } = await supabase.auth.getSession();
@@ -440,42 +545,78 @@ export default function AdminRequests() {
       }
 
       if (data.status === 'approved' && jobsToCover.length > 0) {
-        const fmtDay = (d) => new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-        const reason = `${target.type === 'holiday' ? 'Holiday' : 'Unavailable'} approved, ${fmtDay(target.start_date)}${target.end_date !== target.start_date ? ` to ${fmtDay(target.end_date)}` : ''}`;
-        let opened = 0;
-        let alreadyOpen = 0;
-        const openedOffers = [];
-        for (const job of jobsToCover) {
-          // One open offer per job is enforced by the database; a shift
-          // already out for cover is left as it is.
-          const { data: offer, error: offerError } = await supabase
-            .from('shift_offers')
-            .insert({ job_id: job.id, released_by: target.cleaner_id, opened_by: session.user.id, reason })
-            .select('id')
-            .single();
-          if (offerError || !offer) { alreadyOpen += 1; continue; }
-          opened += 1;
-          openedOffers.push({
-            id: offer.id,
-            job_id: job.id,
-            released_by: target.cleaner_id,
-            job: { scheduled_at: job.scheduled_at, address: job.properties?.address, duration_minutes: job.duration_minutes },
-          });
-          notify({
-            type: 'shift_cover_needed',
-            offerId: offer.id,
-            jobId: job.id,
-            address: job.properties?.address,
-            scheduledAt: job.scheduled_at,
-            releasedByCleanerId: target.cleaner_id,
-          });
-        }
-        if (opened > 0) toast.success(`${opened} shift${opened === 1 ? '' : 's'} put on Shifts to Cover.`);
-        if (alreadyOpen > 0) toast.success(`${alreadyOpen} shift${alreadyOpen === 1 ? ' was' : 's were'} already out for cover.`);
-        if (openedOffers.length > 0) setCoverSuggestions({ requestId: id, offers: openedOffers });
+        await openCoverFor(target, jobsToCover, session);
       }
     }
     setDecidingId(null);
+  };
+
+  // The office marking someone as on holiday or unavailable. Saved already
+  // approved with the office as the decider, so it counts against their
+  // balance, reaches payroll (0108) and takes their shifts off the rota
+  // exactly as an approved request would. The cleaner is told by the
+  // database (0110) and by email.
+  const saveAddTimeOff = async (e) => {
+    e.preventDefault();
+    setAddTimeOffError('');
+    const f = addTimeOff;
+    if (!f.cleanerId) { setAddTimeOffError('Pick who this is for.'); return; }
+    if (!f.startDate || !f.endDate) return;
+    if (f.endDate < f.startDate) { setAddTimeOffError('End date must be on or after the start date.'); return; }
+    if (f.type === 'holiday' && !(Number(f.hours) > 0)) { setAddTimeOffError('Enter how many hours of holiday this is.'); return; }
+
+    const person = staff.find((s) => s.id === f.cleanerId);
+    const jobsToCover = await shiftsToCoverFor(
+      { cleaner_id: f.cleanerId, cleaner_name: person?.full_name, type: f.type, start_date: f.startDate, end_date: f.endDate },
+      'Saving'
+    );
+    if (!jobsToCover) return;
+
+    setAddingTimeOff(true);
+    const { data: { session } } = await supabase.auth.getSession();
+
+    const { data, error } = await supabase
+      .from('time_off_requests')
+      .insert({
+        cleaner_id: f.cleanerId,
+        type: f.type,
+        start_date: f.startDate,
+        end_date: f.endDate,
+        hours: f.type === 'holiday' ? Number(f.hours) : null,
+        reason: f.reason.trim() || null,
+        status: 'approved',
+        admin_note: f.note.trim() || null,
+        decided_by: session.user.id,
+        decided_at: new Date().toISOString(),
+      })
+      .select('id, type, start_date, end_date, hours, reason, status, admin_note, created_at, cleaner_id, decided_by, profiles!time_off_requests_cleaner_id_fkey(full_name), decider:profiles!time_off_requests_decided_by_fkey(full_name)')
+      .single();
+    setAddingTimeOff(false);
+
+    if (error || !data) {
+      // The balance check (0026) is worded for the cleaner asking.
+      setAddTimeOffError((error?.message || "Couldn't save that.").replace(/^.*?:\s*/, '').replace('your available', 'their available'));
+      return;
+    }
+
+    setTimeOff((prev) => [data, ...prev]);
+    setShowAddTimeOff(false);
+    setAddTimeOff(EMPTY_TIME_OFF);
+    setTimeOffFilter('approved');
+    toast.success(`${person?.full_name || 'They'} marked as ${f.type === 'holiday' ? 'on holiday' : 'unavailable'}.`);
+
+    notify({
+      type: 'time_off_decided',
+      cleanerId: f.cleanerId,
+      status: 'approved',
+      enteredByOffice: true,
+      requestType: f.type,
+      startDate: f.startDate,
+      endDate: f.endDate,
+      note: data.admin_note,
+    });
+
+    if (jobsToCover.length > 0) await openCoverFor(data, jobsToCover, session);
   };
 
   const startDecideExtension = (id, action) => {
@@ -1176,12 +1317,109 @@ export default function AdminRequests() {
 
       {section === 'timeoff' && (
         <>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
             <button className={timeOffFilter === 'pending' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTimeOffFilter('pending')}>Pending</button>
             <button className={timeOffFilter === 'approved' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTimeOffFilter('approved')}>Approved</button>
             <button className={timeOffFilter === 'declined' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTimeOffFilter('declined')}>Declined</button>
             <button className={timeOffFilter === 'all' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTimeOffFilter('all')}>All</button>
+            <button
+              className="btn-secondary"
+              style={{ marginLeft: 'auto' }}
+              onClick={() => { setShowAddTimeOff((s) => !s); setAddTimeOff(EMPTY_TIME_OFF); setAddTimeOffError(''); }}
+              title="Mark someone as on holiday or unavailable yourself - for when they rang in, or it was agreed in person. It goes in already approved."
+            >
+              {showAddTimeOff ? 'Cancel' : '+ Mark time off'}
+            </button>
           </div>
+
+          {showAddTimeOff && (
+            <form onSubmit={saveAddTimeOff} className="card" style={{ marginBottom: 16 }}>
+              <h2 style={{ marginTop: 0 }}>Mark someone as off</h2>
+              <p className="job-time" style={{ marginTop: -4, marginBottom: 12 }}>
+                Saved as approved straight away. Holiday comes off their balance and goes to payroll; any shifts they are booked on those days are put out for cover.
+              </p>
+              {addTimeOffError && (
+                <p style={{ fontSize: 13, color: 'var(--wf-overdue)', background: 'rgba(216, 30, 52, 0.12)', padding: '8px 12px', borderRadius: 10, margin: '0 0 10px' }}>
+                  {addTimeOffError}
+                </p>
+              )}
+
+              <div className="field-row">
+                <div className="field">
+                  <label className="field-label">Who</label>
+                  <select value={addTimeOff.cleanerId} onChange={(e) => setAddTimeOff((f) => ({ ...f, cleanerId: e.target.value, hoursTouched: false }))} required autoFocus>
+                    <option value="">Choose a person</option>
+                    {staff.map((s) => <option key={s.id} value={s.id}>{s.full_name || 'Unnamed'}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label className="field-label">Type</label>
+                  <select value={addTimeOff.type} onChange={(e) => setAddTimeOff((f) => ({ ...f, type: e.target.value }))}>
+                    {!addTimeOffSubcontractor && <option value="holiday">Holiday</option>}
+                    <option value="unavailable">Unavailable</option>
+                  </select>
+                </div>
+              </div>
+              {addTimeOffSubcontractor && (
+                <p style={{ fontSize: 12, color: 'var(--muted)', margin: '-4px 0 10px' }}>Subcontractor - no holiday accrues, so this can only be marked as unavailable.</p>
+              )}
+
+              <div className="field-row">
+                <div className="field">
+                  <label className="field-label">From</label>
+                  <input type="date" value={addTimeOff.startDate} onChange={(e) => setAddTimeOff((f) => ({ ...f, startDate: e.target.value, endDate: f.endDate && f.endDate >= e.target.value ? f.endDate : e.target.value }))} required />
+                </div>
+                <div className="field">
+                  <label className="field-label">To</label>
+                  <input type="date" value={addTimeOff.endDate} min={addTimeOff.startDate || undefined} onChange={(e) => setAddTimeOff((f) => ({ ...f, endDate: e.target.value }))} required />
+                </div>
+              </div>
+
+              {addTimeOff.type === 'holiday' && (
+                <>
+                  <label>Holiday hours</label>
+                  <input
+                    type="number"
+                    min="0.5"
+                    step="0.5"
+                    value={addTimeOff.hours}
+                    onChange={(e) => setAddTimeOff((f) => ({ ...f, hours: e.target.value, hoursTouched: true }))}
+                    placeholder={addTimeOff.cleanerId && addTimeOff.startDate && addTimeOff.endDate ? 'Nothing booked on those days - enter the hours' : 'Pick the person and dates first'}
+                    required
+                  />
+                  {addTimeOff.cleanerId && addTimeOff.startDate && addTimeOff.endDate && (
+                    <p style={{ fontSize: 12, color: 'var(--muted)', margin: '-4px 0 10px' }}>
+                      {bookedHoursForAdd > 0
+                        ? `Booked for ${bookedHoursForAdd}h on ${addTimeOff.startDate === addTimeOff.endDate ? 'that day' : 'those days'}${addTimeOff.hoursTouched && Number(addTimeOff.hours) !== bookedHoursForAdd ? ' - changed by you' : ', so that is filled in'}.`
+                        : 'Nothing is on their rota for those days, so enter what they would normally work.'}
+                      {holidayBalances[addTimeOff.cleanerId] !== undefined && ` ${(holidayBalances[addTimeOff.cleanerId] - holidayHoursUsed(addTimeOff.cleanerId, timeOff)).toFixed(1)}h remaining on their balance.`}
+                    </p>
+                  )}
+                </>
+              )}
+
+              <label>Reason (optional)</label>
+              <input
+                value={addTimeOff.reason}
+                onChange={(e) => setAddTimeOff((f) => ({ ...f, reason: e.target.value }))}
+                placeholder="e.g. Off sick, rang in this morning"
+              />
+
+              <label>Note to them (optional)</label>
+              <input
+                value={addTimeOff.note}
+                onChange={(e) => setAddTimeOff((f) => ({ ...f, note: e.target.value }))}
+                placeholder="e.g. Get well soon - shifts are being covered"
+              />
+
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button type="button" className="btn-secondary" onClick={() => { setShowAddTimeOff(false); setAddTimeOff(EMPTY_TIME_OFF); }}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={addingTimeOff} title="Save this as approved time off and tell them">
+                  {addingTimeOff ? 'Saving...' : `Mark as ${addTimeOff.type === 'holiday' ? 'on holiday' : 'unavailable'}`}
+                </button>
+              </div>
+            </form>
+          )}
 
           {filteredTimeOff.length === 0 && <p className="empty-state">Nothing here.</p>}
 

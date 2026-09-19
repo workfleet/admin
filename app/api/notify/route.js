@@ -557,9 +557,18 @@ export async function POST(request) {
       const email = await emailForUserId(payload.cleanerId);
       if (!email) return NextResponse.json({ skipped: 'no_email' });
       to = [email];
-      subject = `Your time off request was ${payload.status}`;
-      text = `Your request for ${payload.startDate} to ${payload.endDate} was ${payload.status}.`
-        + (payload.note ? `\n\nNote from admin: ${payload.note}` : '');
+      if (payload.enteredByOffice) {
+        // The office marked them off themselves - they never asked, so
+        // "your request was approved" would read as someone else's email.
+        const what = payload.requestType === 'holiday' ? 'on holiday' : 'unavailable';
+        subject = `You've been marked as ${what}`;
+        text = `The office has marked you as ${what} from ${payload.startDate} to ${payload.endDate}.`
+          + (payload.note ? `\n\nNote from admin: ${payload.note}` : '');
+      } else {
+        subject = `Your time off request was ${payload.status}`;
+        text = `Your request for ${payload.startDate} to ${payload.endDate} was ${payload.status}.`
+          + (payload.note ? `\n\nNote from admin: ${payload.note}` : '');
+      }
     } else if (payload.type === 'shift_cover_needed') {
       to = await adminEmails();
       if (to.length === 0) return NextResponse.json({ skipped: 'no_email' });
