@@ -368,8 +368,38 @@ export default function ClientDetail() {
     setIsEditing(false);
   };
 
+  // Deleting a client or a property takes every job at those addresses
+  // with it - past visits included - so the box says how many, and then
+  // asks again. A site's whole history once went in a single click.
+  const countJobsAt = async (propertyIds) => {
+    if (propertyIds.length === 0) return { total: 0, upcoming: 0 };
+    const nowIso = new Date().toISOString();
+    const [{ count: total }, { count: upcoming }] = await Promise.all([
+      supabase.from('jobs').select('id', { count: 'exact', head: true }).in('property_id', propertyIds),
+      supabase.from('jobs').select('id', { count: 'exact', head: true }).in('property_id', propertyIds).gte('scheduled_at', nowIso),
+    ]);
+    return { total: total || 0, upcoming: upcoming || 0 };
+  };
+
+  const jobsPhrase = ({ total, upcoming }) => {
+    if (total === 0) return 'There are no jobs at it.';
+    return `${total} job${total === 1 ? '' : 's'} (${upcoming} still to come) will be deleted with it, along with every check-in, task and photo on them.`;
+  };
+
   const deleteClient = async () => {
-    if (!(await confirm('Delete this client and all their properties? This cannot be undone.', { title: 'Delete client', danger: true }))) return;
+    const propertyIds = properties.map((p) => p.id);
+    const counts = await countJobsAt(propertyIds);
+    const first = await confirm(
+      `Delete ${client?.name || 'this client'} and ${propertyIds.length === 1 ? 'their property' : `all ${propertyIds.length} of their properties`}? `
+        + jobsPhrase(counts).replace('at it', 'at them'),
+      { title: 'Delete client', danger: true, confirmLabel: 'Delete' }
+    );
+    if (!first) return;
+    const sure = await confirm(
+      `Are you sure? The client, ${propertyIds.length} propert${propertyIds.length === 1 ? 'y' : 'ies'} and ${counts.total} job${counts.total === 1 ? '' : 's'} will be deleted for good. This cannot be undone.`,
+      { title: 'Delete this client?', danger: true, confirmLabel: 'Yes, delete everything' }
+    );
+    if (!sure) return;
     const { error } = await supabase.from('clients').delete().eq('id', id);
     if (error) { toast.error('Could not delete the client.'); return; }
     toast.success('Client deleted.');
@@ -495,7 +525,20 @@ export default function ClientDetail() {
   };
 
   const deleteProperty = async (propertyId) => {
-    if (!(await confirm('Delete this property?', { danger: true }))) return;
+    const property = properties.find((p) => p.id === propertyId);
+    const counts = await countJobsAt([propertyId]);
+    const first = await confirm(
+      `Delete ${property?.address || 'this property'}? ${jobsPhrase(counts)}`,
+      { title: 'Delete property', danger: true, confirmLabel: 'Delete' }
+    );
+    if (!first) return;
+    const sure = await confirm(
+      counts.total > 0
+        ? `Are you sure? The property and its ${counts.total} job${counts.total === 1 ? '' : 's'} will be deleted for good. This cannot be undone.`
+        : 'Are you sure? This cannot be undone.',
+      { title: 'Delete this property?', danger: true, confirmLabel: counts.total > 0 ? `Yes, delete it and ${counts.total} job${counts.total === 1 ? '' : 's'}` : 'Yes, delete it' }
+    );
+    if (!sure) return;
     const { error } = await supabase.from('properties').delete().eq('id', propertyId);
     if (error) { toast.error('Could not delete the property.'); return; }
     setProperties((prev) => prev.filter((p) => p.id !== propertyId));

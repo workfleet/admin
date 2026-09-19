@@ -10,6 +10,7 @@ import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
 import { localDateString } from '../../../lib/localDate';
 import { generateOccurrenceDates, MAX_OCCURRENCES, WEEKDAY_OPTIONS } from '../../../lib/recurrence';
+import { describeSeriesPlan } from '../../../lib/seriesEdit';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
@@ -18,6 +19,7 @@ import { groupOverlappingJobs, assignLanes, abbreviateName } from '../../../lib/
 import { findTightTurnarounds, describeTurnaround } from '../../../lib/travelTime';
 import { buildCleanerRows, UNASSIGNED_ROW_ID } from '../../../lib/rotaGrid';
 import CleanerWeekGrid from './CleanerWeekGrid';
+import SeriesEditor from './SeriesEditor';
 
 // Full 24hr range with scroll (CrewConnect crews run early mornings through
 // overnight), defaulting the scroll position to business hours on load.
@@ -245,6 +247,9 @@ export default function AdminRota() {
   const [editMinute, setEditMinute] = useState('00');
   const [editDuration, setEditDuration] = useState(120);
   const [editUseCustomDuration, setEditUseCustomDuration] = useState(false);
+  // The recurring series behind the open job, loaded when the office asks
+  // to edit it: { series, futureJobs } - null while the editor is closed.
+  const [seriesEdit, setSeriesEdit] = useState(null);
   const [editNotes, setEditNotes] = useState('');
   const [editAddress, setEditAddress] = useState('');
   const [editAddressCoords, setEditAddressCoords] = useState(null);
@@ -433,6 +438,7 @@ export default function AdminRota() {
     setEditAddressCoords(null);
     setJobSaveError('');
     setAddCleanerSelection('');
+    setSeriesEdit(null);
   }, [selectedJob?.id]);
 
   const saveJobDetails = async () => {
@@ -779,8 +785,26 @@ export default function AdminRota() {
     await dropCleanerFromJob(jobId, cleanerId);
   };
 
+  // Deleting asks twice. The first box says what is about to go; the
+  // second is a plain "are you sure", because a whole site's visits once
+  // went in a single click and nobody could say who pressed it.
+  const whenLabel = (job) => new Date(job.scheduled_at).toLocaleString(undefined, {
+    weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
+  });
+
   const deleteJob = async (job) => {
-    if (!(await confirm(`Delete this job at ${job.properties?.address} on ${new Date(job.scheduled_at).toLocaleString()}? This can't be undone.`, { title: 'Delete job', danger: true }))) return;
+    const staff = (job.job_assignments || []).map((a) => a.profiles?.full_name).filter(Boolean);
+    const first = await confirm(
+      `Delete the visit at ${job.properties?.address} on ${whenLabel(job)}?`
+        + (staff.length > 0 ? ` ${staff.join(' and ')} ${staff.length === 1 ? 'is' : 'are'} booked on it.` : ''),
+      { title: 'Delete job', danger: true, confirmLabel: 'Delete' }
+    );
+    if (!first) return;
+    const sure = await confirm(
+      'Are you sure? This visit, its tasks and any check-ins on it will be deleted for good. This cannot be undone.',
+      { title: 'Delete this visit?', danger: true, confirmLabel: 'Yes, delete it' }
+    );
+    if (!sure) return;
 
     const { error } = await supabase.from('jobs').delete().eq('id', job.id);
     if (error) { toast.error('Could not delete the job.'); return; }
@@ -789,11 +813,165 @@ export default function AdminRota() {
     toast.success('Job deleted.');
   };
 
+  const openSeriesEditor = async () => {
+    if (!selectedJob?.series_id) return;
+    const [{ data: series }, { data: future }] = await Promise.all([
+      supabase
+        .from('job_series')
+        .select('id, property_id, recurrence_type, interval_count, weekdays, duration_minutes')
+        .eq('id', selectedJob.series_id)
+        .single(),
+      supabase
+        .from('jobs')
+        .select('id, scheduled_at, status, duration_minutes')
+        .eq('series_id', selectedJob.series_id)
+        .gte('scheduled_at', selectedJob.scheduled_at)
+        .order('scheduled_at', { ascending: true }),
+    ]);
+    if (!series) { toast.error('Could not load the series.'); return; }
+    setSeriesEdit({ series, futureJobs: future || [] });
+  };
+
+  // Applies an edit to the series from the open job onward. The plan came
+  // from lib/seriesEdit: existing jobs are moved in place so their
+  // cleaners, tasks and check-ins stay put; only days that left the
+  // pattern are deleted, and only days that joined it are booked - with
+  // this job's cleaners and tasks copied on. Jobs that already happened,
+  // or that were moved off the pattern by hand, are not touched.
+  const applySeriesEdit = async (plan, form) => {
+    const job = selectedJob;
+    if (!job || !seriesEdit) return;
+    const cleanerIds = (job.job_assignments || []).map((a) => a.cleaner_id);
+    const property = properties.find((p) => p.id === job.property_id) || job.properties;
+
+    // One combined warning across every new or moved date x cleaner, as
+    // creating a series does.
+    const checks = [
+      ...plan.add.map((d) => ({ date: d, excludeJobId: null })),
+      ...plan.move.map((m) => ({ date: m.to, excludeJobId: m.job.id })),
+    ];
+    let conflictCount = 0;
+    let timeOffConflictCount = 0;
+    let travelConflictCount = 0;
+    let firstTravelConflict = null;
+    for (const cid of cleanerIds) {
+      for (const { date, excludeJobId } of checks) {
+        if (await findConflict(cid, date, form.duration, excludeJobId)) conflictCount++;
+        if (await findTimeOffConflict(cid, date)) timeOffConflictCount++;
+        const tight = await findTravelConflict(cid, date, form.duration, property, excludeJobId);
+        if (tight) { travelConflictCount++; firstTravelConflict = firstTravelConflict || tight; }
+      }
+    }
+    const warnings = [];
+    if (conflictCount > 0) warnings.push(`${conflictCount} double-booking${conflictCount === 1 ? '' : 's'}`);
+    if (timeOffConflictCount > 0) warnings.push(`${timeOffConflictCount} clash${timeOffConflictCount === 1 ? '' : 'es'} with approved time off`);
+    if (travelConflictCount > 0) {
+      warnings.push(`${travelConflictCount} turnaround${travelConflictCount === 1 ? '' : 's'} with no time to travel`
+        + (firstTravelConflict ? ` (e.g. ${describeTurnaround(firstTravelConflict)})` : ''));
+    }
+
+    const fmt = (d) => new Date(d).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+    const lines = [describeSeriesPlan(plan)];
+    if (plan.remove.length > 0) lines.push(`Deleted for good: ${plan.remove.map((j) => fmt(j.scheduled_at)).join(', ')}.`);
+    if (warnings.length > 0) lines.push(`Includes ${warnings.join(' and ')}.`);
+    const proceed = await confirm(lines.join(' '), {
+      title: 'Change this series',
+      confirmLabel: 'Apply',
+      danger: plan.remove.length > 0,
+    });
+    if (!proceed) return;
+
+    const { error: seriesError } = await supabase
+      .from('job_series')
+      .update({
+        recurrence_type: form.recurrenceType,
+        interval_count: form.interval,
+        weekdays: form.weekdays,
+        duration_minutes: form.duration,
+      })
+      .eq('id', seriesEdit.series.id);
+    if (seriesError) { toast.error('Could not save the series.'); return; }
+
+    if (plan.remove.length > 0) {
+      const { error } = await supabase.from('jobs').delete().in('id', plan.remove.map((j) => j.id));
+      if (error) { toast.error('Could not remove the visits that left the pattern.'); return; }
+    }
+
+    // Each move is its own update so the row keeps its id. The database
+    // tells every cleaner on a moved visit through the bell (0086); an
+    // email per visit on top would be dozens at once, so none is sent.
+    const moved = await Promise.all(plan.move.map((m) =>
+      supabase.from('jobs').update({ scheduled_at: m.to.toISOString(), duration_minutes: form.duration }).eq('id', m.job.id)
+    ));
+    if (moved.some((r) => r.error)) toast.error('Some visits could not be moved - check the rota.');
+
+    if (plan.add.length > 0) {
+      const { data: inserted } = await supabase
+        .from('jobs')
+        .insert(plan.add.map((d) => ({
+          property_id: job.property_id,
+          scheduled_at: d.toISOString(),
+          duration_minutes: form.duration,
+          series_id: job.series_id,
+        })))
+        .select('id, scheduled_at');
+
+      if (inserted && inserted.length > 0) {
+        if (cleanerIds.length > 0) {
+          await supabase
+            .from('job_assignments')
+            .insert(inserted.flatMap((j) => cleanerIds.map((cid) => ({ job_id: j.id, cleaner_id: cid }))));
+          cleanerIds.forEach((cid) => {
+            notify({ type: 'shift_assigned', cleanerId: cid, address: job.properties?.address, scheduledAt: inserted[0].scheduled_at });
+          });
+        }
+        if (jobTasks.length > 0) {
+          await supabase
+            .from('tasks')
+            .insert(inserted.flatMap((j) => jobTasks.map((t) => ({ job_id: j.id, description: t.description }))));
+        }
+      } else {
+        toast.error('Could not book the new visits - check the rota.');
+      }
+    }
+
+    await loadJobs();
+    toast.success(`Series updated: ${describeSeriesPlan(plan).toLowerCase()}`);
+    // The open job may have moved or gone; close rather than show stale fields.
+    setSeriesEdit(null);
+    setSelectedJob(null);
+  };
+
   // Deletes this occurrence and every future one sharing the same
   // series_id - past occurrences (already happened) are left alone.
   const deleteFutureInSeries = async (job) => {
     if (!job.series_id) return;
-    if (!(await confirm('Delete this and every future job in this recurring series? Past occurrences will be kept.', { title: 'Delete series', danger: true }))) return;
+
+    // Count what is about to go before asking, so the box says "14 visits,
+    // Mon 21 Sep to Fri 6 Nov" rather than "this and every future job".
+    const { data: future } = await supabase
+      .from('jobs')
+      .select('id, scheduled_at, status')
+      .eq('series_id', job.series_id)
+      .gte('scheduled_at', job.scheduled_at)
+      .order('scheduled_at', { ascending: true });
+    const doomed = future || [];
+    if (doomed.length === 0) { toast.error('Nothing to delete.'); return; }
+    const started = doomed.filter((j) => j.status !== 'scheduled').length;
+
+    const first = await confirm(
+      `Delete ${doomed.length} visit${doomed.length === 1 ? '' : 's'} at ${job.properties?.address}`
+        + (doomed.length > 1 ? `, ${whenLabel(doomed[0])} to ${whenLabel(doomed[doomed.length - 1])}` : ` on ${whenLabel(doomed[0])}`)
+        + '? Visits before this one are kept.'
+        + (started > 0 ? ` ${started} of these ${started === 1 ? 'has' : 'have'} already started or finished.` : ''),
+      { title: 'Delete series', danger: true, confirmLabel: 'Delete' }
+    );
+    if (!first) return;
+    const sure = await confirm(
+      `Are you sure? ${doomed.length} visit${doomed.length === 1 ? '' : 's'} and everything on them - cleaners, tasks, check-ins - will be deleted for good. This cannot be undone.`,
+      { title: `Delete ${doomed.length} visit${doomed.length === 1 ? '' : 's'}?`, danger: true, confirmLabel: `Yes, delete ${doomed.length}` }
+    );
+    if (!sure) return;
 
     const { data: deleted, error } = await supabase
       .from('jobs')
@@ -2109,6 +2287,33 @@ export default function AdminRota() {
               <button type="submit" className="btn-primary">Add</button>
             </form>
           </div>
+
+          {selectedJob.series_id && (
+            <div className="card" style={{ marginTop: 14, padding: '12px 14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <div>
+                  <p style={{ fontWeight: 600, margin: 0 }}>Recurring series</p>
+                  <p style={{ fontSize: 12, color: 'var(--muted)', margin: '2px 0 0' }}>
+                    Change the days, time, length or end date for this visit and every one after it.
+                  </p>
+                </div>
+                {!seriesEdit && (
+                  <button className="btn-secondary" onClick={openSeriesEditor} title="Change the pattern from this visit onward - earlier visits are kept as they are">
+                    Edit this + future
+                  </button>
+                )}
+              </div>
+              {seriesEdit && (
+                <SeriesEditor
+                  series={seriesEdit.series}
+                  fromJob={selectedJob}
+                  futureJobs={seriesEdit.futureJobs}
+                  onSave={applySeriesEdit}
+                  onCancel={() => setSeriesEdit(null)}
+                />
+              )}
+            </div>
+          )}
 
           {/* Deleting lives at the foot of the panel in its own bounded area.
               Sat next to Close at the top, the two read as a matching pair of
