@@ -446,10 +446,16 @@ export default function AdminRota() {
     setSavingJob(true);
     setJobSaveError('');
 
-    const scheduledAtDate = new Date(`${editDate}T${editHour}:${editMinute}`);
+    // Once a visit has started or finished its date and time are history.
+    // Dragging and the series editor already refuse to move such a job;
+    // this form once didn't, and a completed visit re-dated a fortnight
+    // ahead took its check-in with it and blocked the cleaner from
+    // clocking in. Only a job that is still 'scheduled' can be moved.
+    const timeLocked = selectedJob.status !== 'scheduled';
     const previousAt = selectedJob.scheduled_at;
+    const scheduledAtDate = timeLocked ? new Date(previousAt) : new Date(`${editDate}T${editHour}:${editMinute}`);
 
-    for (const a of selectedJob.job_assignments || []) {
+    for (const a of timeLocked ? [] : selectedJob.job_assignments || []) {
       const conflict = await findConflict(a.cleaner_id, scheduledAtDate, editDuration, selectedJob.id);
       if (conflict) {
         const proceed = await confirm(
@@ -2067,17 +2073,17 @@ export default function AdminRota() {
             <div className="field-row" style={{ marginTop: 10 }}>
               <div className="field">
                 <label className="field-label">Date</label>
-                <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
+                <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} disabled={selectedJob.status !== 'scheduled'} />
               </div>
               <div className="field">
                 <label className="field-label">Time</label>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <select value={editHour} onChange={(e) => setEditHour(e.target.value)} style={{ flex: 1.4, marginBottom: 0 }}>
+                  <select value={editHour} onChange={(e) => setEditHour(e.target.value)} disabled={selectedJob.status !== 'scheduled'} style={{ flex: 1.4, marginBottom: 0 }}>
                     {HOUR_OPTIONS.map((h) => (
                       <option key={h} value={String(h).padStart(2, '0')}>{formatHour12(h)}</option>
                     ))}
                   </select>
-                  <select value={editMinute} onChange={(e) => setEditMinute(e.target.value)} style={{ flex: 1, marginBottom: 0 }}>
+                  <select value={editMinute} onChange={(e) => setEditMinute(e.target.value)} disabled={selectedJob.status !== 'scheduled'} style={{ flex: 1, marginBottom: 0 }}>
                     {MINUTE_OPTIONS.map((m) => (
                       <option key={m} value={String(m).padStart(2, '0')}>:{String(m).padStart(2, '0')}</option>
                     ))}
@@ -2085,6 +2091,11 @@ export default function AdminRota() {
                 </div>
               </div>
             </div>
+            {selectedJob.status !== 'scheduled' && (
+              <p style={{ fontSize: 12, color: 'var(--muted)', margin: '4px 0 0' }}>
+                This visit has {selectedJob.status === 'completed' ? 'finished' : 'already started'}, so its date and time can't be changed. To book another visit, add a new job.
+              </p>
+            )}
 
             <div className="field" style={{ marginTop: 10 }}>
               <label className="field-label">Duration</label>
