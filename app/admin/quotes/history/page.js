@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { supabase } from '../../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../../lib/authGate';
 import { formatPriceGBP, quoteReference, quoteRecipientName } from '../../../../lib/companyBranding';
-import { ROOM_TYPES, ADDON_TYPES, OVEN_OPTIONS } from '../../../../lib/quoteCalculator';
+import { ROOM_TYPES, ADDON_TYPES, OVEN_OPTIONS, pricePeriodSuffix, projectPricePeriods } from '../../../../lib/quoteCalculator';
 import { summariseShiftSchedule } from '../../../../lib/shiftSchedule';
 import BackButton from '../../../components/BackButton';
 
@@ -31,7 +31,7 @@ export default function QuoteHistory() {
 
     const { data } = await supabase
       .from('quotes')
-      .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, status, valid_until, notes, created_at, archived_at, calculator_input, calculator_breakdown, shift_schedule, clients(name)')
+      .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, price_period, status, valid_until, notes, created_at, archived_at, calculator_input, calculator_breakdown, shift_schedule, clients(name)')
       .order('created_at', { ascending: false });
 
     setQuotes(data || []);
@@ -114,7 +114,7 @@ export default function QuoteHistory() {
                   <td style={{ padding: '8px 6px', color: 'var(--muted)', maxWidth: 320 }}>{quote.description}</td>
                   <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{b ? `${b.totalHours}h` : '—'}</td>
                   <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{b ? `${(b.marginPct * 100).toFixed(1)}%` : '—'}</td>
-                  <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>{formatPriceGBP(quote.price)}</td>
+                  <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>{formatPriceGBP(quote.price)}{pricePeriodSuffix(quote.price_period)}</td>
                   <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>
                     <span className={`badge ${STATUS_BADGE_CLASS[quote.status]}`}>{STATUS_LABELS[quote.status]}</span>
                   </td>
@@ -134,7 +134,12 @@ export default function QuoteHistory() {
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
               <span className={`badge ${STATUS_BADGE_CLASS[selectedQuote.status]}`}>{STATUS_LABELS[selectedQuote.status]}</span>
-              <strong style={{ fontSize: 20 }}>{formatPriceGBP(selectedQuote.price)}</strong>
+              <strong style={{ fontSize: 20 }}>{formatPriceGBP(selectedQuote.price)}{pricePeriodSuffix(selectedQuote.price_period)}</strong>
+              {projectPricePeriods(selectedQuote.price, selectedQuote.price_period) && (
+                <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+                  {(() => { const p = projectPricePeriods(selectedQuote.price, selectedQuote.price_period); return `${formatPriceGBP(p.weekly)}/week · ${formatPriceGBP(p.monthly)}/month · ${formatPriceGBP(p.annual)}/year`; })()}
+                </div>
+              )}
             </div>
 
             <p style={{ fontSize: 13.5, color: 'var(--muted)', marginTop: 10 }}>

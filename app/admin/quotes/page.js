@@ -13,7 +13,7 @@ import {
   PROPERTY_TYPES, PROPERTY_TYPE_DEFAULTS, ADDON_TYPES, OVEN_OPTIONS,
   SERVICE_TYPES, GARDEN_SIZE_OPTIONS, GARDEN_ADDON_TYPES, COMMERCIAL_FREQUENCY_OPTIONS,
   calculateQuote, defaultQuoteDescription, rebaseBreakdownToPrice,
-  PRICING_DEFAULTS,
+  PRICING_DEFAULTS, PRICE_PERIODS, pricePeriodSuffix, projectPricePeriods,
 } from '../../../lib/quoteCalculator';
 import {
   WEEKDAYS, RECURRENCE_OPTIONS, EMPTY_SHIFT_PATTERN, EMPTY_SHIFT_SCHEDULE,
@@ -232,6 +232,7 @@ export default function AdminQuotes() {
   const [prospectPhone, setProspectPhone] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
+  const [pricePeriod, setPricePeriod] = useState('one_off');
   const [validUntil, setValidUntil] = useState('');
   const [notes, setNotes] = useState('');
   const [creating, setCreating] = useState(false);
@@ -278,7 +279,7 @@ export default function AdminQuotes() {
       supabase.from('profiles').select('role').eq('id', session.user.id).single(),
       supabase
         .from('quotes')
-        .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, status, valid_until, notes, created_at, archived_at, calculator_input, calculator_breakdown, shift_schedule, clients(name)')
+        .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, price_period, status, valid_until, notes, created_at, archived_at, calculator_input, calculator_breakdown, shift_schedule, clients(name)')
         .order('created_at', { ascending: false }),
       supabase.from('clients').select('id, name').order('name'),
       supabase.from('properties').select('id, client_id, address'),
@@ -354,6 +355,7 @@ export default function AdminQuotes() {
     setProspectPhone('');
     setDescription('');
     setPrice('');
+    setPricePeriod('one_off');
     setValidUntil('');
     setNotes('');
     setPricingMode('manual');
@@ -377,6 +379,13 @@ export default function AdminQuotes() {
     return rebased === breakdown ? null : rebased;
   }, [breakdown, price]);
 
+  // The typed price as a weekly, monthly and annual figure, so whichever
+  // one the client asked for, the office sees the others before sending.
+  const priceProjection = useMemo(
+    () => (price === '' ? null : projectPricePeriods(parseFloat(price), pricePeriod)),
+    [price, pricePeriod]
+  );
+
   // Puts a saved quote back into the form it was written in. The
   // pricing mode is inferred from what was stored rather than kept as a
   // column: a schedule means it was priced on shifts, calculator input
@@ -390,6 +399,7 @@ export default function AdminQuotes() {
     setProspectPhone(quote.prospect_phone || '');
     setDescription(quote.description || '');
     setPrice(String(quote.price ?? ''));
+    setPricePeriod(quote.price_period || 'one_off');
     setValidUntil(quote.valid_until || '');
     setNotes(quote.notes || '');
 
@@ -446,8 +456,11 @@ export default function AdminQuotes() {
     setShiftSchedule((prev) => ({ ...prev, initialWeeks: { ...prev.initialWeeks, [key]: value } }));
   };
 
+  // A shift pattern is billed by the week, so the period follows the price.
   const useWeeklyChargeAsPrice = () => {
-    if (scheduleSummary) setPrice(String(scheduleSummary.weeklyCharge));
+    if (!scheduleSummary) return;
+    setPrice(String(scheduleSummary.weeklyCharge));
+    setPricePeriod('week');
   };
 
   const useScheduleDescription = () => {
@@ -475,8 +488,12 @@ export default function AdminQuotes() {
     }));
   };
 
+  // The calculator prices one visit; whether that is a one-off job or a
+  // recurring visit depends on the commercial frequency it was given.
   const useCalculatedPrice = () => {
-    if (breakdown) setPrice(String(breakdown.finalPrice));
+    if (!breakdown) return;
+    setPrice(String(breakdown.finalPrice));
+    setPricePeriod(breakdown.visitsPerWeek > 0 ? 'visit' : 'one_off');
   };
 
   const useGeneratedDescription = () => {
@@ -499,6 +516,7 @@ export default function AdminQuotes() {
       prospect_phone: recipientType === 'prospect' ? (prospectPhone.trim() || null) : null,
       description: description.trim(),
       price: parseFloat(price),
+      price_period: pricePeriod,
       valid_until: validUntil || null,
       notes: notes.trim() || null,
       // Set on creation only - editing a quote doesn't make you its author.
@@ -518,7 +536,7 @@ export default function AdminQuotes() {
       ? supabase.from('quotes').update(payload).eq('id', editingQuoteId)
       : supabase.from('quotes').insert(payload);
 
-    const { data, error } = await query.select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, status, valid_until, notes, created_at, archived_at, calculator_input, calculator_breakdown, shift_schedule, clients(name)').single();
+    const { data, error } = await query.select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, price_period, status, valid_until, notes, created_at, archived_at, calculator_input, calculator_breakdown, shift_schedule, clients(name)').single();
 
     setCreating(false);
     if (error || !data) { toast.error('Could not save the quote.'); return; }
@@ -1051,10 +1069,21 @@ export default function AdminQuotes() {
                   <input type="number" step="0.01" min="0" value={price} onChange={(e) => setPrice(e.target.value)} required />
                 </div>
                 <div className="field">
+                  <label className="field-label">This price is</label>
+                  <select value={pricePeriod} onChange={(e) => setPricePeriod(e.target.value)}>
+                    {PRICE_PERIODS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                  </select>
+                </div>
+                <div className="field">
                   <label className="field-label">Valid until (optional)</label>
                   <input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
                 </div>
               </div>
+              {priceProjection && (
+                <p className="job-time" style={{ marginTop: -4, marginBottom: 12 }}>
+                  {formatPrice(priceProjection.weekly)}/week · {formatPrice(priceProjection.monthly)}/month · {formatPrice(priceProjection.annual)}/year
+                </p>
+              )}
               <div className="field">
                 <label className="field-label">Notes (optional)</label>
                 <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Internal notes, not shown to the client" />
@@ -1086,6 +1115,7 @@ export default function AdminQuotes() {
           const isExpanded = expandedQuoteId === quote.id;
           const b = quote.calculator_breakdown;
           const sched = summariseShiftSchedule(quote.shift_schedule);
+          const projection = projectPricePeriods(quote.price, quote.price_period);
           return (
             <div key={quote.id} className="card job-card" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
@@ -1131,7 +1161,12 @@ export default function AdminQuotes() {
                   )}
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <strong style={{ fontSize: 18 }}>{formatPrice(quote.price)}</strong>
+                  <strong style={{ fontSize: 18 }}>{formatPrice(quote.price)}{pricePeriodSuffix(quote.price_period)}</strong>
+                  {projection && (
+                    <div className="job-time" style={{ marginTop: 2 }}>
+                      {formatPrice(projection.monthly)}/month · {formatPrice(projection.annual)}/year
+                    </div>
+                  )}
                 </div>
               </div>
 

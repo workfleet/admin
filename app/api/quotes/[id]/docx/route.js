@@ -25,7 +25,7 @@ export async function GET(request, { params }) {
 
   const { data: quote } = await supabaseAdmin
     .from('quotes')
-    .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, valid_until, created_at, calculator_input, calculator_breakdown, shift_schedule, clients(name)')
+    .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, price_period, valid_until, created_at, calculator_input, calculator_breakdown, shift_schedule, clients(name)')
     .eq('id', params.id)
     .single();
 
