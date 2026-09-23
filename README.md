@@ -168,6 +168,13 @@ own throwaway fixture data, so it's safe to run against a real project.
   **cleaner deactivation** — see open items tracked separately.
 - **Invoicing** — client billing address exists in the schema, but there's no
   invoice generation yet.
+- **Play Store listing**: the app installs today as a PWA ("Add to Home
+  screen"), which needs nothing further. Publishing it to the Play Store as a
+  Trusted Web Activity is possible — `/.well-known/assetlinks.json` is already
+  served from `ANDROID_PACKAGE_NAME` and `ANDROID_CERT_FINGERPRINTS`, and the
+  rest is walked through in `docs/android-play-store.md`. Note that staff on
+  Samsung Internet cannot install the PWA at all — Play Protect blocks the
+  WebAPK it mints — so the app hands them off to Chrome instead.
 - **Deploy**: push this to GitHub, then connect the repo at https://vercel.com
   (free tier) and add the same environment variables there (including the
   service role key, server-side only) — it'll go live in a couple of minutes.

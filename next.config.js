@@ -7,6 +7,16 @@ const nextConfig = {
   // during page-data collection). Two sessions in this checkout is normal now,
   // so this leaves a way to build somewhere else: NEXT_DIST_DIR=.next-build.
   distDir: process.env.NEXT_DIST_DIR || '.next',
+
+  // Android fetches the site's app-association file from a fixed path it will
+  // not negotiate on. `.well-known` is a hidden directory as far as the App
+  // Router is concerned, so the handler lives at a routable path and this puts
+  // it back where Google looks. See lib/assetlinks.js.
+  async rewrites() {
+    return [
+      { source: '/.well-known/assetlinks.json', destination: '/api/assetlinks' },
+    ];
+  },
 };
 
 // Source map upload needs a Sentry auth token, and nobody should have to hold
