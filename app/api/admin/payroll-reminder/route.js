@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '../../../../lib/supabaseAdmin';
 import { withoutTestAccounts } from '../../../../lib/testAccounts';
+import { BOOKABLE_ROLES } from '../../../../lib/staffRoles';
 import { sendPushToSubscriptions } from '../../../../lib/webPush';
 import {
   DEFAULT_PAYROLL_SETTINGS,
@@ -93,7 +94,7 @@ async function runReminder(request) {
   if (cleanerIds.length === 0) return NextResponse.json({ sent: 0, reason: 'nobody_in_period', period });
 
   const { data: active } = await supabaseAdmin
-    .from('profiles').select('id').in('id', cleanerIds).eq('active', true).eq('role', 'cleaner');
+    .from('profiles').select('id').in('id', cleanerIds).eq('active', true).in('role', BOOKABLE_ROLES);
   const recipients = withoutTestAccounts(active).map((p) => p.id);
 
   const label = periodLabel(period, { withYear: false });

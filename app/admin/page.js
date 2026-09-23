@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ClipboardList, Users, Inbox, Clock, UserX, ChevronDown } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { withoutTestAccounts } from '../../lib/testAccounts';
+import { BOOKABLE_ROLES } from '../../lib/staffRoles';
 import { getSessionWithRetry } from '../../lib/authGate';
 import { getWorkAnniversaryYears } from '../../lib/workAnniversary';
 import { needsReorder } from '../../lib/inventory';
@@ -273,7 +274,7 @@ export default function AdminDashboard() {
       { data: contractClients },
       { data: allProducts },
     ] = await Promise.all([
-      supabase.from('profiles').select('id, full_name').eq('role', 'cleaner').eq('active', true),
+      supabase.from('profiles').select('id, full_name').in('role', BOOKABLE_ROLES).eq('active', true),
       supabase.from('jobs')
         .select('id, scheduled_at, status, duration_minutes, properties(address, clients(name)), job_assignments(cleaner_id, profiles(full_name))')
         .gte('scheduled_at', startOfDay.toISOString()).lt('scheduled_at', endOfDay.toISOString())

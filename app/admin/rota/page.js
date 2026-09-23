@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../../../lib/supabaseClient';
 import { withoutTestAccounts } from '../../../lib/testAccounts';
+import { BOOKABLE_ROLES } from '../../../lib/staffRoles';
 import { claimFor, describeClockRecord, indexClaims } from '../../../lib/clockIn';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
@@ -609,8 +610,14 @@ export default function AdminRota() {
     // Only current staff can be put on a job. Someone deactivated stays on
     // the jobs they already had (the assignment embed carries their name),
     // they just stop being offered for new ones.
+    //
+    // Not only cleaners: whoever does the stock take is booked on the rota
+    // for it like any other visit - see lib/staffRoles.js. Anyone left out
+    // here who still holds a job gets drawn as a former-staff row by
+    // buildCleanerRows(), which is the wrong thing to say about someone who
+    // simply isn't a cleaner.
     const { data: cleanersData } = await supabase
-      .from('profiles').select('id, full_name').eq('role', 'cleaner').eq('active', true).order('full_name');
+      .from('profiles').select('id, full_name').in('role', BOOKABLE_ROLES).eq('active', true).order('full_name');
     const { data: clientsData } = await supabase
       .from('clients').select('id, name').order('name');
     const { data: propertiesData } = await supabase

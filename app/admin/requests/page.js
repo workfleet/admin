@@ -7,6 +7,7 @@ import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
 import { assignmentMinutes, bookedHoursBetween, formatHours } from '../../../lib/hoursWorked';
 import { fetchEmploymentTypes, isSubcontractor } from '../../../lib/profilePrivate';
+import { BOOKABLE_ROLES } from '../../../lib/staffRoles';
 import { isClaimableMissedJob } from '../../../lib/missedClockin';
 import { MISSED_SHIFT_OUTCOMES, isJobWideOutcome, outcomeLabel } from '../../../lib/missedShiftOutcomes';
 import { describeShortfall, shiftShortfall } from '../../../lib/shortShift';
@@ -204,7 +205,7 @@ export default function AdminRequests() {
         .order('created_at', { ascending: false }),
       // Adjustments live on profile_private (0088); aliased so the balance
       // maths below still keys on `id`.
-      supabase.from('profile_private').select('id:profile_id, holiday_adjustment_hours, profiles!inner(role)').eq('profiles.role', 'cleaner'),
+      supabase.from('profile_private').select('id:profile_id, holiday_adjustment_hours, profiles!inner(role)').in('profiles.role', BOOKABLE_ROLES),
       supabase.from('job_assignments').select('cleaner_id, paid_minutes, jobs(id, status, duration_minutes, scheduled_at)'),
       supabase
         .from('time_extension_requests')

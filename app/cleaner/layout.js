@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Home, Calendar, User, HelpCircle, Settings, MessageCircle } from 'lucide-react';
+import { Home, Calendar, User, HelpCircle, Settings, MessageCircle, Package } from 'lucide-react';
 import { getSessionAndProfile } from '../../lib/authGate';
 import PresenceIndicator from '../components/PresenceIndicator';
 import EmergencyButton from '../components/EmergencyButton';
@@ -17,16 +17,25 @@ import PhotoQueueFlusher from '../components/PhotoQueueFlusher';
 const NAV_ITEMS = [
   { href: '/cleaner', label: 'Home', icon: Home },
   { href: '/cleaner/rota', label: 'Rota', icon: Calendar },
-  { href: '/cleaner/messages', label: 'Messages', icon: MessageCircle },
+  { href: '/cleaner/messages', label: 'Messages', icon: MessageCircle, staffOnly: true },
   { href: '/cleaner/profile', label: 'Profile', icon: User },
-  { href: '/cleaner/policies', label: 'Help', icon: HelpCircle },
+  { href: '/cleaner/policies', label: 'Help', icon: HelpCircle, staffOnly: true },
   { href: '/cleaner/settings', label: 'Settings', icon: Settings },
 ];
+
+// Whoever does the stock take is booked on the rota for it and clocks in
+// like anyone else (lib/staffRoles.js), so this app is theirs too - it is
+// where the shift and the clock live. They get a way back to the stock
+// screens, and they lose the two things the database would hand them
+// empty: Team Chat and the document/training library are gated on
+// is_staff() (0021, 0035), which the inventory role is deliberately not in.
+const INVENTORY_NAV_ITEM = { href: '/admin/inventory', label: 'Stock', icon: Package };
 
 export default function CleanerLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
   const [authorized, setAuthorized] = useState(false);
+  const [role, setRole] = useState(null);
   const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
@@ -41,9 +50,9 @@ export default function CleanerLayout({ children }) {
     if (error) { setLoadError(true); return; }
 
     if (profile?.role === 'admin' || profile?.role === 'supervisor') { router.push('/admin'); return; }
-    if (profile?.role === 'inventory') { router.push('/admin/inventory'); return; }
     if (profile?.role === 'client') { router.push('/client'); return; }
 
+    setRole(profile?.role || null);
     setAuthorized(true);
   };
 
@@ -57,6 +66,10 @@ export default function CleanerLayout({ children }) {
   }
 
   if (!authorized) return null;
+
+  const navItems = role === 'inventory'
+    ? [...NAV_ITEMS.filter((item) => !item.staffOnly), INVENTORY_NAV_ITEM]
+    : NAV_ITEMS;
 
   return (
     <div className="cleaner-shell">
@@ -81,7 +94,7 @@ export default function CleanerLayout({ children }) {
       </div>
       {children}
       <nav className="bottom-nav">
-        {NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const active = pathname === item.href;
           const Icon = item.icon;
           return (

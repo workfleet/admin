@@ -15,10 +15,16 @@ import Logo from '../components/Logo';
 // reviewing onboarding ID documents) - kept admin-only, hidden from
 // supervisors here and enforced again on those two pages themselves.
 //
-// The 'inventory' role (0101) is stock-only: it lands on Inventory, sees no
-// other link, and is bounced back here from any other /admin page. RLS
-// backs that up - no other table's policies name the role.
+// The 'inventory' role (0101) sees one office page: it lands on Inventory
+// and is bounced back here from any other /admin page. RLS backs that up -
+// no other table's policies name the role.
+//
+// The stock take is now booked on the rota as a paid hour (lib/staffRoles.js),
+// so this role also has jobs to turn up to and clock into. Those live in the
+// cleaner app, which is outside /admin and so outside the bounce above; this
+// is the way across to them.
 const INVENTORY_HOME = '/admin/inventory';
+const INVENTORY_JOBS_ITEM = { href: '/cleaner', label: 'My Jobs', icon: Calendar };
 
 const NAV_ITEMS = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
@@ -81,7 +87,7 @@ export default function AdminLayout({ children }) {
   };
 
   const navItems = role === 'inventory'
-    ? NAV_ITEMS.filter((item) => item.href === INVENTORY_HOME)
+    ? [...NAV_ITEMS.filter((item) => item.href === INVENTORY_HOME), INVENTORY_JOBS_ITEM]
     : NAV_ITEMS.filter((item) => !item.adminOnly || role === 'admin');
 
   const handleLogout = async () => {
