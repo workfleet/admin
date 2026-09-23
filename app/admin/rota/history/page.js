@@ -33,9 +33,13 @@ export default function JobHistory() {
     const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
+    // Only what has already happened. Jobs still to come belong on the rota,
+    // and because this list is the most recent 300 by date they otherwise sat
+    // at the top and pushed the actual history off the end of it.
     const { data } = await supabase
       .from('jobs')
       .select(`id, scheduled_at, status, duration_minutes, ${TRAINING_JOB_COLUMNS}, properties(address, clients(name)), job_assignments(cleaner_id, profiles(full_name))`)
+      .lte('scheduled_at', new Date().toISOString())
       .order('scheduled_at', { ascending: false })
       .limit(300);
 
@@ -61,7 +65,7 @@ export default function JobHistory() {
       <div className="page-header-row">
         <div>
           <h1>Job History</h1>
-          <p className="page-subtitle">{jobs.length} job{jobs.length === 1 ? '' : 's'}, most recent 300</p>
+          <p className="page-subtitle">{jobs.length} past job{jobs.length === 1 ? '' : 's'}, most recent 300</p>
         </div>
       </div>
 

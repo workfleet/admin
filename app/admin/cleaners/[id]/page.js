@@ -634,6 +634,12 @@ export default function CleanerProfile() {
 
   if (loading || !cleaner) return <div className="page-inner">Loading...</div>;
 
+  // History means what has already happened. A shift still ahead of them
+  // belongs on the rota, not in the record of what they have done - and on
+  // a busy cleaner the future ones sat at the top and pushed it out of view.
+  const historyJobs = jobs.filter((j) => new Date(j.scheduled_at) <= new Date());
+  const upcomingCount = jobs.length - historyJobs.length;
+
   // Their own figure for a job where the office set one (0094), else the
   // even split - the same rule as lib/hoursWorked.js and the database.
   const worked = jobs
@@ -1107,9 +1113,18 @@ export default function CleanerProfile() {
       </div>
 
       <div className="card">
-        <h2>Job History ({jobs.length})</h2>
-        {jobs.length === 0 && <p className="empty-state">No jobs assigned yet.</p>}
-        {jobs.map((job) => (
+        <h2>Job History ({historyJobs.length})</h2>
+        {historyJobs.length === 0 && (
+          <p className="empty-state">
+            {jobs.length === 0 ? 'No jobs assigned yet.' : 'Nothing worked yet - everything on their rota is still to come.'}
+          </p>
+        )}
+        {upcomingCount > 0 && (
+          <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '0 0 6px' }}>
+            {upcomingCount} upcoming job{upcomingCount === 1 ? '' : 's'} not shown here - they are on the rota.
+          </p>
+        )}
+        {historyJobs.map((job) => (
           <div key={job.id} className="task-row" style={{ justifyContent: 'space-between' }}>
             <div>
               <div style={{ fontSize: 14 }}>{job.properties?.address}</div>
