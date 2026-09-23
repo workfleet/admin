@@ -23,8 +23,7 @@ export const runtime = 'nodejs';
 // on a period's last day, everyone who worked in it gets a nudge to look at
 // My Hours.
 //
-// Daily, because that is what Vercel Cron allows on this plan (see the note
-// in api/admin/clockin-nudge) and daily is all this needs: it runs every
+// Daily on Vercel Cron, and daily is all this needs: it runs every
 // morning, does nothing unless today is a period's final day, and a period
 // only has one of those. Same two ways in as the other sweeps: the
 // CRON_SECRET Vercel injects, or an admin's own session for a manual run.

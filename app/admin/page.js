@@ -233,18 +233,17 @@ export default function AdminDashboard() {
 
     // Nudge anyone who's started a shift without clocking in.
     //
-    // This is the only thing that runs the sweep. It was meant to be a
-    // fallback behind a quarter-hourly Vercel Cron, but a sub-daily schedule
-    // needs a paid plan and the entry failed the deploy, so it came out of
-    // vercel.json - and a daily cron would be worse than none, since it would
-    // send "you haven't clocked in" about yesterday and then mark the job as
-    // already nudged. Same lazy-sweep reasoning as reconcile_job_statuses
-    // above: no scheduler, so it runs when somebody opens a page.
+    // No longer the only thing that runs the sweep. This used to be it -
+    // which meant nudges went out only while an admin had the dashboard open,
+    // and on a morning when nobody was at a desk the cleaner standing in the
+    // building got nothing. Migration 0112 moved the schedule into the
+    // database, where pg_cron fires the same route every fifteen minutes
+    // whether or not anyone is looking at a screen.
     //
-    // The cost is that nudges only go out while an admin has the dashboard
-    // open. Restoring the cron is one entry in vercel.json if the plan ever
-    // allows it; the route is idempotent per job (jobs.clockin_nudge_sent_at),
-    // so both firing costs nothing.
+    // Kept anyway, because an admin opening the dashboard is a free excuse to
+    // sweep now rather than up to fifteen minutes from now, and the route is
+    // idempotent per job (jobs.clockin_nudge_sent_at) so both firing costs
+    // nothing. Same lazy-sweep reasoning as reconcile_job_statuses above.
     fetch('/api/admin/clockin-nudge', {
       method: 'POST',
       headers: { Authorization: `Bearer ${session.access_token}` },

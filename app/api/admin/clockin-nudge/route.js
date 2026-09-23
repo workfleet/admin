@@ -13,15 +13,19 @@ export const runtime = 'nodejs';
 // the record instead of a declared one. So this sweeps for jobs that have
 // started with nobody checked in and prods whoever is assigned.
 //
-// Driven from the admin dashboard rather than a timer. It was written for a
-// quarter-hourly Vercel Cron, but sub-daily schedules need a paid plan and
-// the entry failed the deploy, so it is not in vercel.json - and a daily one
-// would be worse than none, prodding people about yesterday and then marking
-// the job nudged. It still accepts the cron secret so restoring that entry is
-// a one-line change if the plan ever allows it.
+// Driven by a quarter-hourly timer, which it spent a long time without. It
+// was written for a Vercel Cron; that entry never stuck, and for months the
+// only thing that ran it was an admin opening the dashboard - so on a morning
+// when nobody was at a desk, nobody got prodded. Migration 0112 put the
+// schedule in the database instead: pg_cron calls this route every fifteen
+// minutes via pg_net, carrying the same CRON_SECRET, on infrastructure that
+// is awake whether or not the office is. The dashboard still pokes it too,
+// which costs nothing because jobs.clockin_nudge_sent_at makes a repeat run a
+// no-op.
 //
-// Same two ways in as api/admin/enforce-retention: the CRON_SECRET Vercel
-// injects, or an admin's own session.
+// Same two ways in as api/admin/enforce-retention: the CRON_SECRET (injected
+// by Vercel for its own crons, sent from Vault by 0112's job), or an admin's
+// own session.
 async function isAuthorised(request) {
   const authHeader = request.headers.get('authorization') || '';
   const token = authHeader.replace('Bearer ', '');
