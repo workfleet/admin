@@ -8,6 +8,7 @@ import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
 import { HOLIDAY_ACCRUAL_RATE, assignedJob, bookedHoursBetween, fetchAssigneeCounts, hoursWorked } from '../../../lib/hoursWorked';
 import { fetchEmploymentTypes, isSubcontractor } from '../../../lib/profilePrivate';
+import { isTraining, jobHeadline, jobSubtitle, TRAINING_JOB_COLUMNS } from '../../../lib/training';
 import BackButton from '../../components/BackButton';
 
 function groupByDate(jobs) {
@@ -97,7 +98,7 @@ export default function CleanerRota() {
     const [{ data: assignmentRows }, { data: timeOffData }, { data: profileData }, employmentTypes] = await Promise.all([
       supabase
         .from('job_assignments')
-        .select('paid_minutes, jobs(id, scheduled_at, status, duration_minutes, properties(address))')
+        .select(`paid_minutes, jobs(id, scheduled_at, status, duration_minutes, ${TRAINING_JOB_COLUMNS}, properties(address))`)
         .eq('cleaner_id', session.user.id),
       supabase
         .from('time_off_requests')

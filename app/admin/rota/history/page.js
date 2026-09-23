@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../../lib/authGate';
+import { isTraining, jobHeadline, TRAINING_JOB_COLUMNS } from '../../../../lib/training';
 import BackButton from '../../../components/BackButton';
 
 const STATUS_LABELS = { scheduled: 'Scheduled', in_progress: 'In Progress', completed: 'Completed', missed: 'Missed' };
@@ -34,7 +35,7 @@ export default function JobHistory() {
 
     const { data } = await supabase
       .from('jobs')
-      .select('id, scheduled_at, status, duration_minutes, properties(address, clients(name)), job_assignments(cleaner_id, profiles(full_name))')
+      .select(`id, scheduled_at, status, duration_minutes, ${TRAINING_JOB_COLUMNS}, properties(address, clients(name)), job_assignments(cleaner_id, profiles(full_name))`)
       .order('scheduled_at', { ascending: false })
       .limit(300);
 
@@ -48,7 +49,7 @@ export default function JobHistory() {
       if (statusFilter !== 'all' && job.status !== statusFilter) return false;
       if (!q) return true;
       const staffNames = (job.job_assignments || []).map((a) => a.profiles?.full_name).join(' ');
-      return [job.properties?.address, job.properties?.clients?.name, staffNames].some((v) => v?.toLowerCase().includes(q));
+      return [job.properties?.address, job.properties?.clients?.name, job.training_title, job.training_location, staffNames].some((v) => v?.toLowerCase().includes(q));
     });
   }, [jobs, search, statusFilter]);
 
@@ -101,8 +102,8 @@ export default function JobHistory() {
                   <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>
                     {new Date(job.scheduled_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
                   </td>
-                  <td style={{ padding: '8px 6px' }}>{job.properties?.clients?.name || '—'}</td>
-                  <td style={{ padding: '8px 6px', color: 'var(--muted)' }}>{job.properties?.address}</td>
+                  <td style={{ padding: '8px 6px' }}>{isTraining(job) ? 'Training' : job.properties?.clients?.name || '—'}</td>
+                  <td style={{ padding: '8px 6px', color: 'var(--muted)' }}>{isTraining(job) ? jobHeadline(job) : job.properties?.address}</td>
                   <td style={{ padding: '8px 6px' }}>{staffNames.length > 0 ? staffNames.join(', ') : 'Unassigned'}</td>
                   <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{formatDuration(job.duration_minutes || 120)}</td>
                   <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>

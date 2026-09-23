@@ -17,6 +17,7 @@ import { COMPANY, companyFromSettings } from '../../lib/companyBranding';
 import { KIT_PRODUCTS } from '../../lib/kitProducts';
 import { HOLIDAY_ACCRUAL_RATE, assignedJob, fetchAssigneeCounts, hoursWorked, formatHours } from '../../lib/hoursWorked';
 import { fetchEmploymentTypes, isSubcontractor } from '../../lib/profilePrivate';
+import { jobHeadline, TRAINING_JOB_COLUMNS } from '../../lib/training';
 import {
   greetingFor, firstNameOf, splitJobsForHome, hoursThisWeek, hoursLeftThisWeek,
   jobsCompletedThisMonth, daySummary, unreadMessageCount, unreadSince, ratingSummary,
@@ -104,7 +105,7 @@ export default function CleanerDashboard() {
     const [{ data: assignmentRows }, { data: timeOffData }, { data: privateData }] = await Promise.all([
       supabase
         .from('job_assignments')
-        .select('paid_minutes, jobs(id, scheduled_at, status, duration_minutes, properties(address))')
+        .select(`paid_minutes, jobs(id, scheduled_at, status, duration_minutes, ${TRAINING_JOB_COLUMNS}, properties(address))`)
         .eq('cleaner_id', session.user.id),
       supabase
         .from('time_off_requests')
@@ -348,7 +349,7 @@ export default function CleanerDashboard() {
               <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--wf-verified-text)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px' }}>
                 Clocked in
               </p>
-              <h2 style={{ margin: 0 }}>{day.current.properties?.address}</h2>
+              <h2 style={{ margin: 0 }}>{jobHeadline(day.current)}</h2>
               <p style={{ fontSize: 14, margin: '4px 0 0', color: 'var(--muted)' }}>Booked for {clock(day.current.scheduled_at)}</p>
             </div>
             <ChevronRight size={22} style={{ color: 'var(--wf-verified-text)', flexShrink: 0 }} />
@@ -372,7 +373,7 @@ export default function CleanerDashboard() {
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
             <MapPin size={20} style={{ color: 'var(--brand-link)', flexShrink: 0, marginTop: 3 }} />
             <div style={{ minWidth: 0, flex: 1 }}>
-              <p style={{ fontSize: 17, fontWeight: 600, margin: 0 }}>{day.upNext.properties?.address}</p>
+              <p style={{ fontSize: 17, fontWeight: 600, margin: 0 }}>{jobHeadline(day.upNext)}</p>
               <p style={{ fontSize: 14, color: 'var(--muted)', margin: '2px 0 0' }}>
                 {clock(day.upNext.scheduled_at)}
                 {day.upNext.duration_minutes ? ` · ${formatHours(day.upNext.duration_minutes / 60)}` : ''}
@@ -404,7 +405,7 @@ export default function CleanerDashboard() {
                 {clock(j.scheduled_at)}
               </span>
               <span style={{ flex: 1, fontSize: 14, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {j.properties?.address}
+                {jobHeadline(j)}
               </span>
               <span className={`badge ${j.status}`}>{statusWord(j.status)}</span>
             </div>
@@ -532,7 +533,7 @@ export default function CleanerDashboard() {
                   <option value="">Not job-specific</option>
                   {jobs.map((j) => (
                     <option key={j.id} value={j.id}>
-                      {j.properties?.address} — {new Date(j.scheduled_at).toLocaleDateString()}
+                      {jobHeadline(j)} — {new Date(j.scheduled_at).toLocaleDateString()}
                     </option>
                   ))}
                 </select>

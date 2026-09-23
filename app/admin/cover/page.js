@@ -60,6 +60,11 @@ export default function AdminCover() {
       supabase
         .from('jobs')
         .select('id, scheduled_at, duration_minutes, status, properties(address, clients(name))')
+        // Cleans only. Cover means handing a client's visit to somebody
+        // else, and request_cover_for_job() (0070) asks for a cleaner on
+        // purpose - a seat at a training session is not a shift anyone can
+        // pick up on your behalf.
+        .eq('kind', 'clean')
         .eq('status', 'scheduled')
         .gte('scheduled_at', new Date().toISOString())
         .order('scheduled_at')

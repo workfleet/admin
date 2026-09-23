@@ -3716,3 +3716,57 @@ a.btn-compact {
   }
   .rota-grid.is-day .rota-chip-line { flex-wrap: wrap; white-space: normal; }
 }
+
+
+/* ---- Training on the rota (0115) ------------------------------------ */
+
+/* A training session is a job with kind = 'training', so it is drawn by the
+   same block and chip as a clean. What it must not do is read as one: the
+   office scanning a week needs "that hour is not a client" to be obvious at
+   a glance. The status colours are all spoken for and all mean something
+   about progress, so training is marked with coral - the brand accent,
+   used nowhere else on a block - down the leading edge. The status fill
+   underneath is left alone, so a training that was missed still reads as
+   missed. */
+.calendar-job.is-training {
+  box-shadow: inset 3px 0 0 var(--wf-coral);
+}
+.calendar-job.is-training .calendar-job-pill {
+  color: var(--wf-coral-ink);
+}
+
+.rota-chip.is-training {
+  border-left: 3px solid var(--wf-coral);
+}
+
+/* The two kinds of thing the New Job form can book. Same shape as the
+   saved-address buttons above it, so the form has one vocabulary. */
+.job-kind-toggle {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.job-kind-option {
+  flex: 1;
+  min-width: 140px;
+  background: var(--wf-white);
+  color: var(--ink-soft);
+  border: 1px solid var(--hairline);
+  border-radius: var(--wf-radius);
+  padding: 10px 14px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.job-kind-option:hover {
+  border-color: var(--wf-coral);
+}
+
+.job-kind-option.active {
+  background: var(--wf-coral);
+  border-color: var(--wf-coral);
+  color: var(--wf-on-coral);
+}

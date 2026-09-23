@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { coworkersOf, firstName, formatHours, freeGaps, formatGap, UNASSIGNED_ROW_ID } from '../../../lib/rotaGrid';
+import { isTraining, jobHeadline, jobSubtitle } from '../../../lib/training';
 
 // The rota with a row per cleaner. Across the week, each cell lists that
 // person's jobs for the day in order, so a gap on the sheet is a gap in
@@ -75,7 +76,13 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, dayIndex = n
   const renderChip = (job, row) => {
     const cleanerId = row.id === UNASSIGNED_ROW_ID ? null : row.id;
     const unassigned = (job.job_assignments || []).length === 0;
-    const client = job.properties?.clients?.name || job.properties?.address || 'Unknown client';
+    // Training has no client, so the chip names the training and its venue
+    // where a clean names the client and the address.
+    const training = isTraining(job);
+    const client = training
+      ? jobHeadline(job)
+      : job.properties?.clients?.name || job.properties?.address || 'Unknown client';
+    const where = training ? jobSubtitle(job) : job.properties?.address;
     const others = coworkersOf(job, cleanerId).map(firstName);
     const draggable = job.status === 'scheduled';
     const everyone = (job.job_assignments || []).map((a) => a.profiles?.full_name || 'Unknown');
@@ -84,8 +91,8 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, dayIndex = n
     const title = [
       timeRange,
       client,
-      job.properties?.address,
-      unassigned ? 'Needs a cleaner' : everyone.join(', '),
+      where,
+      unassigned ? (training ? 'Nobody booked on' : 'Needs a cleaner') : everyone.join(', '),
       word,
       draggable ? 'Drag to another day or cleaner, or click to open' : 'Click to open',
     ].filter(Boolean).join(' · ');
@@ -94,6 +101,7 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, dayIndex = n
       'rota-chip',
       job.status,
       unassigned ? 'unassigned' : '',
+      training ? 'is-training' : '',
       draggable ? 'draggable' : '',
       single ? 'is-day' : '',
     ].filter(Boolean).join(' ');
@@ -112,8 +120,8 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, dayIndex = n
 
     if (single) {
       const sub = [
-        job.properties?.address && job.properties.address !== client ? job.properties.address : null,
-        unassigned ? 'Needs a cleaner' : null,
+        where && where !== client ? where : null,
+        unassigned ? (training ? 'Nobody booked on' : 'Needs a cleaner') : null,
         word,
       ].filter(Boolean).join(' · ');
       return (

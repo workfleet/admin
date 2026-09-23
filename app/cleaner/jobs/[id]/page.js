@@ -27,6 +27,7 @@ import { shiftShortfall } from '../../../../lib/shortShift';
 import { enqueue, isCheckinPending, isTransientError, makeId, pendingCheckinFor } from '../../../../lib/clockQueue';
 import { makePhotoPath, pendingPhotos, queuePhoto } from '../../../../lib/photoQueue';
 import { missingAreas } from '../../../../lib/photoCheck';
+import { isTraining, jobHeadline, jobSubtitle, trainerLine, TRAINING_JOB_COLUMNS } from '../../../../lib/training';
 import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 
@@ -197,7 +198,7 @@ export default function JobDetailPage() {
     setLoadError(null);
     const { data: jobData, error: jobError } = await supabase
       .from('jobs')
-      .select('id, scheduled_at, status, duration_minutes, property_id, properties(address, notes, access_details, client_access_notes, lat, lng, geofence_radius_m, clients(name))')
+      .select(`id, scheduled_at, status, duration_minutes, property_id, ${TRAINING_JOB_COLUMNS}, properties(address, notes, access_details, client_access_notes, lat, lng, geofence_radius_m, clients(name))`)
       .eq('id', id)
       .maybeSingle();
 
@@ -981,7 +982,9 @@ export default function JobDetailPage() {
     && claim?.status !== 'pending'
     && claim?.status !== 'approved';
 
-  const placeName = job.properties?.clients?.name || job.properties?.address || 'This job';
+  const placeName = isTraining(job)
+    ? jobHeadline(job)
+    : job.properties?.clients?.name || job.properties?.address || 'This job';
   const scheduled = new Date(job.scheduled_at);
   const duration = job.duration_minutes || 120;
   const approvedExtra = extensionRequests
@@ -1034,7 +1037,8 @@ export default function JobDetailPage() {
                 {clock(scheduled)} – {clock(new Date(scheduled.getTime() + duration * 60000))} · {formatSpan(duration)}
               </div>
               <h1 className="visit-place">{placeName}</h1>
-              <p className="visit-address">{job.properties?.address}</p>
+              <p className="visit-address">{isTraining(job) ? jobSubtitle(job) : job.properties?.address}</p>
+              {trainerLine(job) && <p className="visit-address">{trainerLine(job)}</p>}
             </div>
 
             {job.properties?.lat != null && job.properties?.lng != null && (

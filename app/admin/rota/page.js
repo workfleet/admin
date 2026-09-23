@@ -19,6 +19,7 @@ import BackButton from '../../components/BackButton';
 import { groupOverlappingJobs, assignLanes, abbreviateName } from '../../../lib/jobOverlap';
 import { findTightTurnarounds, describeTurnaround } from '../../../lib/travelTime';
 import { buildCleanerRows, UNASSIGNED_ROW_ID } from '../../../lib/rotaGrid';
+import { certificationLine, isTraining, jobHeadline, jobSubtitle, trainerLine, trainingJobFields, TRAINING_JOB_COLUMNS } from '../../../lib/training';
 import CleanerWeekGrid from './CleanerWeekGrid';
 import SeriesEditor from './SeriesEditor';
 
@@ -64,7 +65,7 @@ function dayIndexOf(date) {
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => h);
 const MINUTE_OPTIONS = [0, 15, 30, 45];
 
-const JOB_SELECT = 'id, scheduled_at, status, duration_minutes, notes, series_id, property_id, properties(address, lat, lng, clients(name)), job_assignments(cleaner_id, profiles(full_name))';
+const JOB_SELECT = `id, scheduled_at, status, duration_minutes, notes, series_id, property_id, ${TRAINING_JOB_COLUMNS}, properties(address, lat, lng, clients(name)), job_assignments(cleaner_id, profiles(full_name))`;
 
 function formatHour12(h) {
   const period = h < 12 ? 'AM' : 'PM';
@@ -184,6 +185,16 @@ export default function AdminRota() {
   const [now, setNow] = useState(null);
 
   const [showForm, setShowForm] = useState(false);
+  // Which kind of thing is being booked. A training is a job (0115), so it
+  // shares this whole form - the date, length, staff and repeat all mean
+  // the same thing - and only swaps the client and address for what the
+  // training is and where.
+  const [formKind, setFormKind] = useState('clean');
+  const [trainingTitle, setTrainingTitle] = useState('');
+  const [trainingLocation, setTrainingLocation] = useState('');
+  const [trainingTrainer, setTrainingTrainer] = useState('');
+  const [trainingCertName, setTrainingCertName] = useState('');
+  const [trainingCertExpiry, setTrainingCertExpiry] = useState('');
   const [clientId, setClientId] = useState('');
   const [propertyAddress, setPropertyAddress] = useState('');
   const [propertyCoords, setPropertyCoords] = useState(null);
@@ -472,7 +483,7 @@ export default function AdminRota() {
     // that property's record directly (same as editing it from the client
     // page), so it also corrects every other job at this same address,
     // not just this one instance.
-    if (editAddress.trim() && editAddress.trim() !== selectedJob.properties?.address) {
+    if (!isTraining(selectedJob) && editAddress.trim() && editAddress.trim() !== selectedJob.properties?.address) {
       const { error: addressError } = await supabase
         .from('properties')
         .update({
@@ -777,7 +788,7 @@ export default function AdminRota() {
     setJobs((prev) => prev.map((j) => (j.id === jobId ? withNewAssignment(j) : j)));
     setSelectedJob((sj) => (sj && sj.id === jobId ? withNewAssignment(sj) : sj));
 
-    notify({ type: 'shift_assigned', cleanerId, address: job.properties?.address, scheduledAt: job.scheduled_at });
+    notify({ type: 'shift_assigned', cleanerId, address: jobHeadline(job), scheduledAt: job.scheduled_at });
     return true;
   };
 
@@ -922,7 +933,17 @@ export default function AdminRota() {
       const { data: inserted } = await supabase
         .from('jobs')
         .insert(plan.add.map((d) => ({
-          property_id: job.property_id,
+          // Carried from the job the editor was opened on. Without this a
+          // training series would grow ordinary cleans with no address.
+          ...(isTraining(job)
+            ? trainingJobFields({
+              title: job.training_title,
+              location: job.training_location,
+              trainer: job.training_trainer,
+              certificationName: job.training_certification_name,
+              certificationExpiry: job.training_certification_expiry,
+            })
+            : { property_id: job.property_id }),
           scheduled_at: d.toISOString(),
           duration_minutes: form.duration,
           series_id: job.series_id,
@@ -935,7 +956,7 @@ export default function AdminRota() {
             .from('job_assignments')
             .insert(inserted.flatMap((j) => cleanerIds.map((cid) => ({ job_id: j.id, cleaner_id: cid }))));
           cleanerIds.forEach((cid) => {
-            notify({ type: 'shift_assigned', cleanerId: cid, address: job.properties?.address, scheduledAt: inserted[0].scheduled_at });
+            notify({ type: 'shift_assigned', cleanerId: cid, address: jobHeadline(job), scheduledAt: inserted[0].scheduled_at });
           });
         }
         if (jobTasks.length > 0) {
@@ -1002,6 +1023,12 @@ export default function AdminRota() {
   };
 
   const resetForm = () => {
+    setFormKind('clean');
+    setTrainingTitle('');
+    setTrainingLocation('');
+    setTrainingTrainer('');
+    setTrainingCertName('');
+    setTrainingCertExpiry('');
     setClientId('');
     setPropertyAddress('');
     setPropertyCoords(null);
@@ -1024,7 +1051,10 @@ export default function AdminRota() {
 
   const createJob = async (e) => {
     e.preventDefault();
-    if (!clientId || !propertyAddress.trim() || !jobDate || !jobHour) return;
+    const training = formKind === 'training';
+    if (training) {
+      if (!trainingTitle.trim() || !jobDate || !jobHour) return;
+    } else if (!clientId || !propertyAddress.trim() || !jobDate || !jobHour) return;
     if (repeatJob && recurrenceEndMode === 'date' && !recurrenceEndDate) return;
     if (repeatJob && recurrenceType === 'weekly' && weeklyDays.length === 0) return;
 
@@ -1047,8 +1077,12 @@ export default function AdminRota() {
     // cleaner, rather than a popup per occurrence.
     // The property this job is going on, for the travel check: an existing
     // one carries its pin; a new address carries whatever the lookup found.
-    const existingProperty = properties.find((p) => p.client_id === clientId && p.address === propertyAddress.trim());
-    const targetProperty = existingProperty || { address: propertyAddress.trim(), lat: propertyCoords?.lat ?? null, lng: propertyCoords?.lng ?? null };
+    const existingProperty = training
+      ? null
+      : properties.find((p) => p.client_id === clientId && p.address === propertyAddress.trim());
+    const targetProperty = training
+      ? null
+      : existingProperty || { address: propertyAddress.trim(), lat: propertyCoords?.lat ?? null, lng: propertyCoords?.lng ?? null };
 
     let conflictCount = 0;
     let timeOffConflictCount = 0;
@@ -1058,7 +1092,9 @@ export default function AdminRota() {
       for (const d of occurrenceDates) {
         if (await findConflict(cid, d, duration, null)) conflictCount++;
         if (await findTimeOffConflict(cid, d)) timeOffConflictCount++;
-        const tight = await findTravelConflict(cid, d, duration, targetProperty, null);
+        // Nothing to measure a turnaround against without a pin, and a
+        // training has no property by design.
+        const tight = targetProperty ? await findTravelConflict(cid, d, duration, targetProperty, null) : null;
         if (tight) { travelConflictCount++; firstTravelConflict = firstTravelConflict || tight; }
       }
     }
@@ -1071,7 +1107,7 @@ export default function AdminRota() {
           + (firstTravelConflict ? ` (e.g. ${describeTurnaround(firstTravelConflict)})` : ''));
       }
       const proceed = await confirm(
-        `This will create ${occurrenceDates.length} job${occurrenceDates.length === 1 ? '' : 's'}, including ${parts.join(' and ')}. Create anyway?`,
+        `This will create ${occurrenceDates.length} ${training ? 'training session' : 'job'}${occurrenceDates.length === 1 ? '' : 's'}, including ${parts.join(' and ')}. Create anyway?`,
         { title: 'Scheduling conflicts', confirmLabel: 'Create anyway' }
       );
       if (!proceed) return;
@@ -1079,8 +1115,10 @@ export default function AdminRota() {
 
     // Reuse the property if this exact address already exists for the
     // client; otherwise create one on the fly from what was typed/picked.
-    let property = properties.find((p) => p.client_id === clientId && p.address === propertyAddress.trim());
-    if (!property) {
+    let property = training
+      ? null
+      : properties.find((p) => p.client_id === clientId && p.address === propertyAddress.trim());
+    if (!training && !property) {
       const { data: newProperty } = await supabase
         .from('properties')
         .insert({
@@ -1103,7 +1141,7 @@ export default function AdminRota() {
       const { data: seriesRow } = await supabase
         .from('job_series')
         .insert({
-          property_id: property.id,
+          property_id: property?.id ?? null,
           duration_minutes: duration,
           recurrence_type: recurrenceType,
           interval_count: recurrenceInterval,
@@ -1118,12 +1156,20 @@ export default function AdminRota() {
     const { data: insertedJobs } = await supabase
       .from('jobs')
       .insert(occurrenceDates.map((d) => ({
-        property_id: property.id,
+        ...(training
+          ? trainingJobFields({
+            title: trainingTitle,
+            location: trainingLocation,
+            trainer: trainingTrainer,
+            certificationName: trainingCertName,
+            certificationExpiry: trainingCertExpiry,
+          })
+          : { property_id: property.id }),
         scheduled_at: d.toISOString(),
         duration_minutes: duration,
         series_id: seriesId,
       })))
-      .select('id, scheduled_at, status, duration_minutes, series_id, properties(address, clients(name))');
+      .select(`id, scheduled_at, status, duration_minutes, series_id, ${TRAINING_JOB_COLUMNS}, properties(address, clients(name))`);
 
     if (insertedJobs && insertedJobs.length > 0) {
       const assignmentsByJob = {};
@@ -1152,7 +1198,7 @@ export default function AdminRota() {
       // occurrence - avoids spamming e.g. 8 "new shift" alerts at once.
       const firstJob = insertedJobs[0];
       formCleanerIds.forEach((cid) => {
-        notify({ type: 'shift_assigned', cleanerId: cid, address: firstJob.properties?.address, scheduledAt: firstJob.scheduled_at });
+        notify({ type: 'shift_assigned', cleanerId: cid, address: jobHeadline(firstJob), scheduledAt: firstJob.scheduled_at });
       });
 
       const template = templates.find((t) => t.id === formTemplateId);
@@ -1424,7 +1470,7 @@ export default function AdminRota() {
         type: 'shift_rescheduled',
         cleanerId: a.cleaner_id,
         jobId: job.id,
-        address: job.properties?.address,
+        address: jobHeadline(job),
         previousAt,
         scheduledAt: newAt,
       });
@@ -1612,7 +1658,13 @@ export default function AdminRota() {
     const blockHeight = Math.max(height, 34);
     const lines = linesForHeight(blockHeight);
     const isDraggable = job.status === 'scheduled';
-    const clientName = job.properties?.clients?.name || job.properties?.address || 'Unknown client';
+    // A training block has no client to name, so it leads with what the
+    // training is. jobHeadline also stops a job whose property has gone
+    // missing from rendering 'undefined'.
+    const training = isTraining(job);
+    const clientName = training
+      ? jobHeadline(job)
+      : job.properties?.clients?.name || job.properties?.address || 'Unknown client';
     const timeLabel = `${formatClock(startMinutes)} – ${formatClock(startMinutes + duration)}`;
 
     // The lanes this card holds, of however many the group needs. The 5px
@@ -1628,7 +1680,7 @@ export default function AdminRota() {
 
     // The two states an admin is scanning for get a word as well as a
     // colour; the rest are read off the fill.
-    const pill = job.status === 'completed' ? 'Completed' : unassigned ? 'Unassigned' : null;
+    const pill = training ? 'Training' : job.status === 'completed' ? 'Completed' : unassigned ? 'Unassigned' : null;
     const staffLabel = unassigned
       ? 'Needs a cleaner'
       : job.status === 'in_progress'
@@ -2049,9 +2101,11 @@ export default function AdminRota() {
           <div className="job-modal-head">
             <div>
               <span className={`badge ${selectedJob.status}`}>{selectedJob.status.replace('_', ' ')}</span>
-              <h2>{selectedJob.properties?.address}</h2>
+              <h2>{jobHeadline(selectedJob)}</h2>
               <p className="job-modal-sub">
-                {selectedJob.properties?.clients?.name || 'Unknown client'}
+                {isTraining(selectedJob)
+                  ? (jobSubtitle(selectedJob) || 'Training')
+                  : selectedJob.properties?.clients?.name || 'Unknown client'}
                 {' · '}
                 {new Date(selectedJob.scheduled_at).toLocaleString(undefined, {
                   weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
@@ -2064,6 +2118,18 @@ export default function AdminRota() {
           </div>
 
           <div style={{ marginTop: 14 }}>
+            {isTraining(selectedJob) ? (
+              <div className="field">
+                <label className="field-label">Training</label>
+                <p style={{ fontSize: 14, margin: 0 }}>{jobHeadline(selectedJob)}</p>
+                {trainerLine(selectedJob) && (
+                  <p style={{ fontSize: 13, color: 'var(--muted)', margin: '2px 0 0' }}>{trainerLine(selectedJob)}</p>
+                )}
+                {certificationLine(selectedJob) && (
+                  <p style={{ fontSize: 12, color: 'var(--muted)', margin: '4px 0 0' }}>{certificationLine(selectedJob)}</p>
+                )}
+              </div>
+            ) : (
             <div className="field">
               <label className="field-label">Address</label>
               <AddressAutocomplete
@@ -2076,6 +2142,7 @@ export default function AdminRota() {
                 Changing this updates the address for every job at this property, not just this one.
               </p>
             </div>
+            )}
 
             <div className="field-row" style={{ marginTop: 10 }}>
               <div className="field">
@@ -2359,12 +2426,92 @@ export default function AdminRota() {
         <div className="job-modal-overlay">
         <div className="card job-form-card job-form-modal">
           <div className="job-form-header">
-            <h2>New Job</h2>
+            <h2>{formKind === 'training' ? 'New Training' : 'New Job'}</h2>
             <button className="job-modal-close" onClick={() => setShowForm(false)} type="button" aria-label="Close" title="Close - keeps what you have filled in">×</button>
           </div>
 
           <form onSubmit={createJob}>
             <div className="job-form-body">
+              {/* Everything below the date is the same either way - who is
+                  on it, how long, whether it repeats - so the two kinds
+                  share one form and this only swaps the top of it. */}
+              <div className="field">
+                <label className="field-label">What is this?</label>
+                <div className="job-kind-toggle" role="group" aria-label="What is being booked">
+                  {[['clean', 'Job for a client'], ['training', 'Training']].map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`job-kind-option ${formKind === value ? 'active' : ''}`}
+                      aria-pressed={formKind === value}
+                      onClick={() => setFormKind(value)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {formKind === 'training' ? (
+                <>
+                  <div className="field">
+                    <label className="field-label">What the training is</label>
+                    <input
+                      value={trainingTitle}
+                      onChange={(e) => setTrainingTitle(e.target.value)}
+                      placeholder="e.g. Fire safety refresher"
+                      required
+                    />
+                  </div>
+
+                  <div className="field-row">
+                    <div className="field">
+                      <label className="field-label">Where</label>
+                      <input
+                        value={trainingLocation}
+                        onChange={(e) => setTrainingLocation(e.target.value)}
+                        placeholder="e.g. Head office"
+                      />
+                    </div>
+                    <div className="field">
+                      <label className="field-label">Who's running it</label>
+                      <input
+                        value={trainingTrainer}
+                        onChange={(e) => setTrainingTrainer(e.target.value)}
+                        placeholder="e.g. Dan Powell"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="field-row">
+                    <div className="field">
+                      <label className="field-label">Certificate earned (optional)</label>
+                      <input
+                        value={trainingCertName}
+                        onChange={(e) => setTrainingCertName(e.target.value)}
+                        placeholder="e.g. Fire safety"
+                      />
+                    </div>
+                    <div className="field">
+                      <label className="field-label">Expires</label>
+                      <input
+                        type="date"
+                        value={trainingCertExpiry}
+                        onChange={(e) => setTrainingCertExpiry(e.target.value)}
+                        disabled={!trainingCertName.trim()}
+                      />
+                    </div>
+                  </div>
+                  {/* Said out loud before it is booked, because it writes to
+                      somebody's compliance record without being asked again. */}
+                  <p className="saved-addresses-note">
+                    {trainingCertName.trim()
+                      ? `Everyone who checks in to this session gets "${trainingCertName.trim()}" added to their record when it finishes.`
+                      : 'Name a certificate and it goes on the record of everyone who attends. Leave it blank for a toolbox talk.'}
+                  </p>
+                </>
+              ) : (
+              <>
               <div className="field">
                 <label className="field-label">Client</label>
                 <select
@@ -2416,6 +2563,9 @@ export default function AdminRota() {
                   <input value="" disabled placeholder="Select a client first" />
                 )}
               </div>
+
+              </>
+              )}
 
               <div className="field-row">
                 <div className="field">
@@ -2483,18 +2633,20 @@ export default function AdminRota() {
                 )}
               </div>
 
-              <div className="field">
-                <label className="field-label">Checklist template (optional)</label>
-                <select value={formTemplateId} onChange={(e) => setFormTemplateId(e.target.value)}>
-                  <option value="">No template</option>
-                  {templates.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name} ({t.job_template_items.length} items)</option>
-                  ))}
-                </select>
-              </div>
+              {formKind !== 'training' && (
+                <div className="field">
+                  <label className="field-label">Checklist template (optional)</label>
+                  <select value={formTemplateId} onChange={(e) => setFormTemplateId(e.target.value)}>
+                    <option value="">No template</option>
+                    {templates.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name} ({t.job_template_items.length} items)</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="field">
-                <label className="field-label">Cleaners</label>
+                <label className="field-label">{formKind === 'training' ? 'Who is attending' : 'Cleaners'}</label>
                 {cleaners.length === 0 && <p className="empty-state" style={{ padding: '4px 0' }}>No cleaners yet.</p>}
                 <div className="duration-chips">
                   {cleaners.map((c) => (

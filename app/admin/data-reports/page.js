@@ -9,6 +9,7 @@ import { getSessionWithRetry } from '../../../lib/authGate';
 import { toCSV, downloadCSV } from '../../../lib/csv';
 import { privateOf } from '../../../lib/profilePrivate';
 import { assignmentMinutes } from '../../../lib/hoursWorked';
+import { isTraining, jobHeadline, TRAINING_JOB_COLUMNS } from '../../../lib/training';
 import BackButton from '../../components/BackButton';
 
 function getWeekRange(weekOffset) {
@@ -122,7 +123,7 @@ async function loadHours(range) {
 async function loadJobs(range) {
   let query = supabase
     .from('jobs')
-    .select('id, scheduled_at, status, duration_minutes, properties(address, clients(name)), job_assignments(profiles(full_name))')
+    .select(`id, scheduled_at, status, duration_minutes, ${TRAINING_JOB_COLUMNS}, properties(address, clients(name)), job_assignments(profiles(full_name))`)
     .order('scheduled_at', { ascending: false })
     .limit(1000);
   if (range) query = query.gte('scheduled_at', range.start.toISOString()).lt('scheduled_at', range.end.toISOString());
@@ -139,8 +140,8 @@ async function loadJobs(range) {
     ],
     rows: (data || []).map((j) => ({
       date: new Date(j.scheduled_at).toLocaleString(),
-      client: j.properties?.clients?.name || '',
-      address: j.properties?.address || '',
+      client: isTraining(j) ? 'Training' : j.properties?.clients?.name || '',
+      address: isTraining(j) ? jobHeadline(j) : j.properties?.address || '',
       status: j.status,
       duration: j.duration_minutes || '',
       cleaners: (j.job_assignments || []).map((a) => a.profiles?.full_name).filter(Boolean).join('; ') || 'Unassigned',
