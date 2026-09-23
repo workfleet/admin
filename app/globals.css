@@ -2920,6 +2920,9 @@ a.stat-card.is-alert:hover {
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
+  /* The Samsung Internet route renders this as a link to Chrome rather than
+     a button, and a pill with an underline through it looks broken. */
+  text-decoration: none;
 }
 
 .install-bar-action:hover {

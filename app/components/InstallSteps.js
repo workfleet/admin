@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Check, Download, Share, Smartphone, SquarePlus } from 'lucide-react';
+import { Check, Download, ExternalLink, Share, Smartphone, SquarePlus } from 'lucide-react';
 import {
   getInstallPrompt,
   onInstallPromptChange,
@@ -9,6 +9,8 @@ import {
   isStandalone,
   isIos,
   isIosSafari,
+  isSamsungInternet,
+  chromeIntentUrl,
 } from '../../lib/pwaInstall';
 
 // The install instructions as a plain card, for the end of onboarding -
@@ -18,10 +20,11 @@ import {
 // of signing up, and it answers for desktop too because plenty of people
 // will have finished the form on a laptop.
 export default function InstallSteps() {
-  const [platform, setPlatform] = useState(null); // installed | ios | android | desktop
+  const [platform, setPlatform] = useState(null); // installed | ios | samsung | android | desktop
   const [canPrompt, setCanPrompt] = useState(false);
   const [safari, setSafari] = useState(true);
   const [installed, setInstalled] = useState(false);
+  const [chromeHandoff, setChromeHandoff] = useState(null);
 
   useEffect(() => {
     if (isStandalone()) {
@@ -32,6 +35,16 @@ export default function InstallSteps() {
     if (isIos()) {
       setSafari(isIosSafari());
       setPlatform('ios');
+      return undefined;
+    }
+
+    // Ahead of the pointer test, because Samsung Internet is Chromium and
+    // would otherwise be offered an install that Play Protect blocks - a bad
+    // last step of signing up, and the moment a new starter is least able to
+    // tell a real security warning from a browser's mistake.
+    if (isSamsungInternet()) {
+      setChromeHandoff({ href: chromeIntentUrl(), host: window.location.host });
+      setPlatform('samsung');
       return undefined;
     }
 
@@ -96,6 +109,26 @@ export default function InstallSteps() {
               </span>
             </li>
           )}
+        </ol>
+      )}
+
+      {platform === 'samsung' && (
+        <ol className="install-steps-list">
+          <li>
+            <ExternalLink size={16} aria-hidden="true" />
+            <span>
+              Samsung Internet cannot add it properly. Open this page in{' '}
+              <strong>Chrome</strong> — <a href={chromeHandoff?.href}>tap here</a>, or open the
+              Chrome app yourself and go to <strong>{chromeHandoff?.host}</strong>.
+            </span>
+          </li>
+          <li>
+            <SquarePlus size={16} aria-hidden="true" />
+            <span>
+              In Chrome, tap <strong>Install</strong> when it offers, or the ⋮ menu then{' '}
+              <strong>Add to Home screen</strong>.
+            </span>
+          </li>
         </ol>
       )}
 

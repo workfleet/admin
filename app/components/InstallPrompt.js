@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { X, Share, SquarePlus, Download } from 'lucide-react';
+import { X, Share, SquarePlus, Download, ExternalLink } from 'lucide-react';
 import {
   getInstallPrompt,
   onInstallPromptChange,
@@ -9,6 +9,8 @@ import {
   isStandalone,
   isIos,
   isIosSafari,
+  isSamsungInternet,
+  chromeIntentUrl,
 } from '../../lib/pwaInstall';
 
 const DISMISS_KEY = 'wf-install-dismissed-at';
@@ -27,13 +29,16 @@ function snoozed() {
 }
 
 // Bottom bar on the cleaner app offering to install it to the home
-// screen. Two quite different jobs behind one bar: on Android it fires
+// screen. Three quite different jobs behind one bar: on Android it fires
 // Chrome's real install dialog, on iOS there is no such API so it can
-// only show where the Share-sheet item is. Renders nothing at all once
-// installed, on desktop, or for 30 days after a dismissal.
+// only show where the Share-sheet item is, and on Samsung Internet the
+// install would be blocked by Play Protect so it points at Chrome
+// instead. Renders nothing at all once installed, on desktop, or for 30
+// days after a dismissal.
 export default function InstallPrompt() {
-  const [mode, setMode] = useState(null); // 'android' | 'ios' | null
+  const [mode, setMode] = useState(null); // 'android' | 'ios' | 'samsung' | null
   const [showSteps, setShowSteps] = useState(false);
+  const [chromeHandoff, setChromeHandoff] = useState(null);
   const barRef = useRef(null);
 
   useEffect(() => {
@@ -41,6 +46,19 @@ export default function InstallPrompt() {
 
     if (isIos()) {
       setMode('ios');
+      return undefined;
+    }
+
+    // Before the Chromium branch, because Samsung Internet is Chromium and
+    // will happily offer an install that Play Protect then blocks. Not gated
+    // on the install event: the answer is "use Chrome" whether or not this
+    // browser thinks it could install it.
+    if (isSamsungInternet()) {
+      // Both read `window`, so they are resolved here rather than in render -
+      // the bar renders on the server too, and a crash there takes the whole
+      // cleaner layout with it.
+      setChromeHandoff({ href: chromeIntentUrl(), host: window.location.host });
+      setMode('samsung');
       return undefined;
     }
 
@@ -103,15 +121,28 @@ export default function InstallPrompt() {
 
         <div className="install-bar-text">
           <strong>Install WorkFleet</strong>
-          <span>Add it to your home screen so it opens in one tap.</span>
+          <span>
+            {mode === 'samsung'
+              ? 'Samsung Internet cannot install it — open the site in Chrome instead.'
+              : 'Add it to your home screen so it opens in one tap.'}
+          </span>
         </div>
 
-        {mode === 'android' ? (
+        {mode === 'android' && (
           <button type="button" className="install-bar-action" onClick={install}>
             <Download size={16} aria-hidden="true" />
             Install
           </button>
-        ) : (
+        )}
+
+        {mode === 'samsung' && (
+          <a className="install-bar-action" href={chromeHandoff?.href}>
+            <ExternalLink size={16} aria-hidden="true" />
+            Chrome
+          </a>
+        )}
+
+        {mode === 'ios' && (
           <button
             type="button"
             className="install-bar-action"
@@ -126,6 +157,27 @@ export default function InstallPrompt() {
           <X size={18} aria-hidden="true" />
         </button>
       </div>
+
+      {/* Not behind the "How" toggle like the iOS steps: this route has a
+          handoff that Samsung Internet may simply ignore, so the way to do it
+          by hand needs to be on screen already when the button does nothing. */}
+      {mode === 'samsung' && (
+        <ol className="install-bar-steps">
+          <li>
+            <ExternalLink size={16} aria-hidden="true" />
+            <span>
+              Tap <strong>Chrome</strong> above — or open the Chrome app yourself and go to{' '}
+              <strong>{chromeHandoff?.host}</strong>.
+            </span>
+          </li>
+          <li>
+            <SquarePlus size={16} aria-hidden="true" />
+            <span>
+              Sign in, then tap <strong>Install</strong> when this bar appears again.
+            </span>
+          </li>
+        </ol>
+      )}
 
       {mode === 'ios' && showSteps && (
         <ol className="install-bar-steps">
