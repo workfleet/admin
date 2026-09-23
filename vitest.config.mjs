@@ -6,8 +6,10 @@ export default defineConfig({
   // component to a string - the one check that catches a crash on render,
   // which neither the build nor the helper tests can. Vite's own default
   // excludes every .js file, so the exclude has to be set as well.
+  // lib/ is in there too: the PDF documents are JSX components living
+  // outside app/, and rendering one is the only way to find out it renders.
   oxc: {
-    include: /app\/.*\.js$/,
+    include: /(app|lib)\/.*\.js$/,
     exclude: /node_modules/,
     lang: 'jsx',
     jsx: { runtime: 'automatic' },
