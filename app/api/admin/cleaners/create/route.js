@@ -35,8 +35,8 @@ export async function POST(request) {
     password,
     email_confirm: true,
     user_metadata: { full_name: fullName.trim() },
-    // Read by handle_new_user() (0106): only an account the office made
-    // starts active. app_metadata cannot be set by a self-signup.
+    // Marks an account the office made (0106); a self-signup cannot set
+    // app_metadata. The trigger reads it too late - see below.
     app_metadata: { created_by_office: true },
   });
 
@@ -47,17 +47,17 @@ export async function POST(request) {
     return NextResponse.json({ error: reason }, { status: 400 });
   }
 
-  // handle_new_user() always creates the profile as role='cleaner' -
-  // change it afterward if something else was requested.
-  if (grantedRole !== 'cleaner') {
-    const { error: roleUpdateError } = await supabaseAdmin
-      .from('profiles')
-      .update({ role: grantedRole })
-      .eq('id', created.user.id);
+  // handle_new_user() always creates the profile as role='cleaner', and as
+  // inactive: createUser inserts the auth user before it writes
+  // app_metadata, so the trigger never sees created_by_office and every
+  // account the office made came out deactivated. Set both here instead.
+  const { error: profileUpdateError } = await supabaseAdmin
+    .from('profiles')
+    .update({ role: grantedRole, active: true })
+    .eq('id', created.user.id);
 
-    if (roleUpdateError) {
-      return NextResponse.json({ error: 'role_promotion_failed' }, { status: 502 });
-    }
+  if (profileUpdateError) {
+    return NextResponse.json({ error: 'role_promotion_failed' }, { status: 502 });
   }
 
   const { data: profile } = await supabaseAdmin

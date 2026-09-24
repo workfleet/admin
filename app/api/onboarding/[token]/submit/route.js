@@ -116,8 +116,8 @@ export async function POST(request, { params }) {
     password,
     email_confirm: true,
     user_metadata: { full_name: fullName },
-    // Read by handle_new_user() (0106): only an account the office made
-    // starts active. app_metadata cannot be set by a self-signup.
+    // Marks an account the office made (0106); a self-signup cannot set
+    // app_metadata. The trigger reads it too late - see below.
     app_metadata: { created_by_office: true },
   });
 
@@ -127,6 +127,16 @@ export async function POST(request, { params }) {
       : 'account_creation_failed';
     return NextResponse.json({ error: reason }, { status: 400 });
   }
+
+  // createUser inserts the auth user before it writes app_metadata, so
+  // handle_new_user() never sees created_by_office and makes the profile
+  // inactive. Switch it on here. Not fatal: the account exists and the
+  // office can reactivate it from the staff page if this fails.
+  const { error: activateError } = await supabaseAdmin
+    .from('profiles')
+    .update({ active: true })
+    .eq('id', created.user.id);
+  if (activateError) console.error('Could not activate new starter', created.user.id, activateError);
 
   let idDocumentPath = null;
   if (idFile && typeof idFile === 'object' && idFile.size > 0) {
