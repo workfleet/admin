@@ -18,7 +18,7 @@ import { useToast } from '../../components/ToastProvider';
 import BackButton from '../../components/BackButton';
 import { groupOverlappingJobs, assignLanes, abbreviateName } from '../../../lib/jobOverlap';
 import { findTightTurnarounds, describeTurnaround } from '../../../lib/travelTime';
-import { buildCleanerRows, UNASSIGNED_ROW_ID } from '../../../lib/rotaGrid';
+import { buildCleanerRows, formatHours, shareMinutes, UNASSIGNED_ROW_ID } from '../../../lib/rotaGrid';
 import { certificationLine, isTraining, jobHeadline, jobSubtitle, trainerLine, trainingJobFields, TRAINING_JOB_COLUMNS } from '../../../lib/training';
 import CleanerWeekGrid from './CleanerWeekGrid';
 import SeriesEditor from './SeriesEditor';
@@ -65,7 +65,7 @@ function dayIndexOf(date) {
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => h);
 const MINUTE_OPTIONS = [0, 15, 30, 45];
 
-const JOB_SELECT = `id, scheduled_at, status, duration_minutes, notes, series_id, property_id, ${TRAINING_JOB_COLUMNS}, properties(address, lat, lng, clients(name)), job_assignments(cleaner_id, profiles(full_name))`;
+const JOB_SELECT = `id, scheduled_at, status, duration_minutes, notes, series_id, property_id, ${TRAINING_JOB_COLUMNS}, properties(address, lat, lng, clients(name)), job_assignments(cleaner_id, paid_minutes, profiles(full_name))`;
 
 function formatHour12(h) {
   const period = h < 12 ? 'AM' : 'PM';
@@ -204,6 +204,11 @@ export default function AdminRota() {
   const [duration, setDuration] = useState(120);
   const [useCustomDuration, setUseCustomDuration] = useState(false);
   const [formCleanerIds, setFormCleanerIds] = useState([]);
+  // With two or more people on a job its hours split evenly unless the
+  // office sets each person's hours here - a 10-hour job as 7 and 3. Kept as
+  // typed (hours, by cleaner id); anyone not typed yet gets the even share.
+  const [formSplitByHand, setFormSplitByHand] = useState(false);
+  const [formHours, setFormHours] = useState({});
   const [formTemplateId, setFormTemplateId] = useState('');
   const [repeatJob, setRepeatJob] = useState(false);
   const [recurrenceType, setRecurrenceType] = useState('weekly');
@@ -268,6 +273,12 @@ export default function AdminRota() {
   const [savingJob, setSavingJob] = useState(false);
   const [jobSaveError, setJobSaveError] = useState('');
   const [addCleanerSelection, setAddCleanerSelection] = useState('');
+  // The one person on the open job whose hours are being typed, and the
+  // figure so far (hours).
+  const [hoursEditFor, setHoursEditFor] = useState(null);
+  const [hoursEditValue, setHoursEditValue] = useState('');
+  const [savingHours, setSavingHours] = useState(false);
+  useEffect(() => { setHoursEditFor(null); }, [selectedJob?.id]);
   const [applyTemplateSelection, setApplyTemplateSelection] = useState('');
 
   const calendarScrollRef = useRef(null);
@@ -804,6 +815,44 @@ export default function AdminRota() {
     return true;
   };
 
+  // Sets one person's hours on one job, as Requests does (0094): null puts
+  // them back on the even share. If payroll has already closed for the job,
+  // the trigger on job_assignments carries the difference to the next run.
+  const saveAssignmentHours = async (jobId, cleanerId, minutes) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    setSavingHours(true);
+    const { error } = await supabase
+      .from('job_assignments')
+      .update({
+        paid_minutes: minutes,
+        paid_minutes_reason: minutes == null ? null : 'Hours set on the rota',
+        paid_minutes_set_by: minutes == null ? null : session?.user?.id ?? null,
+        paid_minutes_set_at: minutes == null ? null : new Date().toISOString(),
+      })
+      .eq('job_id', jobId)
+      .eq('cleaner_id', cleanerId);
+    setSavingHours(false);
+    if (error) { toast.error('Could not save those hours.'); return; }
+
+    const withHours = (j) => ({
+      ...j,
+      job_assignments: (j.job_assignments || []).map((a) => (a.cleaner_id === cleanerId ? { ...a, paid_minutes: minutes } : a)),
+    });
+    setJobs((prev) => prev.map((j) => (j.id === jobId ? withHours(j) : j)));
+    setSelectedJob((sj) => (sj && sj.id === jobId ? withHours(sj) : sj));
+    setHoursEditFor(null);
+    toast.success(minutes == null ? 'Back to an even split.' : `Set to ${formatHours(minutes)}h.`);
+  };
+
+  const submitAssignmentHours = (jobId, cleanerId) => {
+    const hours = Number(hoursEditValue);
+    if (hoursEditValue.trim() === '' || !Number.isFinite(hours) || hours < 0) {
+      toast.error('Enter the hours, 0 or more.');
+      return;
+    }
+    saveAssignmentHours(jobId, cleanerId, Math.round(hours * 60));
+  };
+
   const removeCleanerFromJob = async (jobId, cleanerId) => {
     if (!(await confirm('Remove this cleaner from the job?', { danger: true, confirmLabel: 'Remove' }))) return;
     await dropCleanerFromJob(jobId, cleanerId);
@@ -1038,6 +1087,8 @@ export default function AdminRota() {
     setDuration(120);
     setUseCustomDuration(false);
     setFormCleanerIds([]);
+    setFormSplitByHand(false);
+    setFormHours({});
     setFormTemplateId('');
     setRepeatJob(false);
     setRecurrenceType('weekly');
@@ -1049,6 +1100,12 @@ export default function AdminRota() {
     setShowForm(false);
   };
 
+  // The even share, in hours to two places, as the starting figure for
+  // anyone whose hours have not been typed.
+  const evenShareHours = formCleanerIds.length > 0 ? Math.round((duration / formCleanerIds.length / 60) * 100) / 100 : 0;
+  const formHourValue = (cid) => formHours[cid] ?? String(evenShareHours);
+  const formHoursTotal = formCleanerIds.reduce((sum, cid) => sum + (Number(formHourValue(cid)) || 0), 0);
+
   const createJob = async (e) => {
     e.preventDefault();
     const training = formKind === 'training';
@@ -1057,6 +1114,21 @@ export default function AdminRota() {
     } else if (!clientId || !propertyAddress.trim() || !jobDate || !jobHour) return;
     if (repeatJob && recurrenceEndMode === 'date' && !recurrenceEndDate) return;
     if (repeatJob && recurrenceType === 'weekly' && weeklyDays.length === 0) return;
+
+    // Each person's minutes when the office has split the hours by hand;
+    // null means the even split, which needs nothing stored.
+    let handMinutes = null;
+    if (formSplitByHand && formCleanerIds.length >= 2) {
+      handMinutes = {};
+      for (const cid of formCleanerIds) {
+        const hours = Number(formHourValue(cid));
+        if (!Number.isFinite(hours) || hours < 0) {
+          toast.error(`Enter the hours for ${cleaners.find((c) => c.id === cid)?.full_name || 'each cleaner'}, 0 or more.`);
+          return;
+        }
+        handMinutes[cid] = Math.round(hours * 60);
+      }
+    }
 
     const jobTime = `${jobHour}:${jobMinute}`;
     const firstDate = new Date(`${jobDate}T${jobTime}`);
@@ -1174,10 +1246,19 @@ export default function AdminRota() {
     if (insertedJobs && insertedJobs.length > 0) {
       const assignmentsByJob = {};
       if (formCleanerIds.length > 0) {
+        const { data: { session: bookedBy } } = await supabase.auth.getSession();
+        const handFields = (cid) => (handMinutes
+          ? {
+            paid_minutes: handMinutes[cid],
+            paid_minutes_reason: 'Hours set when the job was booked',
+            paid_minutes_set_by: bookedBy?.user?.id ?? null,
+            paid_minutes_set_at: new Date().toISOString(),
+          }
+          : {});
         const { data: allAssignments } = await supabase
           .from('job_assignments')
-          .insert(insertedJobs.flatMap((j) => formCleanerIds.map((cid) => ({ job_id: j.id, cleaner_id: cid }))))
-          .select('job_id, cleaner_id, profiles(full_name)');
+          .insert(insertedJobs.flatMap((j) => formCleanerIds.map((cid) => ({ job_id: j.id, cleaner_id: cid, ...handFields(cid) }))))
+          .select('job_id, cleaner_id, paid_minutes, profiles(full_name)');
 
         (allAssignments || []).forEach((a) => {
           if (!assignmentsByJob[a.job_id]) assignmentsByJob[a.job_id] = [];
@@ -2236,12 +2317,53 @@ export default function AdminRota() {
             {(selectedJob.job_assignments || []).length === 0 && (
               <p className="empty-state" style={{ padding: '4px 0' }}>No one assigned yet.</p>
             )}
-            {(selectedJob.job_assignments || []).map((a) => (
-              <div key={a.cleaner_id} className="task-row" style={{ justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 14 }}>{a.profiles?.full_name || 'Unknown'}</span>
-                <button className="btn-secondary" onClick={() => removeCleanerFromJob(selectedJob.id, a.cleaner_id)} title="Take this person off the job - they are told it has been unassigned">Remove</button>
-              </div>
-            ))}
+            {(selectedJob.job_assignments || []).map((a) => {
+              const share = shareMinutes(selectedJob, a.cleaner_id);
+              const byHand = a.paid_minutes != null;
+              if (hoursEditFor === a.cleaner_id) {
+                return (
+                  <div key={a.cleaner_id} className="task-row" style={{ flexWrap: 'wrap', gap: 8 }}>
+                    <span style={{ fontSize: 14, flex: 1 }}>{a.profiles?.full_name || 'Unknown'}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.25"
+                      inputMode="decimal"
+                      value={hoursEditValue}
+                      onChange={(e) => setHoursEditValue(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitAssignmentHours(selectedJob.id, a.cleaner_id); } }}
+                      aria-label={`Hours for ${a.profiles?.full_name || 'this person'}`}
+                      style={{ width: 80, marginBottom: 0 }}
+                      autoFocus
+                    />
+                    <span style={{ fontSize: 13, color: 'var(--muted)' }}>h</span>
+                    <button className="btn-primary" disabled={savingHours} onClick={() => submitAssignmentHours(selectedJob.id, a.cleaner_id)}>Save</button>
+                    {byHand && (
+                      <button className="btn-secondary" disabled={savingHours} onClick={() => saveAssignmentHours(selectedJob.id, a.cleaner_id, null)} title="Go back to splitting the job's hours evenly">Even split</button>
+                    )}
+                    <button className="btn-secondary" disabled={savingHours} onClick={() => setHoursEditFor(null)}>Cancel</button>
+                  </div>
+                );
+              }
+              return (
+                <div key={a.cleaner_id} className="task-row" style={{ justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 14, flex: 1 }}>
+                    {a.profiles?.full_name || 'Unknown'}
+                    <span style={{ color: 'var(--muted)', fontSize: 13 }}>
+                      {' · '}{formatHours(share)}h{byHand ? ' (set by hand)' : ''}
+                    </span>
+                  </span>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => { setHoursEditFor(a.cleaner_id); setHoursEditValue(String(Math.round((share / 60) * 100) / 100)); }}
+                    title="Set this person's hours for this job - their rota, hours page and payroll use this instead of an even split"
+                  >
+                    Hours
+                  </button>
+                  <button className="btn-secondary" onClick={() => removeCleanerFromJob(selectedJob.id, a.cleaner_id)} title="Take this person off the job - they are told it has been unassigned">Remove</button>
+                </div>
+              );
+            })}
             {availableToAdd.length > 0 && (
               <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                 <select
@@ -2663,6 +2785,53 @@ export default function AdminRota() {
                   ))}
                 </div>
               </div>
+
+              {formCleanerIds.length >= 2 && (
+                <div className="field">
+                  <label className="field-label">Hours each</label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, textTransform: 'none', fontWeight: 500, fontSize: 14, color: 'var(--ink)' }}>
+                    <input
+                      type="checkbox"
+                      checked={formSplitByHand}
+                      onChange={(e) => { setFormSplitByHand(e.target.checked); setFormHours({}); }}
+                      style={{ width: 'auto', margin: 0 }}
+                    />
+                    Set each person&rsquo;s hours
+                  </label>
+                  {!formSplitByHand ? (
+                    <p style={{ fontSize: 13, color: 'var(--muted)', margin: '6px 0 0' }}>
+                      Split evenly: {formatHours(duration / formCleanerIds.length)}h each.
+                    </p>
+                  ) : (
+                    <div style={{ marginTop: 8 }}>
+                      {formCleanerIds.map((cid) => (
+                        <div key={cid} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                          <span style={{ flex: 1, fontSize: 14 }}>{cleaners.find((c) => c.id === cid)?.full_name || 'Unknown'}</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.25"
+                            inputMode="decimal"
+                            value={formHourValue(cid)}
+                            onChange={(e) => setFormHours((prev) => ({ ...prev, [cid]: e.target.value }))}
+                            aria-label={`Hours for ${cleaners.find((c) => c.id === cid)?.full_name || 'this cleaner'}`}
+                            style={{ width: 90, marginBottom: 0 }}
+                          />
+                          <span style={{ fontSize: 13, color: 'var(--muted)' }}>h</span>
+                        </div>
+                      ))}
+                      <p style={{
+                        fontSize: 13, margin: '4px 0 0',
+                        color: Math.round(formHoursTotal * 60) === duration ? 'var(--muted)' : 'var(--wf-overdue)',
+                      }}>
+                        Adds up to {formatHours(Math.round(formHoursTotal * 60))}h of a {formatHours(duration)}h job
+                        {Math.round(formHoursTotal * 60) === duration ? '.' : ' - check this is what you meant.'}
+                        {repeatJob ? ' The same hours apply to every repeat.' : ''}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="field">
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, textTransform: 'none', fontWeight: 500, fontSize: 14, color: 'var(--ink)' }}>

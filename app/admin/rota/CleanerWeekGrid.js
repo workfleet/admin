@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { coworkersOf, firstName, formatHours, freeGaps, formatGap, UNASSIGNED_ROW_ID } from '../../../lib/rotaGrid';
+import { coworkersOf, firstName, formatHours, freeGaps, formatGap, shareMinutes, UNASSIGNED_ROW_ID } from '../../../lib/rotaGrid';
 import { isTraining, jobHeadline, jobSubtitle } from '../../../lib/training';
 
 // The rota with a row per cleaner. Across the week, each cell lists that
@@ -84,6 +84,9 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, dayIndex = n
       : job.properties?.clients?.name || job.properties?.address || 'Unknown client';
     const where = training ? jobSubtitle(job) : job.properties?.address;
     const others = coworkersOf(job, cleanerId).map(firstName);
+    // On a shared job the note says whose it is and what this person's
+    // share comes to, so an 8-hour job for two reads as 4 hours on each row.
+    const withNote = others.length > 0 ? `w/ ${others.join(', ')} · ${formatHours(shareMinutes(job, cleanerId))}h` : null;
     const draggable = job.status === 'scheduled';
     const everyone = (job.job_assignments || []).map((a) => a.profiles?.full_name || 'Unknown');
     const timeRange = `${clockOf(job.scheduled_at)} – ${clockOf(endOf(job))}`;
@@ -93,6 +96,7 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, dayIndex = n
       client,
       where,
       unassigned ? (training ? 'Nobody booked on' : 'Needs a cleaner') : everyone.join(', '),
+      withNote ? `${formatHours(shareMinutes(job, cleanerId))}h for ${firstName(row.name)}` : null,
       word,
       draggable ? 'Drag to another day or cleaner, or click to open' : 'Click to open',
     ].filter(Boolean).join(' · ');
@@ -129,7 +133,7 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, dayIndex = n
           <span className="rota-chip-line">
             <b>{timeRange}</b>
             <span className="rota-chip-client">{client}</span>
-            {others.length > 0 && <span className="rota-chip-with">w/ {others.join(', ')}</span>}
+            {withNote && <span className="rota-chip-with">{withNote}</span>}
           </span>
           {sub && <span className="rota-chip-sub">{sub}</span>}
         </button>
@@ -140,7 +144,7 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, dayIndex = n
       <button key={`${row.id}-${job.id}`} type="button" className={className} {...dragProps} onClick={() => onOpenJob(job)} title={title}>
         <b>{clockOf(job.scheduled_at)}</b>
         <span className="rota-chip-client">{client}</span>
-        {others.length > 0 && <span className="rota-chip-with">w/ {others.join(', ')}</span>}
+        {withNote && <span className="rota-chip-with">{withNote}</span>}
         {job.status === 'missed' && <span className="rota-chip-with">missed</span>}
       </button>
     );
@@ -205,7 +209,7 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, dayIndex = n
             const cleanerId = isUnassigned ? null : row.id;
             const shownLists = shownDays.map((i) => row.days[i]);
             const shownJobs = shownLists.reduce((n, list) => n + list.length, 0);
-            const shownMinutes = shownLists.reduce((sum, list) => sum + list.reduce((s, j) => s + (j.duration_minutes || 120), 0), 0);
+            const shownMinutes = shownLists.reduce((sum, list) => sum + list.reduce((s, j) => s + shareMinutes(j, cleanerId), 0), 0);
             // A row for nobody with nothing on it is a good sign, not a
             // sheet row - it only appears when there is something to fix.
             if (isUnassigned && shownJobs === 0) return null;

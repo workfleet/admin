@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildCleanerRows, coworkersOf, firstName, formatHours, freeGaps, formatGap, UNASSIGNED_ROW_ID } from '../lib/rotaGrid';
+import { buildCleanerRows, coworkersOf, firstName, formatHours, freeGaps, formatGap, shareMinutes, UNASSIGNED_ROW_ID } from '../lib/rotaGrid';
 
 // The by-cleaner rota is a row per person with the days across. A job that
 // lands on the wrong row, or on no row, is a job the office can't see.
@@ -68,6 +68,20 @@ describe('buildCleanerRows', () => {
     expect(rows[1].jobCount).toBe(2);
     expect(rows[2].minutes).toBe(60);
     expect(rows[0].minutes).toBe(0);
+  });
+
+  it('splits a shared job between the people on it, unless their minutes were set by hand', () => {
+    const jobs = [
+      job('j1', '2026-09-14T08:00:00', 480, [on('amira', 'Amira Shah'), on('ben', 'Ben Okafor')]),
+      job('j2', '2026-09-15T08:00:00', 240, [{ ...on('amira', 'Amira Shah'), paid_minutes: 420 }, on('ben', 'Ben Okafor')]),
+      job('j3', '2026-09-16T08:00:00', 90),
+    ];
+    const rows = buildCleanerRows(jobs, cleaners, weekDays);
+    expect(rows[1].minutes).toBe(240 + 420);
+    expect(rows[2].minutes).toBe(240 + 120);
+    expect(rows[0].minutes).toBe(90);
+    expect(shareMinutes(jobs[0], 'amira')).toBe(240);
+    expect(shareMinutes(jobs[2], null)).toBe(90);
   });
 
   it('gives someone who has left but still holds a job a row after current staff', () => {
