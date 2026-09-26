@@ -11,9 +11,16 @@ import { claimFor, describeClockRecord, indexClaims, lateMinutes } from '../../.
 import { STAFF_DETAIL_FIELDS, detailsToForm, formToDetails, formatDateOnly, missingEssentials } from '../../../../lib/staffDetails';
 import { BANK_DETAIL_FIELDS, emptyBankForm, formToBankDetails, formatSortCode } from '../../../../lib/bankDetails';
 import { countsAgainstCleaner, outcomeLabel } from '../../../../lib/missedShiftOutcomes';
+import { formatHours } from '../../../../lib/hoursWorked';
+import { jobHeadline, TRAINING_JOB_COLUMNS } from '../../../../lib/training';
 import BackButton from '../../../components/BackButton';
 
 const HOLIDAY_ACCRUAL_RATE = 0.1207; // UK statutory: 5.6 weeks / 46.4 working weeks
+
+// How much of someone's rota the Upcoming card shows before it asks. Enough
+// to answer "what are they on next" without a filled-in month burying the
+// rest of the record underneath it.
+const UPCOMING_PREVIEW = 5;
 
 // Each sub-score is 0-100; components with no underlying data (e.g. no
 // ratings yet) are left out of the average entirely rather than counted
@@ -57,6 +64,7 @@ export default function CleanerProfile() {
   const [jobs, setJobs] = useState([]);
   const [checkins, setCheckins] = useState(null);
   const [showClockIns, setShowClockIns] = useState(false);
+  const [showAllUpcoming, setShowAllUpcoming] = useState(false);
   const [claimIndex, setClaimIndex] = useState(() => new Map());
   const [timeOffRequests, setTimeOffRequests] = useState([]);
   const [submission, setSubmission] = useState(null);
@@ -148,7 +156,7 @@ export default function CleanerProfile() {
 
     const { data: assignmentRows } = await supabase
       .from('job_assignments')
-      .select('job_id, paid_minutes, paid_minutes_reason, jobs(id, scheduled_at, status, duration_minutes, properties(address))')
+      .select(`job_id, paid_minutes, paid_minutes_reason, jobs(id, scheduled_at, status, duration_minutes, ${TRAINING_JOB_COLUMNS}, properties(address))`)
       .eq('cleaner_id', id);
 
     const jobIds = (assignmentRows || []).map((r) => r.job_id);
@@ -635,10 +643,15 @@ export default function CleanerProfile() {
   if (loading || !cleaner) return <div className="page-inner">Loading...</div>;
 
   // History means what has already happened. A shift still ahead of them
-  // belongs on the rota, not in the record of what they have done - and on
-  // a busy cleaner the future ones sat at the top and pushed it out of view.
-  const historyJobs = jobs.filter((j) => new Date(j.scheduled_at) <= new Date());
-  const upcomingCount = jobs.length - historyJobs.length;
+  // belongs in Upcoming below, not in the record of what they have done - and
+  // on a busy cleaner the future ones sat at the top and pushed it out of view.
+  const now = new Date();
+  const historyJobs = jobs.filter((j) => new Date(j.scheduled_at) <= now);
+  // Soonest first: this card answers "what are they on next", which is the
+  // opposite order to a history.
+  const upcomingJobs = jobs
+    .filter((j) => new Date(j.scheduled_at) > now)
+    .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
 
   // Their own figure for a job where the office set one (0094), else the
   // even split - the same rule as lib/hoursWorked.js and the database.
@@ -1113,21 +1126,48 @@ export default function CleanerProfile() {
       </div>
 
       <div className="card">
+        <h2>Upcoming ({upcomingJobs.length})</h2>
+        {upcomingJobs.length === 0 && <p className="empty-state">Nothing booked in for them yet.</p>}
+        {(showAllUpcoming ? upcomingJobs : upcomingJobs.slice(0, UPCOMING_PREVIEW)).map((job) => (
+          <div key={job.id} className="task-row" style={{ justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: 14 }}>{jobHeadline(job)}</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                {new Date(job.scheduled_at).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                {job.duration_minutes ? ` · ${formatHours(job.duration_minutes / 60)}` : ''}
+                {job.assigneeCount > 1 ? ` · with ${job.assigneeCount - 1} other${job.assigneeCount > 2 ? 's' : ''}` : ''}
+              </div>
+            </div>
+            {/* Every row here is scheduled by definition, so that badge would
+                say nothing - anything else is worth seeing. */}
+            {job.status !== 'scheduled' && (
+              <span className={`badge ${job.status}`}>{job.status.replace('_', ' ')}</span>
+            )}
+          </div>
+        ))}
+        {upcomingJobs.length > UPCOMING_PREVIEW && (
+          <button
+            className="btn-secondary"
+            onClick={() => setShowAllUpcoming((s) => !s)}
+            style={{ marginTop: 10 }}
+            title="Show the rest of what they are booked in for"
+          >
+            {showAllUpcoming ? 'Show fewer' : `Show all ${upcomingJobs.length}`}
+          </button>
+        )}
+      </div>
+
+      <div className="card">
         <h2>Job History ({historyJobs.length})</h2>
         {historyJobs.length === 0 && (
           <p className="empty-state">
             {jobs.length === 0 ? 'No jobs assigned yet.' : 'Nothing worked yet - everything on their rota is still to come.'}
           </p>
         )}
-        {upcomingCount > 0 && (
-          <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '0 0 6px' }}>
-            {upcomingCount} upcoming job{upcomingCount === 1 ? '' : 's'} not shown here - they are on the rota.
-          </p>
-        )}
         {historyJobs.map((job) => (
           <div key={job.id} className="task-row" style={{ justifyContent: 'space-between' }}>
             <div>
-              <div style={{ fontSize: 14 }}>{job.properties?.address}</div>
+              <div style={{ fontSize: 14 }}>{jobHeadline(job)}</div>
               <div style={{ fontSize: 12, color: 'var(--muted)' }}>{new Date(job.scheduled_at).toLocaleString()}</div>
             </div>
             <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
