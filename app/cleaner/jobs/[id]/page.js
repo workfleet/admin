@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { ChevronLeft, Camera, Lock, Check, ChevronDown, KeyRound } from 'lucide-react';
 import { supabase } from '../../../../lib/supabaseClient';
+import { compressImage } from '../../../../lib/compressImage';
 import { getSessionWithRetry } from '../../../../lib/authGate';
 import { notify } from '../../../../lib/notify';
 import { distanceMeters, geofenceRadiusFor } from '../../../../lib/geo';
@@ -389,38 +390,6 @@ export default function JobDetailPage() {
         return { ...p, signedUrl: data?.signedUrl };
       })
     );
-
-  // Downscales + re-encodes as JPEG in the browser before upload, so
-  // cleaners on mobile data aren't sending full-resolution photos.
-  const compressImage = (file, maxDimension = 1600, quality = 0.75) =>
-    new Promise((resolve) => {
-      if (!file.type.startsWith('image/')) return resolve(file);
-      const img = new Image();
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        img.onload = () => {
-          let { width, height } = img;
-          if (width > maxDimension || height > maxDimension) {
-            const scale = maxDimension / Math.max(width, height);
-            width = Math.round(width * scale);
-            height = Math.round(height * scale);
-          }
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-          canvas.toBlob(
-            (blob) => resolve(blob ? new File([blob], file.name, { type: 'image/jpeg' }) : file),
-            'image/jpeg',
-            quality
-          );
-        };
-        img.onerror = () => resolve(file);
-        img.src = e.target.result;
-      };
-      reader.onerror = () => resolve(file);
-      reader.readAsDataURL(file);
-    });
 
   const getLocation = () =>
     new Promise((resolve) => {
@@ -1600,6 +1569,17 @@ export default function JobDetailPage() {
             </div>
           </>
         )}
+
+        {/* In every state, locked or not: an accident is often reported
+            after the job is done, and the report is not part of the job. */}
+        <button
+          type="button"
+          onClick={() => router.push(`/cleaner/incidents?job=${id}`)}
+          title="Report an accident or near miss on this job"
+          style={{ background: 'none', border: 0, padding: '4px 0', color: 'var(--brand-link)', fontWeight: 600, fontSize: 13.5, textAlign: 'left' }}
+        >
+          Accident or near miss here? Report it
+        </button>
       </div>
 
       {/* One primary action, always in the same place, always reachable

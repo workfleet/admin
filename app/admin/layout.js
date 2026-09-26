@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Download, Folder, Package, KeyRound, LifeBuoy, Banknote, Video, Bell, Menu, X, Receipt } from 'lucide-react';
+import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Download, Folder, Package, KeyRound, LifeBuoy, Banknote, Video, Bell, HardHat, Menu, X, Receipt } from 'lucide-react';
 import { signOutAndClearPresence } from '../../lib/signOut';
 import { getSessionAndProfile } from '../../lib/authGate';
 import { canSeeInvoices } from '../../lib/invoiceAccess';
@@ -51,6 +51,7 @@ const NAV_ITEMS = [
   { href: '/admin/reports', label: 'Reports', icon: FileText },
   { href: '/admin/data-reports', label: 'Data Reports', icon: Download },
   { href: '/admin/requests', label: 'Requests', icon: MessageSquareWarning },
+  { href: '/admin/incidents', label: 'Accidents', icon: HardHat },
   { href: '/admin/messages', label: 'Messages', icon: MessageCircle },
   { href: '/admin/help', label: 'Help', icon: HelpCircle },
 ];

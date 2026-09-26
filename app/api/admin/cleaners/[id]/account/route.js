@@ -55,6 +55,7 @@ const HISTORY = [
   ['staff_requests', 'cleaner_id'],
   ['time_extension_requests', 'cleaner_id'],
   ['emergency_alerts', 'cleaner_id'],
+  ['incident_reports', 'reported_by'],
   ['staff_onboarding_submissions', 'profile_id'],
   ['staff_certifications', 'staff_id'],
   ['key_holdings', 'holder_id'],

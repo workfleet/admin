@@ -43,6 +43,7 @@ export async function GET(request, { params }) {
     { data: extensions },
     { data: assignments },
     { data: emergencyAlerts },
+    { data: incidentReports },
     { data: pushSubs },
     { data: notifications },
     { data: participants },
@@ -58,6 +59,10 @@ export async function GET(request, { params }) {
     supabaseAdmin.from('time_extension_requests').select('*').eq('cleaner_id', id),
     supabaseAdmin.from('job_assignments').select('id, job_id, jobs(scheduled_at, status, properties(address))').eq('cleaner_id', id),
     supabaseAdmin.from('emergency_alerts').select('*').eq('cleaner_id', id),
+    // The reports they made. An accident where they were the one hurt but
+    // someone else reported it names them only in free text, so it is not
+    // found here - check the Accidents page's CSV for their name too.
+    supabaseAdmin.from('incident_reports').select('*').eq('reported_by', id),
     supabaseAdmin.from('push_subscriptions').select('id, endpoint, created_at').eq('user_id', id),
     supabaseAdmin.from('notifications').select('*').eq('user_id', id),
     supabaseAdmin.from('conversation_participants').select('conversation_id').eq('profile_id', id),
@@ -98,6 +103,7 @@ export async function GET(request, { params }) {
     time_extension_requests: extensions,
     kit_and_issue_requests: staffRequests,
     emergency_alerts: emergencyAlerts,
+    accident_and_near_miss_reports: incidentReports,
     messages_sent: messagesSent,
     notifications,
     push_subscriptions: pushSubs,

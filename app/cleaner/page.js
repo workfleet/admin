@@ -526,6 +526,18 @@ export default function CleanerDashboard() {
             Report an Issue
           </button>
         </div>
+        {/* Its own page rather than a third request type: an accident
+            report is a record the office has to keep and follow up, not a
+            job for someone to tick off. */}
+        {!requestType && (
+          <Link
+            href="/cleaner/incidents"
+            style={{ display: 'block', marginTop: 10, fontSize: 13.5, fontWeight: 600, color: 'var(--brand-link)', textDecoration: 'none' }}
+            title="Report an accident or a near miss to the office"
+          >
+            Accident or near miss? Report it
+          </Link>
+        )}
 
         {requestType && (
           <form onSubmit={submitRequest}>
