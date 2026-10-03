@@ -15,8 +15,11 @@ async function requireStaff(request) {
   const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
   if (error || !user) return null;
 
-  const { data: profile } = await supabaseAdmin.from('profiles').select('role').eq('id', user.id).single();
-  if (!['admin', 'supervisor', 'inventory'].includes(profile?.role)) return null;
+  const { data: profile } = await supabaseAdmin.from('profiles').select('role, manages_inventory').eq('id', user.id).single();
+  // Stock is a permission as well as a role now (0118), so a cleaner who
+  // does the stock take can pull the list too.
+  const allowed = ['admin', 'supervisor', 'inventory'].includes(profile?.role) || profile?.manages_inventory === true;
+  if (!allowed) return null;
   return user;
 }
 

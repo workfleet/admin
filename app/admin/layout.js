@@ -15,14 +15,15 @@ import Logo from '../components/Logo';
 // reviewing onboarding ID documents) - kept admin-only, hidden from
 // supervisors here and enforced again on those two pages themselves.
 //
-// The 'inventory' role (0101) sees one office page: it lands on Inventory
-// and is bounced back here from any other /admin page. RLS backs that up -
-// no other table's policies name the role.
+// Some people are in here for the stock screens and nothing else: the
+// 'inventory' role (0101), and now anyone carrying the manages_inventory
+// permission (0118) who is not office staff - a cleaner who also does the
+// stock take. They land on Inventory and are bounced back to it from any
+// other /admin page. RLS backs that up: products is the only table the
+// permission opens, through can_manage_inventory().
 //
-// The stock take is now booked on the rota as a paid hour (lib/staffRoles.js),
-// so this role also has jobs to turn up to and clock into. Those live in the
-// cleaner app, which is outside /admin and so outside the bounce above; this
-// is the way across to them.
+// Their jobs live in the cleaner app, which is outside /admin and so outside
+// the bounce; this is the way across to them.
 const INVENTORY_HOME = '/admin/inventory';
 const INVENTORY_JOBS_ITEM = { href: '/cleaner', label: 'My Jobs', icon: Calendar };
 
@@ -56,6 +57,8 @@ export default function AdminLayout({ children }) {
   const router = useRouter();
   const [authorized, setAuthorized] = useState(false);
   const [role, setRole] = useState(null);
+  // In here for the stock screens only - not office staff.
+  const [stockOnly, setStockOnly] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [loadError, setLoadError] = useState(false);
 
@@ -68,8 +71,8 @@ export default function AdminLayout({ children }) {
   }, [pathname]);
 
   useEffect(() => {
-    if (role === 'inventory' && pathname !== INVENTORY_HOME) router.replace(INVENTORY_HOME);
-  }, [role, pathname]);
+    if (stockOnly && pathname !== INVENTORY_HOME) router.replace(INVENTORY_HOME);
+  }, [stockOnly, pathname]);
 
   const checkAccess = async () => {
     setLoadError(false);
@@ -78,15 +81,18 @@ export default function AdminLayout({ children }) {
 
     if (error) { setLoadError(true); return; }
 
-    if (profile?.role !== 'admin' && profile?.role !== 'supervisor' && profile?.role !== 'inventory') {
+    const isOffice = profile?.role === 'admin' || profile?.role === 'supervisor';
+    const isStock = profile?.role === 'inventory' || profile?.manages_inventory === true;
+    if (!isOffice && !isStock) {
       router.push('/');
       return;
     }
     setRole(profile.role);
+    setStockOnly(!isOffice);
     setAuthorized(true);
   };
 
-  const navItems = role === 'inventory'
+  const navItems = stockOnly
     ? [...NAV_ITEMS.filter((item) => item.href === INVENTORY_HOME), INVENTORY_JOBS_ITEM]
     : NAV_ITEMS.filter((item) => !item.adminOnly || role === 'admin');
 

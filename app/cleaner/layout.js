@@ -17,6 +17,9 @@ import PhotoQueueFlusher from '../components/PhotoQueueFlusher';
 const NAV_ITEMS = [
   { href: '/cleaner', label: 'Home', icon: Home },
   { href: '/cleaner/rota', label: 'Rota', icon: Calendar },
+  // staffOnly: these two are gated on is_staff() in the database (0021,
+  // 0035), which the stock-only 'inventory' role is deliberately not in, so
+  // they would open empty for them. A cleaner who manages stock is in it.
   { href: '/cleaner/messages', label: 'Messages', icon: MessageCircle, staffOnly: true },
   { href: '/cleaner/profile', label: 'Profile', icon: User },
   { href: '/cleaner/policies', label: 'Help', icon: HelpCircle, staffOnly: true },
@@ -25,10 +28,9 @@ const NAV_ITEMS = [
 
 // Whoever does the stock take is booked on the rota for it and clocks in
 // like anyone else (lib/staffRoles.js), so this app is theirs too - it is
-// where the shift and the clock live. They get a way back to the stock
-// screens, and they lose the two things the database would hand them
-// empty: Team Chat and the document/training library are gated on
-// is_staff() (0021, 0035), which the inventory role is deliberately not in.
+// where the shift and the clock live, and this is their way back to the
+// stock screens. Shown for the manages_inventory permission (0118) as well
+// as the old stock-only role, since a cleaner can hold it now.
 const INVENTORY_NAV_ITEM = { href: '/admin/inventory', label: 'Stock', icon: Package };
 
 export default function CleanerLayout({ children }) {
@@ -36,6 +38,7 @@ export default function CleanerLayout({ children }) {
   const router = useRouter();
   const [authorized, setAuthorized] = useState(false);
   const [role, setRole] = useState(null);
+  const [managesInventory, setManagesInventory] = useState(false);
   const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
@@ -53,6 +56,7 @@ export default function CleanerLayout({ children }) {
     if (profile?.role === 'client') { router.push('/client'); return; }
 
     setRole(profile?.role || null);
+    setManagesInventory(profile?.manages_inventory === true);
     setAuthorized(true);
   };
 
@@ -67,9 +71,11 @@ export default function CleanerLayout({ children }) {
 
   if (!authorized) return null;
 
-  const navItems = role === 'inventory'
-    ? [...NAV_ITEMS.filter((item) => !item.staffOnly), INVENTORY_NAV_ITEM]
-    : NAV_ITEMS;
+  const stockOnly = role === 'inventory';
+  const navItems = [
+    ...NAV_ITEMS.filter((item) => !item.staffOnly || !stockOnly),
+    ...(stockOnly || managesInventory ? [INVENTORY_NAV_ITEM] : []),
+  ];
 
   return (
     <div className="cleaner-shell">
