@@ -18,7 +18,7 @@ async function requireAdmin(request) {
 // not edited from the Cleaners page, and a client's is not a staff account.
 async function loadStaffProfile(id) {
   const { data: profile } = await supabaseAdmin
-    .from('profiles').select('id, full_name, role, active, manages_inventory').eq('id', id).single();
+    .from('profiles').select('id, full_name, role, active, manages_inventory, takes_cover').eq('id', id).single();
   if (!profile || !['cleaner', 'supervisor', 'inventory'].includes(profile.role)) return null;
   return profile;
 }
@@ -110,6 +110,8 @@ export async function PATCH(request, { params }) {
   // Stock is a permission rather than a role now (0118), so it arrives
   // separately and can be set on a cleaner.
   const managesInventory = typeof body.manages_inventory === 'boolean' ? body.manages_inventory : undefined;
+  // Whether they are offered other people's shifts (0119).
+  const takesCover = typeof body.takes_cover === 'boolean' ? body.takes_cover : undefined;
 
   if (fullName !== undefined && fullName.length === 0) {
     return NextResponse.json({ error: 'name_required' }, { status: 400 });
@@ -146,6 +148,7 @@ export async function PATCH(request, { params }) {
   // says another, and can_manage_inventory() reads both.
   if (role === 'inventory') profileUpdate.manages_inventory = true;
   else if (managesInventory !== undefined) profileUpdate.manages_inventory = managesInventory;
+  if (takesCover !== undefined) profileUpdate.takes_cover = takesCover;
 
   if (Object.keys(profileUpdate).length > 0) {
     const { error: profileError } = await supabaseAdmin.from('profiles').update(profileUpdate).eq('id', params.id);
@@ -159,6 +162,7 @@ export async function PATCH(request, { params }) {
     full_name: updated?.full_name ?? profile.full_name,
     role: updated?.role ?? profile.role,
     manages_inventory: updated?.manages_inventory ?? profile.manages_inventory,
+    takes_cover: updated?.takes_cover ?? profile.takes_cover,
     email: userData?.user?.email || null,
     password_changed: password !== undefined,
   });

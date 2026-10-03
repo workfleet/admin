@@ -70,7 +70,9 @@ export default function AdminCover() {
         .order('scheduled_at')
         .limit(100),
       supabase.from('job_assignments').select('job_id, cleaner_id, profiles(full_name)'),
-      supabase.from('profiles').select('id, full_name').eq('role', 'cleaner').eq('active', true).order('full_name'),
+      // takes_cover (0119): someone whose work is not cleaning visits is
+      // not on the list of people to hand one to.
+      supabase.from('profiles').select('id, full_name').eq('role', 'cleaner').eq('active', true).eq('takes_cover', true).order('full_name'),
     ]);
 
     setOffers(offerRows || []);

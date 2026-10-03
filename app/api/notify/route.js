@@ -147,7 +147,7 @@ async function flushPendingPushes() {
 // minutes late to look at the app costs someone the shift.
 async function pushActiveCleaners(excludeUserId, push) {
   const { data: cleaners } = await supabaseAdmin
-    .from('profiles').select('id').eq('role', 'cleaner').eq('active', true);
+    .from('profiles').select('id').eq('role', 'cleaner').eq('active', true).eq('takes_cover', true);
   const ids = (cleaners || []).map((c) => c.id).filter((id) => id !== excludeUserId);
   await pushToUserIds(ids, push);
 }

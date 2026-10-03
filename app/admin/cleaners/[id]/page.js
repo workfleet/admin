@@ -141,7 +141,7 @@ export default function CleanerProfile() {
 
     const { data: cleanerData } = await supabase
       .from('profiles')
-      .select('id, full_name, role, manages_inventory, created_at, active, profile_private(holiday_adjustment_hours, deactivated_at)')
+      .select('id, full_name, role, manages_inventory, takes_cover, created_at, active, profile_private(holiday_adjustment_hours, deactivated_at)')
       .eq('id', id)
       .single()
       .then((res) => ({ ...res, data: flattenPrivate(res.data) }));
@@ -452,6 +452,7 @@ export default function CleanerProfile() {
       email: email || '',
       role: ['supervisor', 'inventory'].includes(cleaner.role) ? cleaner.role : 'cleaner',
       manages_inventory: cleaner.manages_inventory === true,
+      takes_cover: cleaner.takes_cover !== false,
       password: '',
     });
     setAccountError('');
@@ -478,6 +479,9 @@ export default function CleanerProfile() {
     if (accountForm.role !== cleaner.role) changes.role = accountForm.role;
     if (accountForm.manages_inventory !== (cleaner.manages_inventory === true)) {
       changes.manages_inventory = accountForm.manages_inventory;
+    }
+    if (accountForm.takes_cover !== (cleaner.takes_cover !== false)) {
+      changes.takes_cover = accountForm.takes_cover;
     }
     if (accountForm.password) changes.password = accountForm.password;
     if (Object.keys(changes).length === 0) { setEditingAccount(false); return; }
@@ -511,7 +515,7 @@ export default function CleanerProfile() {
       return;
     }
 
-    setCleaner((c) => ({ ...c, full_name: body.full_name, role: body.role, manages_inventory: body.manages_inventory }));
+    setCleaner((c) => ({ ...c, full_name: body.full_name, role: body.role, manages_inventory: body.manages_inventory, takes_cover: body.takes_cover }));
     setEmail(body.email);
     setHandedPassword(body.password_changed ? changes.password : null);
     setEditingAccount(false);
@@ -769,6 +773,26 @@ export default function CleanerProfile() {
                   : 'Adds the Stock screen to their app. Everything else about their role stays the same.'}
               </p>
             </div>
+            {/* Default on, so this only ever has to be touched for the
+                exception (0119): someone on the staff list whose work is not
+                cleaning visits, who should not be pushed somebody else's
+                Tuesday morning. They can still put their own shifts out. */}
+            {accountForm.role === 'cleaner' && (
+              <div className="field">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, textTransform: 'none', fontWeight: 500, fontSize: 14, color: 'var(--ink)' }}>
+                  <input
+                    type="checkbox"
+                    checked={accountForm.takes_cover}
+                    onChange={(e) => setAccountForm((f) => ({ ...f, takes_cover: e.target.checked }))}
+                    style={{ width: 'auto', margin: 0 }}
+                  />
+                  Offer them shifts that need covering
+                </label>
+                <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
+                  Untick for someone who is on the books but does not cover cleans. They can still put their own shifts out for cover.
+                </p>
+              </div>
+            )}
             <div className="field">
               <label className="field-label">New password (leave blank to keep theirs)</label>
               <div style={{ display: 'flex', gap: 8 }}>
