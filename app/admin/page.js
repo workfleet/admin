@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ClipboardList, Users, Inbox, Clock, UserX, ChevronDown } from 'lucide-react';
+import { ChevronDown, ChevronRight, CircleAlert, Package, Wrench, CalendarClock, BadgeCheck, FileText, Boxes, Plus, Check, FileBarChart } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { withoutTestAccounts } from '../../lib/testAccounts';
 import { BOOKABLE_ROLES } from '../../lib/staffRoles';
@@ -14,13 +14,8 @@ import { localDateString } from '../../lib/localDate';
 import { assignmentMinutes } from '../../lib/hoursWorked';
 import WorkAnniversaryPopup from '../components/WorkAnniversaryPopup';
 import { abbreviateName } from '../../lib/jobOverlap';
-
-function formatTimeRange(scheduledAt, durationMinutes) {
-  const start = new Date(scheduledAt);
-  const end = new Date(start.getTime() + (durationMinutes || 120) * 60000);
-  const fmt = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-  return `${fmt(start)} – ${fmt(end)}`;
-}
+import { shortAddress } from '../../lib/shortAddress';
+import { tintFor } from '../../lib/avatarTint';
 
 function initialsOf(fullName) {
   return String(fullName || '')
@@ -36,19 +31,44 @@ function clockOf(value) {
   return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
-// The word for a job's state, and the pill colour that goes with it.
-function jobStatusPill(status) {
-  if (status === 'completed') return { label: 'Completed', tone: 'verified' };
-  if (status === 'in_progress') return { label: 'On site', tone: 'onsite' };
-  if (status === 'missed') return { label: 'Missed', tone: 'overdue' };
-  return { label: 'Scheduled', tone: 'progress' };
+// Where each kind of item sits in Needs attention. A job with nobody on it
+// is the only thing here that goes wrong today if it waits; stock is the
+// one thing that can always wait for tomorrow, so it never jumps the queue
+// however low it runs.
+function attentionRank(item) {
+  if (item.kind === 'unassigned') return 0;
+  if (item.kind === 'stock') return 4;
+  if (item.urgent) return 1;
+  if (item.kind === 'request') return 2;
+  return 3;
 }
 
-// Sorted by urgency then date, a category with a lot of rows in it - a dozen
-// expiring certs, say - fills every visible slot and hides everything else.
-// Sort inside each kind as before, then deal the kinds out round-robin so the
-// top of the list always spans what's actually going on. Kinds appear in the
-// order their most pressing item would have come in the flat sort.
+// How far through a job is, 0 to 1, for the bar under an on-site job.
+function progressThrough(job, now) {
+  const start = new Date(job.scheduled_at).getTime();
+  const length = (job.duration_minutes || 120) * 60000;
+  return Math.min(Math.max((now - start) / length, 0), 1);
+}
+
+// "1h 37m" until something starts, or how late it is.
+function describeGap(ms) {
+  const mins = Math.max(Math.round(ms / 60000), 0);
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+// The street, and whose it is. The client's name alone can't tell TKR's
+// twenty-odd houses apart, and the address alone doesn't say whose it is.
+function jobWhere(job) {
+  const client = job.properties?.clients?.name;
+  const street = shortAddress(job.properties?.address);
+  // "The Eagle, Swansea" for The Eagle would only say its name twice.
+  const sameAsName = client && street && street.toLowerCase() === client.toLowerCase();
+  return { title: client || street || 'Unknown client', street: client && street && !sameAsName ? street : null };
+}
+
 function interleaveByKind(items) {
   const byUrgencyThenDate = (a, b) => (b.urgent - a.urgent) || (new Date(a.at) - new Date(b.at));
   const groups = [];
@@ -143,6 +163,9 @@ export default function AdminDashboard() {
   const [staffGlance, setStaffGlance] = useState({ working: [], holiday: [], off: [], total: 0 });
   const [onSiteNow, setOnSiteNow] = useState([]);
   const [glanceDetail, setGlanceDetail] = useState(null);
+  // When each on-site job was clocked into, by job id.
+  const [checkinByJob, setCheckinByJob] = useState({});
+  const [tomorrow, setTomorrow] = useState(null);
 
   const [payrollPeriod, setPayrollPeriod] = useState('this_week');
   const [payrollLoading, setPayrollLoading] = useState(true);
@@ -255,6 +278,8 @@ export default function AdminDashboard() {
     endOfDay.setDate(endOfDay.getDate() + 1);
     const in48h = new Date();
     in48h.setHours(in48h.getHours() + 48);
+    const endOfTomorrow = new Date(endOfDay);
+    endOfTomorrow.setDate(endOfTomorrow.getDate() + 1);
     const sevenDaysOut = new Date(endOfDay);
     sevenDaysOut.setDate(sevenDaysOut.getDate() + 7);
     const in30Days = new Date();
@@ -272,6 +297,8 @@ export default function AdminDashboard() {
       { data: expiringCerts },
       { data: contractClients },
       { data: allProducts },
+      { data: tomorrowsJobs },
+      { data: tomorrowsTimeOff },
     ] = await Promise.all([
       supabase.from('profiles').select('id, full_name').in('role', BOOKABLE_ROLES).eq('active', true),
       supabase.from('jobs')
@@ -298,7 +325,7 @@ export default function AdminDashboard() {
       // Not just how many are on site but who and where - the same row
       // answers the "Working now" figure and the list underneath it.
       supabase.from('checkins')
-        .select('cleaner_id, checked_in_at, profiles(full_name), jobs(properties(address, clients(name)))')
+        .select('cleaner_id, job_id, checked_in_at, profiles(full_name), jobs(properties(address, clients(name)))')
         .gte('checked_in_at', startOfDay.toISOString())
         .is('checked_out_at', null),
       supabase.from('time_off_requests')
@@ -314,6 +341,15 @@ export default function AdminDashboard() {
         .select('id, name, contract_renewal_date, contract_notice_days')
         .not('contract_renewal_date', 'is', null),
       supabase.from('products').select('id, name, stock_level, reorder_threshold'),
+      supabase.from('jobs')
+        .select('id, scheduled_at, duration_minutes, status, job_assignments(cleaner_id)')
+        .gte('scheduled_at', endOfDay.toISOString()).lt('scheduled_at', endOfTomorrow.toISOString())
+        .order('scheduled_at', { ascending: true }),
+      supabase.from('time_off_requests')
+        .select('cleaner_id, type, profiles!time_off_requests_cleaner_id_fkey(full_name)')
+        .eq('status', 'approved')
+        .lte('start_date', localDateString(endOfDay))
+        .gte('end_date', localDateString(endOfDay)),
     ]);
 
     const todaysCompleted = (todaysJobsData || []).filter((j) => j.status === 'completed').length;
@@ -323,9 +359,9 @@ export default function AdminDashboard() {
     // on it is still one slot in the day. Staff Hours below does the splitting.
     //
     // Missed jobs are left out: counting them reports hours of work on a day
-    // that work didn't happen. The 120 default matches formatTimeRange above,
-    // so a job with no duration set reads as the same two hours here as it
-    // does in the Today's Jobs list rather than silently contributing nothing.
+    // that work didn't happen. The 120 default is the one used everywhere a
+    // job has no duration set, so it reads as the same two hours here as it
+    // does on the rota rather than silently contributing nothing.
     const jobHours = (todaysJobsData || [])
       .filter((j) => j.status !== 'missed')
       .reduce((mins, j) => mins + (j.duration_minutes || 120), 0) / 60;
@@ -352,8 +388,27 @@ export default function AdminDashboard() {
     });
     setStaffGlance({ working, holiday, off, total: withoutTestAccounts(activeCleaners).length });
 
+    const firstCheckin = {};
+    (openCheckins || []).forEach((c) => {
+      if (c.job_id && (!firstCheckin[c.job_id] || c.checked_in_at < firstCheckin[c.job_id])) firstCheckin[c.job_id] = c.checked_in_at;
+    });
+    setCheckinByJob(firstCheckin);
+
+    const tomorrowList = (tomorrowsJobs || []).filter((j) => j.status !== 'missed');
+    const lastEnd = tomorrowList.reduce((latest, j) => Math.max(latest, new Date(j.scheduled_at).getTime() + (j.duration_minutes || 120) * 60000), 0);
+    setTomorrow({
+      date: endOfDay,
+      count: tomorrowList.length,
+      hours: tomorrowList.reduce((mins, j) => mins + (j.duration_minutes || 120), 0) / 60,
+      unassigned: tomorrowList.filter((j) => (j.job_assignments || []).length === 0).length,
+      first: tomorrowList[0]?.scheduled_at || null,
+      lastEnd: lastEnd ? new Date(lastEnd) : null,
+      away: (tomorrowsTimeOff || []).map((t) => t.profiles?.full_name || 'Someone'),
+    });
+
     setOnSiteNow((openCheckins || []).map((c) => ({
       id: c.cleaner_id,
+      jobId: c.job_id,
       name: c.profiles?.full_name || 'Unknown',
       place: c.jobs?.properties?.clients?.name || c.jobs?.properties?.address || 'a job',
       since: c.checked_in_at,
@@ -393,15 +448,20 @@ export default function AdminDashboard() {
           at: r.due_date,
         };
       }),
-      ...unassignedNearTerm.map((j) => ({
-        id: `unassigned-${j.id}`,
+      ...(unassignedNearTerm.length > 0 ? [{
+        id: 'unassigned',
         kind: 'unassigned',
-        title: 'Job has no cleaner assigned',
-        subtitle: `${j.properties?.address || 'Unknown property'} · ${new Date(j.scheduled_at).toLocaleString()}`,
-        href: '/admin/rota',
+        title: unassignedNearTerm.length === 1
+          ? 'A job needs a cleaner'
+          : `${unassignedNearTerm.length} jobs need a cleaner`,
+        subtitle: unassignedNearTerm
+          .slice(0, 2)
+          .map((j) => `${shortAddress(j.properties?.address) || 'Unknown property'} ${new Date(j.scheduled_at).toLocaleDateString(undefined, { weekday: 'short' })} ${clockOf(j.scheduled_at)}`)
+          .join(' · ') + (unassignedNearTerm.length > 2 ? ` +${unassignedNearTerm.length - 2} more` : ''),
+        href: unassignedNearTerm.length === 1 ? `/admin/rota?job=${unassignedNearTerm[0].id}` : '/admin/rota',
         urgent: true,
-        at: j.scheduled_at,
-      })),
+        at: unassignedNearTerm[0].scheduled_at,
+      }] : []),
       ...(expiringCerts || []).map((c) => {
         const expired = new Date(c.expiry_date) < startOfDay;
         return {
@@ -458,7 +518,7 @@ export default function AdminDashboard() {
     // month, purely because certificates are their own kind.
     // Array#sort is stable, so each half keeps its interleaved order.
     setAttention(
-      interleaveByKind(attentionItems).sort((a, b) => (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0))
+      interleaveByKind(attentionItems).sort((a, b) => attentionRank(a) - attentionRank(b))
     );
 
     setLoading(false);
@@ -490,10 +550,81 @@ export default function AdminDashboard() {
   const hour = new Date().getHours();
   const timeGreeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 
+  const now = Date.now();
+  const onSiteJobs = todaysJobs.filter((j) => j.status === 'in_progress');
+  const missedJobs = todaysJobs.filter((j) => j.status === 'missed');
+  const doneJobs = todaysJobs.filter((j) => j.status === 'completed');
+  const comingUp = todaysJobs.filter((j) => j.status === 'scheduled');
+  // The next people due on today who haven't started: everyone on the
+  // earliest job still to come.
+  const nextJob = comingUp.find((j) => new Date(j.scheduled_at).getTime() > now && (j.job_assignments || []).length > 0);
+  const nextNames = nextJob ? (nextJob.job_assignments || []).map((a) => a.profiles?.full_name).filter(Boolean) : [];
+  const namesOf = (job) => (job.job_assignments || []).map((a) => a.profiles?.full_name).filter(Boolean);
+  const listNames = (names) => (names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
+
+  const attentionIcon = (item) => {
+    if (item.kind === 'unassigned') return <CircleAlert size={17} />;
+    if (item.kind === 'request') return item.requestType === 'kit_topup' ? <Package size={17} /> : <Wrench size={17} />;
+    if (item.kind === 'reminder') return <CalendarClock size={17} />;
+    if (item.kind === 'cert') return <BadgeCheck size={17} />;
+    if (item.kind === 'contract') return <FileText size={17} />;
+    return <Boxes size={17} />;
+  };
+  const attentionTone = (item) => {
+    if (item.kind === 'unassigned' || (item.urgent && item.kind !== 'stock')) return 'is-urgent';
+    if (item.kind === 'stock') return 'is-stock';
+    return '';
+  };
+
+  const renderTodayJob = (job, state) => {
+    const { title, street } = jobWhere(job);
+    const names = namesOf(job);
+    const start = new Date(job.scheduled_at).getTime();
+    const end = start + (job.duration_minutes || 120) * 60000;
+    const unassigned = names.length === 0;
+    const late = state === 'next' && start < now;
+    const detail = [street, unassigned ? 'nobody assigned' : names.join(', ')];
+    if (state === 'onsite' && checkinByJob[job.id]) detail.push(`clocked in ${clockOf(checkinByJob[job.id])}`);
+    if (state === 'onsite') detail.push(`until ${clockOf(new Date(end))}`);
+    return (
+      <div key={job.id} className={`dash-job is-${state}`} onClick={() => router.push(`/admin/rota?job=${job.id}`)}>
+        <span className="dash-job-time">{clockOf(job.scheduled_at)}</span>
+        <div className="dash-job-main">
+          <div className="dash-job-place">{title}</div>
+          <div className="dash-job-sub">{detail.filter(Boolean).join(' · ')}</div>
+          {state === 'onsite' && (
+            <div className="dash-job-progress" aria-hidden="true">
+              <span style={{ width: `${Math.round(progressThrough(job, now) * 100)}%` }} />
+            </div>
+          )}
+        </div>
+        {unassigned && state === 'next' ? (
+          <Link
+            href={`/admin/rota?job=${job.id}`}
+            className="pill-btn is-small is-urgent"
+            onClick={(e) => e.stopPropagation()}
+            title="Open this job and put someone on it"
+          >
+            Assign cleaner
+          </Link>
+        ) : (
+          <span className={`dash-job-state is-${late ? 'late' : state}`}>
+            <span className="dash-state-dot" />
+            {state === 'onsite' ? 'On site'
+              : state === 'missed' ? 'Missed'
+                : state === 'done' ? 'Done'
+                : late ? `Not clocked in · ${describeGap(now - start)} late`
+                  : `In ${describeGap(start - now)}`}
+          </span>
+        )}
+      </div>
+    );
+  };
+
   return (
-    <div className="page-inner">
+    <div className="page-inner dash">
       {anniversary && <WorkAnniversaryPopup name={anniversary.name} years={anniversary.years} />}
-      <div className="page-header-row">
+      <div className="dash-head">
         <div>
           <h1>{timeGreeting}, {greetingName}</h1>
           <p className="page-subtitle">
@@ -501,304 +632,334 @@ export default function AdminDashboard() {
             {' · '}{clockOf(new Date())}
           </p>
         </div>
-        <div className="dash-header-actions">
-          <Link href="/admin/reports" className="btn-secondary" title="Today's numbers in full">
+        <div className="dash-head-actions">
+          <Link href="/admin/reports" className="pill-btn" title="Today's numbers in full">
+            <FileBarChart size={16} aria-hidden />
             Today's report
           </Link>
-          <Link
-            href="/admin/rota?new=1"
-            className="btn-primary"
-            style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap' }}
-            title="Schedule a new job and assign staff to it"
-          >
-            + New job
+          <Link href="/admin/rota?new=1" className="pill-btn is-primary" title="Schedule a new job and assign staff to it">
+            <Plus size={16} strokeWidth={2.4} aria-hidden />
+            New job
           </Link>
         </div>
       </div>
 
-      <div className="stat-row">
-        <Link href="/admin/rota" className="stat-card" title="Today's jobs and how many are done">
-          <div className="stat-icon"><ClipboardList size={18} /></div>
-          <div className="stat-number">{stats.todaysJobs}</div>
-          <div className="stat-label">Today's jobs</div>
-          <div className="stat-sublabel">{stats.todaysCompleted} completed</div>
+      {/* Today's figures as one line. Each still opens the page it comes
+          from, as the cards did. */}
+      <div className="rota-figures dash-figures">
+        <Link href="/admin/rota" className="rota-figure" title="Today's jobs and how many are done">
+          <b>{stats.todaysJobs}</b> jobs today · {stats.todaysCompleted} done
         </Link>
-        <Link href="/admin/cleaners" className="stat-card" title="Staff clocked in right now">
-          <div className="stat-icon"><Users size={18} /></div>
-          <div className="stat-number">{stats.staffWorking}</div>
-          <div className="stat-label">Working now</div>
+        <Link href="/admin/cleaners" className="rota-figure" title="Staff clocked in right now">
           {/* A figure with no denominator says nothing: one of two is a
               problem, one of twelve is a Tuesday. */}
-          <div className="stat-sublabel">of {staffGlance.total} active</div>
+          <b>{stats.staffWorking}</b> working now, of {staffGlance.total}
         </Link>
-        <Link href="/admin/requests" className="stat-card" title="Open kit top-ups, issues and time off">
-          <div className="stat-icon"><Inbox size={18} /></div>
-          <div className="stat-number">{stats.openRequests}</div>
-          <div className="stat-label">Requests</div>
-          <div className="stat-sublabel">open</div>
+        <Link href="/admin/rota" className="rota-figure" title="Total length of today's scheduled work">
+          <b>{Math.round(stats.jobHours * 10) / 10}</b> hours booked
         </Link>
-        <Link href="/admin/rota" className="stat-card" title="Total length of today's scheduled work">
-          <div className="stat-icon"><Clock size={18} /></div>
-          <div className="stat-number">{stats.jobHours.toFixed(1)}</div>
-          <div className="stat-label">Job hours</div>
-          <div className="stat-sublabel">scheduled today</div>
+        <Link href="/admin/requests" className="rota-figure" title="Open kit top-ups, issues and time off">
+          <b>{stats.openRequests}</b> requests open
         </Link>
-        <Link
-          href="/admin/rota"
-          className={`stat-card${stats.unassigned > 0 ? ' is-alert' : ''}`}
-          title="Today's jobs with nobody assigned"
-        >
-          <div className="stat-icon"><UserX size={18} /></div>
-          <div className="stat-number">{stats.unassigned}</div>
-          <div className="stat-label">Unassigned</div>
-          <div className="stat-sublabel">today</div>
-        </Link>
+        {stats.unassigned > 0 ? (
+          <Link href="/admin/rota" className="rota-figure is-alert" title="Today's jobs with nobody assigned">
+            <b>{stats.unassigned}</b> with no cleaner today
+          </Link>
+        ) : (
+          <span className="rota-figure is-good" title="Every job today has someone on it">
+            <Check size={15} strokeWidth={2.6} aria-hidden />
+            Every job today has a cleaner
+          </span>
+        )}
       </div>
 
-      <div className="dash-grid-2">
-        <div className="card">
-          <div className="dash-panel-header">
-            <h2>Today's jobs</h2>
-            <Link href="/admin/rota" className="dash-panel-link">View full schedule &rarr;</Link>
-          </div>
-          <div className="dash-panel-list">
+      <div className="dash-layout">
+        <div className="dash-col">
+          <section className="dash-card">
+            <div className="dash-card-head">
+              <h2>Today</h2>
+              <Link href="/admin/rota" className="dash-panel-link">Open the rota &rarr;</Link>
+            </div>
+
             {todaysJobs.length === 0 && <p className="empty-state">No jobs scheduled today.</p>}
-            {todaysJobs.map((job) => {
-              const names = (job.job_assignments || []).map((a) => a.profiles?.full_name).filter(Boolean);
+
+            {onSiteJobs.length > 0 && (
+              <div className="dash-group">
+                <div className="dash-group-label is-onsite">On site now</div>
+                {onSiteJobs.map((job) => renderTodayJob(job, 'onsite'))}
+              </div>
+            )}
+
+            {missedJobs.length > 0 && (
+              <div className="dash-group">
+                <div className="dash-group-label is-urgent">Missed</div>
+                {missedJobs.map((job) => renderTodayJob(job, 'missed'))}
+              </div>
+            )}
+
+            {todaysJobs.length > 0 && (
+              <div className="dash-now" aria-label={`Now, ${clockOf(new Date())}`}>
+                <span>{clockOf(new Date())}</span>
+                <i />
+              </div>
+            )}
+
+            {comingUp.length > 0 && (
+              <div className="dash-group">
+                <div className="dash-group-label">Coming up</div>
+                {comingUp.map((job) => renderTodayJob(job, 'next'))}
+              </div>
+            )}
+            {todaysJobs.length > 0 && comingUp.length === 0 && (
+              <p className="dash-quiet">Nothing else is due on today.</p>
+            )}
+
+            {/* Finished work is the part of the day nobody needs to act on,
+                so it folds away to one line. */}
+            {doneJobs.length > 0 && (
+              <details className="dash-done">
+                <summary>
+                  <span className="dash-state-dot is-done" />
+                  <span><b>{doneJobs.length} done</b> · {doneJobs.map((j) => jobWhere(j).title).join(', ')}</span>
+                  <ChevronDown size={15} aria-hidden className="dash-done-chevron" />
+                </summary>
+                {doneJobs.map((job) => renderTodayJob(job, 'done'))}
+              </details>
+            )}
+          </section>
+
+          {tomorrow && (
+            <section className="dash-card">
+              <div className="dash-card-head">
+                <h2>Tomorrow</h2>
+                <span className="dash-card-note">
+                  {tomorrow.date.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+                </span>
+              </div>
+              <div className="dash-tiles">
+                <Link href="/admin/rota" className="dash-tile">
+                  <b>{tomorrow.count}</b>
+                  <span>{tomorrow.count === 1 ? 'job' : 'jobs'} · {Math.round(tomorrow.hours * 10) / 10}h</span>
+                </Link>
+                <Link href="/admin/rota" className={`dash-tile${tomorrow.unassigned > 0 ? ' is-urgent' : ' is-good'}`}>
+                  <b>{tomorrow.unassigned > 0 ? tomorrow.unassigned : 'All'}</b>
+                  <span>{tomorrow.unassigned > 0 ? 'need a cleaner' : 'have a cleaner'}</span>
+                </Link>
+                <button
+                  type="button"
+                  className={`dash-tile${tomorrow.away.length > 0 ? ' is-away' : ''}`}
+                  onClick={() => tomorrow.away.length > 0 && setGlanceDetail({ title: 'Away tomorrow', names: tomorrow.away })}
+                  style={{ cursor: tomorrow.away.length > 0 ? 'pointer' : 'default' }}
+                >
+                  <b>{tomorrow.away.length}</b>
+                  <span>away</span>
+                </button>
+              </div>
+              {tomorrow.first && (
+                <p className="dash-quiet">
+                  First job {clockOf(tomorrow.first)}
+                  {tomorrow.lastEnd && ` · last finishes ${clockOf(tomorrow.lastEnd)}`}
+                </p>
+              )}
+            </section>
+          )}
+
+          <section className="dash-card">
+            <div className="dash-card-head">
+              <h2>Later this week</h2>
+              <Link href="/admin/rota" className="dash-panel-link">Rota &rarr;</Link>
+            </div>
+            {upcomingJobs.length === 0 && <p className="empty-state">Nothing scheduled in the next week.</p>}
+            {upcomingJobs.map((job) => {
+              const names = namesOf(job);
               const unassigned = names.length === 0;
-              const pill = jobStatusPill(job.status);
+              const { title, street } = jobWhere(job);
               return (
-                <div key={job.id} className="dash-row" onClick={() => router.push(`/admin/rota?job=${job.id}`)}>
-                  <div className="dash-row-main">
-                    <div className="dash-row-title">{job.properties?.clients?.name || job.properties?.address}</div>
-                    <div className={`dash-row-subtitle${unassigned ? ' is-urgent' : ''}`}>
-                      {formatTimeRange(job.scheduled_at, job.duration_minutes)}
-                      {' · '}{unassigned ? 'nobody assigned' : names.join(', ')}
+                <div key={job.id} className="dash-job is-later" onClick={() => router.push(`/admin/rota?job=${job.id}`)}>
+                  <span className="dash-job-time">
+                    {new Date(job.scheduled_at).toLocaleDateString(undefined, { weekday: 'short' })}
+                    <small>{clockOf(job.scheduled_at)}</small>
+                  </span>
+                  <div className="dash-job-main">
+                    <div className="dash-job-place">{title}</div>
+                    <div className={`dash-job-sub${unassigned ? ' is-urgent' : ''}`}>
+                      {[street, unassigned ? 'needs a cleaner' : abbreviateName(names[0])].filter(Boolean).join(' · ')}
                     </div>
                   </div>
-                  {/* A job with nobody on it needs doing something about, so
-                      it gets a real button. The badge that used to sit here
-                      read as pressable and wasn't. */}
-                  {unassigned ? (
-                    <Link
-                      href={`/admin/rota?job=${job.id}`}
-                      className="btn-primary dash-row-action"
-                      onClick={(e) => e.stopPropagation()}
-                      title="Open this job and put someone on it"
-                    >
-                      Assign cleaner
-                    </Link>
-                  ) : (
-                    <span className={`wf-pill wf-pill-${pill.tone}`}>{pill.label}</span>
-                  )}
                 </div>
               );
             })}
-          </div>
+          </section>
         </div>
 
-        <div className="card">
-          <div className="dash-panel-header">
-            <h2>Needs attention</h2>
-            {attention.some((a) => a.urgent) && (
-              <span className="wf-pill wf-pill-overdue">
-                {attention.filter((a) => a.urgent).length} urgent
-              </span>
+        <div className="dash-col">
+          <section className="dash-card">
+            <div className="dash-card-head">
+              <h2>Who's on now</h2>
+            </div>
+            {onSiteNow.length === 0 && <p className="dash-quiet">Nobody is clocked in right now.</p>}
+            {onSiteNow.map((person) => {
+              const [bg, ink] = tintFor(person.id);
+              return (
+                <div key={person.id} className="dash-person-now">
+                  <span className="dash-avatar is-on" style={{ background: bg, color: ink }}>{initialsOf(person.name)}</span>
+                  <div className="dash-onsite-main">
+                    <div className="dash-onsite-name">{person.name}</div>
+                    <div className="dash-onsite-where">{person.place} · since {clockOf(person.since)}</div>
+                  </div>
+                </div>
+              );
+            })}
+            {nextJob && (
+              <div className="dash-next-up">
+                <div className="dash-avatar-stack">
+                  {(nextJob.job_assignments || []).slice(0, 4).map((a) => {
+                    const [bg, ink] = tintFor(a.cleaner_id);
+                    return <span key={a.cleaner_id} className="dash-avatar" style={{ background: bg, color: ink }}>{initialsOf(a.profiles?.full_name)}</span>;
+                  })}
+                </div>
+                <span>{listNames(nextNames)} {nextNames.length === 1 ? 'starts' : 'start'} at {clockOf(nextJob.scheduled_at)}</span>
+              </div>
             )}
-          </div>
-          <div className="dash-panel-list">
+            <div className="dash-glance-line">
+              <button type="button" onClick={() => staffGlance.holiday.length > 0 && setGlanceDetail({ title: 'On holiday / leave', names: staffGlance.holiday })} disabled={staffGlance.holiday.length === 0}>
+                <span className="dash-glance-dot" style={{ background: 'var(--wf-azure)' }} />
+                {staffGlance.holiday.length} on holiday
+              </button>
+              <button type="button" onClick={() => staffGlance.off.length > 0 && setGlanceDetail({ title: 'Not working today', names: staffGlance.off })} disabled={staffGlance.off.length === 0}>
+                <span className="dash-glance-dot" style={{ background: 'var(--wf-steel)' }} />
+                {staffGlance.off.length} not working today
+              </button>
+              <Link href="/admin/cleaners" className="dash-panel-link">Staff &rarr;</Link>
+            </div>
+          </section>
+
+          <section className="dash-card">
+            <div className="dash-card-head">
+              <h2>Needs attention</h2>
+              {attention.length > 0 && <span className="dash-card-note">Most urgent first</span>}
+            </div>
             {attention.length === 0 && <p className="empty-state">Nothing needs attention right now.</p>}
             {attention.slice(0, 6).map((item) => {
+              const tone = attentionTone(item);
+              const icon = <span className={`dash-att-icon ${tone}`}>{attentionIcon(item)}</span>;
               if (item.kind === 'request') {
+                const kit = item.requestType === 'kit_topup';
                 return (
-                  <div key={item.id} className="dash-row" onClick={() => setDetailItem(item)}>
-                    <input
-                      type="checkbox"
-                      className="dash-row-check"
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={() => completeTodo(item.rawId)}
-                    />
-                    <div className="dash-row-main">
-                      <div className="dash-row-title">{item.title}</div>
-                      <div className="dash-row-subtitle">{item.subtitle}</div>
+                  <div key={item.id} className="dash-att" onClick={() => setDetailItem(item)}>
+                    {icon}
+                    <div className="dash-att-main">
+                      <div className="dash-att-title">{kit ? 'Kit top-up' : 'Issue reported'} · {item.cleanerName}</div>
+                      <div className="dash-att-sub">{item.description}</div>
                     </div>
+                    <button
+                      type="button"
+                      className="pill-btn is-small"
+                      onClick={(e) => { e.stopPropagation(); completeTodo(item.rawId); }}
+                      title={kit ? 'The kit has gone out - clear it off the list' : 'Dealt with - clear it off the list'}
+                    >
+                      {kit ? 'Mark sent' : 'Resolved'}
+                    </button>
                   </div>
                 );
               }
               if (item.kind === 'reminder') {
                 return (
-                  <div key={item.id} className="dash-row" style={{ cursor: 'default' }}>
-                    <span className={`dash-row-dot${item.urgent ? ' is-urgent' : ''}`} />
-                    <div className="dash-row-main">
-                      <div className={`dash-row-title${item.urgent ? ' is-urgent' : ''}`}>
-                        {item.title} — <Link href={item.href} className="dash-row-name">{item.name}</Link>
+                  <div key={item.id} className="dash-att" style={{ cursor: 'default' }}>
+                    {icon}
+                    <div className="dash-att-main">
+                      <div className={`dash-att-title ${tone}`}>
+                        {item.title} · <Link href={item.href} className="dash-row-name">{item.name}</Link>
                       </div>
-                      <div className="dash-row-subtitle">{item.subtitle}</div>
+                      <div className="dash-att-sub">{item.subtitle}</div>
                     </div>
-                    <button className="btn-secondary btn-compact" onClick={() => completeReminder(item)} title="Mark this reminder done and clear it off your dashboard">Done</button>
+                    <button type="button" className="pill-btn is-small" onClick={() => completeReminder(item)} title="Mark this reminder done and clear it off your dashboard">Done</button>
                   </div>
                 );
               }
+              const action = item.kind === 'unassigned' ? 'Find cover' : item.kind === 'stock' ? 'Order list' : null;
               return (
-                <Link key={item.id} href={item.href} className="dash-row">
-                  <span className={`dash-row-dot${item.urgent ? ' is-urgent' : ''}`} />
-                  <div className="dash-row-main">
-                    <div className={`dash-row-title${item.urgent ? ' is-urgent' : ''}`}>{item.title}</div>
-                    <div className="dash-row-subtitle">{item.subtitle}</div>
+                <Link key={item.id} href={item.href} className="dash-att">
+                  {icon}
+                  <div className="dash-att-main">
+                    <div className={`dash-att-title ${tone}`}>{item.title}</div>
+                    <div className="dash-att-sub">{item.subtitle}</div>
                   </div>
+                  {action
+                    ? <span className={`pill-btn is-small${item.kind === 'unassigned' ? ' is-urgent' : ''}`}>{action}</span>
+                    : <ChevronRight size={16} className="dash-att-chevron" aria-hidden />}
                 </Link>
               );
             })}
-          </div>
-          {attention.length > 6 && (
-            <Link href="/admin/requests" className="dash-panel-more">+{attention.length - 6} more &rarr;</Link>
-          )}
-        </div>
-      </div>
-
-      <div className="dash-grid-3" style={role === 'admin' ? undefined : { gridTemplateColumns: 'repeat(2, 1fr)' }}>
-        {role === 'admin' && (
-          <div className="card">
-            <div className="dash-panel-header">
-              <h2>Staff hours</h2>
-              {/* Still a real <select> - it keeps the keyboard and the
-                  platform's own picker on a phone. Only the chrome changes. */}
-              <div className="dash-period">
-                <select value={payrollPeriod} onChange={(e) => setPayrollPeriod(e.target.value)}>
-                  {Object.entries(PAYROLL_PERIODS).map(([key, p]) => (
-                    <option key={key} value={key}>{p.label}</option>
-                  ))}
-                </select>
-                <ChevronDown size={14} aria-hidden />
-              </div>
-            </div>
-            <div className="dash-ring">
-              <HoursRing completedHours={payrollTotals.completedHours} totalHours={payrollTotals.totalHours} />
-            </div>
-            <div className="dash-splits">
-              <div>
-                <strong>{payrollTotals.completedHours.toFixed(1)}h</strong>
-                <span>Completed</span>
-              </div>
-              <div>
-                <strong>{payrollTotals.totalHours.toFixed(1)}h</strong>
-                <span>Scheduled</span>
-              </div>
-              <div>
-                <strong>{Math.max(payrollTotals.totalHours - payrollTotals.completedHours, 0).toFixed(1)}h</strong>
-                <span>Remaining</span>
-              </div>
-            </div>
-            {/* The figure that decides whether this panel is telling the
-                truth. Hours nobody clocked into are paid as zero, so a
-                period showing them is a period whose "Completed" total is
-                short by that much until someone deals with it. */}
-            {!payrollLoading && (payrollTotals.missedHours > 0 || payrollTotals.pendingClaims > 0) && (
-              <Link
-                href="/admin/requests"
-                className="dash-row"
-                style={{ textDecoration: 'none', color: 'inherit', borderTop: '1px solid var(--hairline)', marginTop: 8, paddingTop: 10 }}
-              >
-                <span className="dash-person" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span className="dash-glance-dot" style={{ background: 'var(--wf-overdue)' }} />
-                  {payrollTotals.missedHours > 0
-                    ? 'Nobody clocked in'
-                    : `${payrollTotals.pendingClaims} claim${payrollTotals.pendingClaims === 1 ? '' : 's'} to confirm`}
-                </span>
-                <strong className="dash-person-hours">
-                  {payrollTotals.missedHours > 0 ? `${payrollTotals.missedHours.toFixed(1)}h` : 'Review'}
-                </strong>
-              </Link>
+            {attention.length > 6 && (
+              <Link href="/admin/requests" className="dash-panel-more">+{attention.length - 6} more &rarr;</Link>
             )}
-            {!payrollLoading && payrollRows.slice(0, 4).map((r) => (
-              <div key={r.name} className="dash-row dash-row-quiet">
-                <span className="dash-person">{r.name}</span>
-                <strong className="dash-person-hours">{(r.minutes / 60).toFixed(1)}h</strong>
+          </section>
+
+          {role === 'admin' && (
+            <section className="dash-card">
+              <div className="dash-card-head">
+                <h2>Staff hours</h2>
+                {/* Still a real <select> - it keeps the keyboard and the
+                    platform's own picker on a phone. Only the chrome changes. */}
+                <div className="dash-period">
+                  <select value={payrollPeriod} onChange={(e) => setPayrollPeriod(e.target.value)}>
+                    {Object.entries(PAYROLL_PERIODS).map(([key, p]) => (
+                      <option key={key} value={key}>{p.label}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} aria-hidden />
+                </div>
               </div>
-            ))}
-            {/* These figures are live and keep moving. The payroll page is
-                where a period gets checked, locked, and handed to QuickBooks. */}
-            <Link href="/admin/payroll" className="dash-panel-link dash-panel-foot">Close payroll &rarr;</Link>
-          </div>
-        )}
-
-        <div className="card">
-          <div className="dash-panel-header">
-            <h2>Staff at a glance</h2>
-          </div>
-          <div
-            className="dash-glance-row"
-            style={{ cursor: staffGlance.working.length > 0 ? 'pointer' : 'default' }}
-            onClick={() => staffGlance.working.length > 0 && setGlanceDetail({ title: 'Working now', names: staffGlance.working })}
-          >
-            <span className="dash-glance-dot" style={{ background: 'var(--wf-verified)' }} />
-            <strong>{staffGlance.working.length}</strong> Working now
-          </div>
-          <div
-            className="dash-glance-row"
-            style={{ cursor: staffGlance.holiday.length > 0 ? 'pointer' : 'default' }}
-            onClick={() => staffGlance.holiday.length > 0 && setGlanceDetail({ title: 'On holiday / leave', names: staffGlance.holiday })}
-          >
-            <span className="dash-glance-dot" style={{ background: 'var(--wf-azure)' }} />
-            <strong>{staffGlance.holiday.length}</strong> On holiday / leave
-          </div>
-          <div
-            className="dash-glance-row"
-            style={{ cursor: staffGlance.off.length > 0 ? 'pointer' : 'default' }}
-            onClick={() => staffGlance.off.length > 0 && setGlanceDetail({ title: 'Not working today', names: staffGlance.off })}
-          >
-            <span className="dash-glance-dot" style={{ background: 'var(--wf-steel)' }} />
-            <strong>{staffGlance.off.length}</strong> Not working today
-          </div>
-
-          {/* A count says how many are out; this says who, and where, which
-              is the question that follows it every time. */}
-          {onSiteNow.length > 0 && (
-            <div className="dash-onsite">
-              <div className="dash-onsite-label">On site right now</div>
-              {onSiteNow.map((person) => (
-                <div key={person.id} className="dash-onsite-row">
-                  <span className="dash-avatar">{initialsOf(person.name)}</span>
-                  <div className="dash-onsite-main">
-                    <div className="dash-onsite-name">{person.name}</div>
-                    <div className="dash-onsite-where">{person.place} · on site since {clockOf(person.since)}</div>
-                  </div>
+              <div className="dash-ring">
+                <HoursRing completedHours={payrollTotals.completedHours} totalHours={payrollTotals.totalHours} />
+              </div>
+              <div className="dash-splits">
+                <div>
+                  <strong>{payrollTotals.completedHours.toFixed(1)}h</strong>
+                  <span>Completed</span>
+                </div>
+                <div>
+                  <strong>{payrollTotals.totalHours.toFixed(1)}h</strong>
+                  <span>Scheduled</span>
+                </div>
+                <div>
+                  <strong>{Math.max(payrollTotals.totalHours - payrollTotals.completedHours, 0).toFixed(1)}h</strong>
+                  <span>Remaining</span>
+                </div>
+              </div>
+              {/* The figure that decides whether this panel is telling the
+                  truth. Hours nobody clocked into are paid as zero, so a
+                  period showing them is a period whose "Completed" total is
+                  short by that much until someone deals with it. */}
+              {!payrollLoading && (payrollTotals.missedHours > 0 || payrollTotals.pendingClaims > 0) && (
+                <Link
+                  href="/admin/requests"
+                  className="dash-row"
+                  style={{ textDecoration: 'none', color: 'inherit', borderTop: '1px solid var(--hairline)', marginTop: 8, paddingTop: 10 }}
+                >
+                  <span className="dash-person" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span className="dash-glance-dot" style={{ background: 'var(--wf-overdue)' }} />
+                    {payrollTotals.missedHours > 0
+                      ? 'Nobody clocked in'
+                      : `${payrollTotals.pendingClaims} claim${payrollTotals.pendingClaims === 1 ? '' : 's'} to confirm`}
+                  </span>
+                  <strong className="dash-person-hours">
+                    {payrollTotals.missedHours > 0 ? `${payrollTotals.missedHours.toFixed(1)}h` : 'Review'}
+                  </strong>
+                </Link>
+              )}
+              {!payrollLoading && payrollRows.slice(0, 4).map((r) => (
+                <div key={r.name} className="dash-row dash-row-quiet">
+                  <span className="dash-person">{r.name}</span>
+                  <strong className="dash-person-hours">{(r.minutes / 60).toFixed(1)}h</strong>
                 </div>
               ))}
-            </div>
+              {/* These figures are live and keep moving. The payroll page is
+                  where a period gets checked, locked, and handed to QuickBooks. */}
+              <Link href="/admin/payroll" className="dash-panel-link dash-panel-foot">Close payroll &rarr;</Link>
+            </section>
           )}
-
-          <Link href="/admin/cleaners" className="dash-panel-link dash-panel-foot">
-            View staff &rarr;
-          </Link>
-        </div>
-
-        <div className="card">
-          <div className="dash-panel-header">
-            <h2>Upcoming jobs</h2>
-            <Link href="/admin/rota" className="dash-panel-link">Calendar &rarr;</Link>
-          </div>
-          <div className="dash-panel-list">
-            {upcomingJobs.length === 0 && <p className="empty-state">Nothing scheduled in the next week.</p>}
-            {upcomingJobs.map((job) => {
-              const names = (job.job_assignments || []).map((a) => a.profiles?.full_name).filter(Boolean);
-              const unassigned = names.length === 0;
-              return (
-                <div key={job.id} className="dash-row dash-row-tight" onClick={() => router.push(`/admin/rota?job=${job.id}`)}>
-                  <div className="dash-row-main">
-                    <div className="dash-row-title">{job.properties?.clients?.name || job.properties?.address}</div>
-                    {/* No badge. Across six rows a column of them is noise;
-                        the one row that matters says so in the line itself. */}
-                    <div className={`dash-row-subtitle${unassigned ? ' is-urgent' : ''}`}>
-                      {new Date(job.scheduled_at).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
-                      {' · '}{clockOf(job.scheduled_at)}
-                      {' · '}{unassigned ? 'needs a cleaner' : abbreviateName(names[0])}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         </div>
       </div>
 

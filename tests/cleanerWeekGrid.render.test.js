@@ -76,7 +76,7 @@ describe('CleanerWeekGrid', () => {
     expect(html).toContain('no longer on staff');
     // The shared job is on both rows, and the client without a name falls
     // back to the address.
-    expect(html.match(/rota-chip-client">Oak House</g)).toHaveLength(2);
+    expect(html.match(/rota-chip-client is-own-line">Oak House</g)).toHaveLength(2);
     expect(html).toContain('31 Station Rd');
     expect(html).toContain('+ Ben');
     expect(html).toContain('rota-grid-todaypill');
@@ -94,7 +94,7 @@ describe('CleanerWeekGrid', () => {
       onNewJob: () => {},
       onDropJob: () => {},
     }));
-    expect(html).toContain('rota-chip-client">14 Bridge St<');
+    expect(html).toContain('rota-chip-client is-own-line">14 Bridge St<');
     expect(html).toContain('rota-chip-sub">Riverside Dental<');
   });
 

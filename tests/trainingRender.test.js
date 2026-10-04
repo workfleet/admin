@@ -68,7 +68,7 @@ describe('the rota with training on it', () => {
     expect(html).toContain('Fire safety refresher');
     // It sits on both attendees' rows, like any job with two people on it -
     // twice per chip, because the hover title repeats what the chip says.
-    expect(html.match(/rota-chip-client">Fire safety refresher</g)).toHaveLength(2);
+    expect(html.match(/rota-chip-client is-own-line">Fire safety refresher</g)).toHaveLength(2);
     // And it is marked as training rather than passing for a clean.
     expect(html).toContain('is-training');
   });

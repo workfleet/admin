@@ -7,6 +7,7 @@ import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, M
 import { signOutAndClearPresence } from '../../lib/signOut';
 import { getSessionAndProfile } from '../../lib/authGate';
 import PresenceIndicator from '../components/PresenceIndicator';
+import ZoomControl from '../components/ZoomControl';
 import EmergencyBanner from '../components/EmergencyBanner';
 import EnablePush from '../components/EnablePush';
 import Logo from '../components/Logo';
@@ -160,6 +161,8 @@ export default function AdminLayout({ children }) {
             );
           })}
         </nav>
+
+        <ZoomControl />
 
         <button className="sidebar-logout" onClick={handleLogout}>
           Log out

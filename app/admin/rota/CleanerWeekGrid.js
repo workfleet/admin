@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { coworkersOf, firstName, formatHours, freeGaps, formatGap, shareMinutes, UNASSIGNED_ROW_ID } from '../../../lib/rotaGrid';
 import { isTraining, jobHeadline, jobSubtitle } from '../../../lib/training';
 import { localDateString } from '../../../lib/localDate';
+import { tintFor } from '../../../lib/avatarTint';
 
 // The rota with a row per cleaner. Across the week, each cell lists that
 // person's jobs for the day in order, so a gap on the sheet is a gap in
@@ -29,26 +30,6 @@ function initials(name) {
     .join('')
     .slice(0, 2)
     .toUpperCase();
-}
-
-// A soft colour per person, so rows are told apart at a glance. Picked from
-// the id rather than the position, so nobody changes colour when someone
-// joins or leaves the list.
-const AVATAR_TINTS = [
-  ['#E8EEFB', '#1A56B8'],
-  ['#FDECE7', '#B2412F'],
-  ['#E6F4EC', '#1B7A4B'],
-  ['#F1EAFB', '#6B3FB0'],
-  ['#FBF1DF', '#8A5A0B'],
-  ['#E3F3F3', '#0F6E70'],
-  ['#FBE9F2', '#A23668'],
-  ['#ECEEF1', '#3B4249'],
-];
-
-function tintFor(id) {
-  let h = 0;
-  for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return AVATAR_TINTS[h % AVATAR_TINTS.length];
 }
 
 function clockOf(date) {
@@ -174,11 +155,24 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, timeOff = []
 
     return (
       <button key={`${row.id}-${job.id}`} type="button" className={className} {...dragProps} onClick={() => onOpenJob(job)} title={title}>
-        <span className="rota-chip-line">
-          <span className="rota-chip-dot" aria-hidden="true" />
-          <b>{single ? timeRange : clockOf(job.scheduled_at)}</b>
-          <span className="rota-chip-client">{client}</span>
-        </span>
+        {/* On a day the row is wide enough for time and place side by side.
+            Across a week a column is not, and sharing a line left the place
+            as "Swa…" - so there the place gets a line of its own. */}
+        {single ? (
+          <span className="rota-chip-line">
+            <span className="rota-chip-dot" aria-hidden="true" />
+            <b>{timeRange}</b>
+            <span className="rota-chip-client">{client}</span>
+          </span>
+        ) : (
+          <>
+            <span className="rota-chip-line">
+              <span className="rota-chip-dot" aria-hidden="true" />
+              <b>{clockOf(job.scheduled_at)}</b>
+            </span>
+            <span className="rota-chip-client is-own-line">{client}</span>
+          </>
+        )}
         {sub && <span className="rota-chip-sub">{sub}</span>}
       </button>
     );
@@ -267,7 +261,7 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, timeOff = []
                     <span className="rota-grid-name">{row.name}</span>
                     <span className={`rota-grid-meta ${isUnassigned ? 'is-alert' : ''}`}>
                       {shownJobs} job{shownJobs === 1 ? '' : 's'}
-                      {isUnassigned ? ' need someone' : row.current ? '' : ' · no longer on staff'}
+                      {isUnassigned ? (shownJobs === 1 ? ' needs someone' : ' need someone') : row.current ? '' : ' · no longer on staff'}
                     </span>
                   </span>
                 </div>
@@ -318,7 +312,7 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, timeOff = []
                       {(!isUnassigned || list.length === 0) && (
                         <button
                           type="button"
-                          className={`rota-grid-add${list.length === 0 && !awayOn(cleanerId, i) && weekDays[i] >= startOfToday ? ' is-open' : ''}`}
+                          className="rota-grid-add"
                           onClick={() => onNewJob(i, cleanerId)}
                           aria-label={cleanerId ? `New job for ${row.name} on ${dayLabel}` : `New job on ${dayLabel}`}
                           title={cleanerId ? `Book ${firstName(row.name)} a job on ${dayLabel}` : `Book a job on ${dayLabel}`}
