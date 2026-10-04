@@ -13,6 +13,7 @@ import {
   autoCheckoutTimestamp,
   classifyFix,
   closeCheckin,
+  expectedShiftEnd,
   markSeenInside,
   nextDepartureState,
   shouldAutoCheckOut,
@@ -23,6 +24,7 @@ import {
   defaultClaimWindow,
   isClaimableMissedJob,
 } from '../../../../lib/missedClockin';
+import { tooEarlyMessage, tooEarlyToCheckIn } from '../../../../lib/clockIn';
 import { shiftShortfall } from '../../../../lib/shortShift';
 import { enqueue, isCheckinPending, isTransientError, makeId, pendingCheckinFor } from '../../../../lib/clockQueue';
 import { makePhotoPath, pendingPhotos, queuePhoto } from '../../../../lib/photoQueue';
@@ -400,7 +402,35 @@ export default function JobDetailPage() {
   const handleCheckIn = async () => {
     setCheckInError('');
     setFarAway(null);
+
+    // The button is disabled until then, but a page left open overnight can
+    // still be holding yesterday's idea of the time.
+    if (tooEarlyToCheckIn(job.scheduled_at, new Date())) {
+      setCheckInError(tooEarlyMessage(job.scheduled_at, new Date()));
+      return;
+    }
+
     setCheckingIn(true);
+
+    // Still clocked into a shift that is not over yet. Ben's wrong tap was
+    // made while he was on Saturday's shift, and this is the question that
+    // would have caught it even inside the hour before a start. A shift
+    // whose time has already run out does not block - that is somebody who
+    // forgot to clock out, and reconcile_job_statuses() closes it for them.
+    const { data: openShifts } = await supabase
+      .from('checkins')
+      .select('job_id, checked_in_at, jobs(scheduled_at, duration_minutes, properties(address, clients(name)))')
+      .eq('cleaner_id', userId)
+      .neq('job_id', id)
+      .is('checked_out_at', null);
+    const current = (openShifts || []).find((c) => c.jobs && expectedShiftEnd(c.jobs, c, new Date()) > new Date());
+    if (current) {
+      const where = current.jobs.properties?.clients?.name || current.jobs.properties?.address || 'another shift';
+      setCheckInError(`You're still clocked in at ${where}. Check out of that shift first, then check in here.`);
+      setCheckingIn(false);
+      return;
+    }
+
     const fix = await getLocation();
     const { lat, lng } = fix;
 
@@ -479,7 +509,9 @@ export default function JobDetailPage() {
         setCheckInError(
           error.code === '23505'
             ? "This shift is already checked in - maybe from another phone. Pull down to refresh."
-            : "The office needs to check you in for this one - the app wasn't allowed to. Message them with the time."
+            : String(error.message || '').includes('too_early_to_check_in')
+              ? tooEarlyMessage(job.scheduled_at, new Date())
+              : "The office needs to check you in for this one - the app wasn't allowed to. Message them with the time."
         );
         return;
       }
@@ -977,6 +1009,9 @@ export default function JobDetailPage() {
   // a job claimable is that its time has run out, which the server can't
   // agree with the client about. Same reason the on-site timer waits.
   const jobTimePassed = !!now && isClaimableMissedJob(job, now);
+  // Same wait for `now`: until the clock has been read the button stays as
+  // it always was, and the handler checks again on tap anyway.
+  const tooEarly = !!now && tooEarlyToCheckIn(job.scheduled_at, now);
   const canClaimMissed = jobTimePassed
     && beforeCheckIn
     && claim?.status !== 'pending'
@@ -1472,13 +1507,15 @@ export default function JobDetailPage() {
                 </button>
               </div>
             )}
-            <button type="button" className="visit-btn-primary" onClick={handleCheckIn} disabled={checkingIn}>
-              {checkingIn ? 'Checking location...' : farAway ? 'Try again' : 'Check in'}
+            <button type="button" className="visit-btn-primary" onClick={handleCheckIn} disabled={checkingIn || tooEarly}>
+              {checkingIn ? 'Checking location...' : tooEarly ? 'Not open yet' : farAway ? 'Try again' : 'Check in'}
             </button>
             <p className="visit-action-help">
-              {jobTimePassed
-                ? "Still here? Check in — it's never too late to start the clock."
-                : 'Your location is checked — you need to be at the property.'}
+              {tooEarly
+                ? tooEarlyMessage(job.scheduled_at, now)
+                : jobTimePassed
+                  ? "Still here? Check in — it's never too late to start the clock."
+                  : 'Your location is checked — you need to be at the property.'}
             </p>
             {/* Offering to release a shift that has already been and gone is
                 nonsense, and the wrong door for someone who worked it. */}
