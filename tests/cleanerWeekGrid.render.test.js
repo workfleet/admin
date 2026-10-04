@@ -78,7 +78,41 @@ describe('CleanerWeekGrid', () => {
     // back to the address.
     expect(html.match(/rota-chip-client">Oak House</g)).toHaveLength(2);
     expect(html).toContain('31 Station Rd');
-    expect(html).toContain('w/ Ben');
+    expect(html).toContain('+ Ben');
+    expect(html).toContain('rota-grid-todaypill');
+  });
+
+  it('leads with the street for a client with several sites, and names them underneath', () => {
+    const html = renderToStaticMarkup(createElement(CleanerWeekGrid, {
+      rows: buildCleanerRows(jobs, cleaners, weekDays),
+      weekDays,
+      todayKey: weekDays[1].toDateString(),
+      placeParts: (job) => (job.id === 'j1'
+        ? { place: '14 Bridge St', client: 'Riverside Dental' }
+        : { place: job.properties?.clients?.name || job.properties?.address || 'Unknown client', client: null }),
+      onOpenJob: () => {},
+      onNewJob: () => {},
+      onDropJob: () => {},
+    }));
+    expect(html).toContain('rota-chip-client">14 Bridge St<');
+    expect(html).toContain('rota-chip-sub">Riverside Dental<');
+  });
+
+  it('marks approved time off, and says so when the person is booked anyway', () => {
+    const html = renderToStaticMarkup(createElement(CleanerWeekGrid, {
+      rows: buildCleanerRows(jobs, cleaners, weekDays),
+      weekDays,
+      todayKey: weekDays[1].toDateString(),
+      timeOff: [
+        { id: 't1', cleaner_id: 'ben', type: 'holiday', start_date: '2026-09-17', end_date: '2026-09-18' },
+        { id: 't2', cleaner_id: 'amira', type: 'unavailable', start_date: '2026-09-15', end_date: '2026-09-15' },
+      ],
+      onOpenJob: () => {},
+      onNewJob: () => {},
+      onDropJob: () => {},
+    }));
+    expect((html.match(/rota-timeoff holiday"/g) || []).length).toBe(2);
+    expect(html).toContain('Unavailable · still booked');
   });
 
   it('leaves the unassigned row out when nothing needs a cleaner', () => {

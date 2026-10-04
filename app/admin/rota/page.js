@@ -1724,11 +1724,18 @@ export default function AdminRota() {
     return new Set(properties.filter((p) => sitesPerClient.get(p.client_id) > 1).map((p) => p.id));
   }, [properties]);
 
-  const jobPlaceLabel = (job) => {
+  // Where a job is, as the street and whose it is when that matters, or
+  // just the client's name when they only have the one site.
+  const placeParts = (job) => {
     const name = job.properties?.clients?.name;
     const street = shortAddress(job.properties?.address);
-    if (name && street && multiSiteProperties.has(job.property_id)) return `${street} · ${name}`;
-    return name || job.properties?.address || 'Unknown client';
+    if (name && street && multiSiteProperties.has(job.property_id)) return { place: street, client: name };
+    return { place: name || job.properties?.address || 'Unknown client', client: null };
+  };
+
+  const jobPlaceLabel = (job) => {
+    const { place, client } = placeParts(job);
+    return client ? `${place} · ${client}` : place;
   };
 
   // Gaps this week that nobody can drive in time. Only future jobs: a tight
@@ -1969,33 +1976,49 @@ export default function AdminRota() {
     <div className="page-inner">
       <BackButton />
       <div className="rota-header">
-        <div>
-          <p className="rota-eyebrow">Rota · {view === 'cleaners' ? `by cleaner · ${range}` : 'by time'}</p>
-          <h1 className="rota-week">{dayMode ? dayLabel : weekLabel}</h1>
+        <h1 className="rota-title">Rota</h1>
+        {/* Back / the week on screen / forward are one control, because they
+            do one job. Today sits beside it rather than inside, so it reads
+            as a way home and not as a third arrow. */}
+        <div className="rota-nav" role="group" aria-label={dayMode ? 'Change day' : 'Change week'}>
+          <button type="button" className="rota-nav-btn" onClick={() => step(-1)} title={dayMode ? 'Go back a day' : 'Go back a week'} aria-label={dayMode ? 'Previous day' : 'Previous week'}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+          </button>
+          <span className="rota-nav-label">{dayMode ? dayLabel : weekLabel}</span>
+          <button type="button" className="rota-nav-btn" onClick={() => step(1)} title={dayMode ? 'Go forward a day' : 'Go forward a week'} aria-label={dayMode ? 'Next day' : 'Next week'}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+          </button>
         </div>
+        <button type="button" className="rota-pill-btn" onClick={goToToday} title={dayMode ? 'Jump back to today' : 'Jump back to this week'} disabled={dayMode ? isOnToday : isCurrentWeek}>Today</button>
+
         <div className="rota-actions">
-          <div className="segmented" role="group" aria-label="How to read the week">
+          <div className="rota-seg" role="group" aria-label="How to read the week">
             <button
-              className={`segmented-btn${view === 'cleaners' ? ' is-active' : ''}`}
+              type="button"
+              className={`rota-seg-btn${view === 'cleaners' ? ' is-active' : ''}`}
               onClick={() => chooseView('cleaners')}
               aria-pressed={view === 'cleaners'}
               title="A row per cleaner, the days across"
             >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5" /><path d="M5 20c1.2-3.5 4-5 7-5s5.8 1.5 7 5" /></svg>
               By cleaner
             </button>
             <button
-              className={`segmented-btn${view === 'calendar' ? ' is-active' : ''}`}
+              type="button"
+              className={`rota-seg-btn${view === 'calendar' ? ' is-active' : ''}`}
               onClick={() => chooseView('calendar')}
               aria-pressed={view === 'calendar'}
               title="The week on the clock"
             >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></svg>
               By time
             </button>
           </div>
           {view === 'cleaners' && (
-            <div className="segmented" role="group" aria-label="How much to show">
+            <div className="rota-seg" role="group" aria-label="How much to show">
               <button
-                className={`segmented-btn${range === 'week' ? ' is-active' : ''}`}
+                type="button"
+                className={`rota-seg-btn${range === 'week' ? ' is-active' : ''}`}
                 onClick={() => chooseRange('week')}
                 aria-pressed={range === 'week'}
                 title="Seven days across"
@@ -2003,7 +2026,8 @@ export default function AdminRota() {
                 Week
               </button>
               <button
-                className={`segmented-btn${range === 'day' ? ' is-active' : ''}`}
+                type="button"
+                className={`rota-seg-btn${range === 'day' ? ' is-active' : ''}`}
                 onClick={() => chooseRange('day')}
                 aria-pressed={range === 'day'}
                 title="One day, with everyone's free time"
@@ -2012,51 +2036,37 @@ export default function AdminRota() {
               </button>
             </div>
           )}
-          {/* Prev / Today / Next are one control because they do one job -
-              moving through weeks. As three loose buttons they carried the
-              same weight as the page's primary action. */}
-          <div className="segmented" role="group" aria-label={dayMode ? 'Change day' : 'Change week'}>
-            <button className="segmented-btn" onClick={() => step(-1)} title={dayMode ? 'Go back a day' : 'Go back a week'} aria-label={dayMode ? 'Previous day' : 'Previous week'}>‹</button>
-            <button className="segmented-btn" onClick={goToToday} title={dayMode ? 'Jump back to today' : 'Jump back to this week'} disabled={dayMode ? isOnToday : isCurrentWeek}>Today</button>
-            <button className="segmented-btn" onClick={() => step(1)} title={dayMode ? 'Go forward a day' : 'Go forward a week'} aria-label={dayMode ? 'Next day' : 'Next week'}>›</button>
-          </div>
-          <button className="btn-primary btn-compact" onClick={() => setShowForm(true)} title="Schedule a new job and assign staff to it">
-            + New Job
+          <button type="button" className="rota-new-btn" onClick={() => setShowForm(true)} title="Schedule a new job and assign staff to it">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+            New job
           </button>
         </div>
       </div>
 
-      <div className="stat-row stat-row-compact">
-        <div className="stat-card stat-jobs">
-          <div className="stat-number">{weekStats.total}</div>
-          <div className="stat-label">Jobs</div>
-          <div className="stat-sublabel">{weekStats.completed} completed</div>
-        </div>
-        <div className="stat-card stat-hours">
-          <div className="stat-number">{weekStats.hours.toFixed(1)}</div>
-          <div className="stat-label">Hours</div>
-          <div className="stat-sublabel">scheduled</div>
-        </div>
-        <div className={`stat-card stat-unassigned${weekStats.unassigned > 0 ? ' is-alert' : ''}`}>
-          <div className="stat-number">{weekStats.unassigned}</div>
-          <div className="stat-label">Unassigned</div>
-          <div className="stat-sublabel">no one on the job</div>
-        </div>
-        <div className={`stat-card stat-missed${weekStats.missed > 0 ? ' is-alert' : ''}`}>
-          <div className="stat-number">{weekStats.missed}</div>
-          <div className="stat-label">Missed</div>
-          <div className="stat-sublabel">this week</div>
-        </div>
-        <div
-          className={`stat-card stat-requests${tightTurnarounds.length > 0 ? ' is-alert' : ''}`}
-          onClick={() => tightTurnarounds.length > 0 && setShowTurnarounds((v) => !v)}
-          style={{ cursor: tightTurnarounds.length > 0 ? 'pointer' : 'default' }}
-          title={tightTurnarounds.length > 0 ? 'Show the gaps nobody can drive in time' : 'Every gap between one cleaner\'s jobs leaves time to get there'}
-        >
-          <div className="stat-number">{tightTurnarounds.length}</div>
-          <div className="stat-label">Tight travel</div>
-          <div className="stat-sublabel">{tightTurnarounds.length > 0 ? 'tap to see' : 'no gaps too short'}</div>
-        </div>
+      {/* The week's figures as one line rather than five cards, so the rota
+          itself starts higher up the screen. Red only when there is
+          something to do about it. */}
+      <div className="rota-figures">
+        <span className="rota-figure"><b>{weekStats.total}</b> jobs · {weekStats.completed} done</span>
+        <span className="rota-figure"><b>{Math.round(weekStats.hours * 10) / 10}</b> hours booked</span>
+        <span className={`rota-figure${weekStats.unassigned > 0 ? ' is-alert' : ''}`}><b>{weekStats.unassigned}</b> need a cleaner</span>
+        <span className={`rota-figure${weekStats.missed > 0 ? ' is-alert' : ''}`}><b>{weekStats.missed}</b> missed</span>
+        {tightTurnarounds.length > 0 ? (
+          <button type="button" className="rota-figure is-alert is-button" onClick={() => setShowTurnarounds((v) => !v)} title="Show the gaps nobody can drive in time">
+            <b>{tightTurnarounds.length}</b> tight travel {tightTurnarounds.length === 1 ? 'gap' : 'gaps'}
+          </button>
+        ) : (
+          <span className="rota-figure" title="Every gap between one cleaner's jobs leaves time to get there"><b>0</b> tight travel gaps</span>
+        )}
+        {view === 'cleaners' && (
+          <span className="rota-key">
+            <span><i className="rota-key-dot is-booked" />Booked</span>
+            <span><i className="rota-key-dot is-done" />Done</span>
+            <span><i className="rota-key-dot is-onsite" />On site</span>
+            <span><i className="rota-key-dot is-alert" />Needs attention</span>
+            <span><i className="rota-key-away" />Away</span>
+          </span>
+        )}
       </div>
 
       {/* Straight-line distance stretched for roads at an urban average, plus a
@@ -2090,6 +2100,7 @@ export default function AdminRota() {
           weekDays={weekDays}
           todayKey={todayKey}
           timeOff={timeOff}
+          placeParts={placeParts}
           dayIndex={dayMode ? dayIndex : null}
           onOpenJob={setSelectedJob}
           onNewJob={startNewJob}
