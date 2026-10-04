@@ -1702,24 +1702,17 @@ export default function AdminRota() {
     [jobs, cleaners, weekDays]
   );
 
-  // A client with more than one site - TKR has twenty-odd houses - reads as
-  // the same name on every card, so those cards lead with the street. A
-  // client with one site keeps just its name: the street adds nothing.
-  const multiSiteProperties = useMemo(() => {
-    const sitesPerClient = new Map();
-    for (const p of properties) {
-      if (p.client_id) sitesPerClient.set(p.client_id, (sitesPerClient.get(p.client_id) || 0) + 1);
-    }
-    return new Set(properties.filter((p) => sitesPerClient.get(p.client_id) > 1).map((p) => p.id));
-  }, [properties]);
-
-  // Where a job is, as the street and whose it is when that matters, or
-  // just the client's name when they only have the one site.
+  // Where a job is: every card leads with the street and names the client
+  // underneath. Showing the street only for clients with several sites
+  // left most of the rota as a list of names with no address on it, which
+  // is not what the office reads a rota for. When the address starts with
+  // the client's own name ("The Eagle, Swansea") it is said once.
   const placeParts = (job) => {
     const name = job.properties?.clients?.name;
     const street = shortAddress(job.properties?.address);
-    if (name && street && multiSiteProperties.has(job.property_id)) return { place: street, client: name };
-    return { place: name || job.properties?.address || 'Unknown client', client: null };
+    if (!street) return { place: name || 'Unknown client', client: null };
+    if (!name || street.toLowerCase() === name.toLowerCase()) return { place: street, client: null };
+    return { place: street, client: name };
   };
 
   const jobPlaceLabel = (job) => {
