@@ -3393,14 +3393,14 @@ body.has-install-bar .emergency-fab {
 .rota-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .rota-title {
-  margin: 0 8px 0 0;
-  font-size: 26px;
+  margin: 0 6px 0 0;
+  font-size: 22px;
   line-height: 1.15;
   letter-spacing: -0.02em;
 }
@@ -3416,16 +3416,16 @@ body.has-install-bar .emergency-fab {
 }
 
 .rota-nav-label {
-  padding: 0 10px;
+  padding: 0 8px;
   font-family: var(--wf-display);
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 500;
   white-space: nowrap;
 }
 
 .rota-nav-btn {
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   margin: 0;
   padding: 0;
   display: grid;
@@ -3440,9 +3440,9 @@ body.has-install-bar .emergency-fab {
 
 .rota-pill-btn {
   width: auto;
-  height: 44px;
+  height: 38px;
   margin: 0;
-  padding: 0 18px;
+  padding: 0 15px;
   border: none;
   border-radius: 999px;
   background: var(--surface);
@@ -3467,7 +3467,7 @@ body.has-install-bar .emergency-fab {
 .rota-seg {
   display: inline-flex;
   gap: 2px;
-  padding: 4px;
+  padding: 3px;
   border-radius: 999px;
   background: #E2E4E7;
 }
@@ -3477,14 +3477,14 @@ body.has-install-bar .emergency-fab {
   align-items: center;
   gap: 7px;
   width: auto;
-  height: 36px;
+  height: 30px;
   margin: 0;
-  padding: 0 16px;
+  padding: 0 13px;
   border: none;
   border-radius: 999px;
   background: transparent;
   color: #4A5058;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
@@ -3503,14 +3503,14 @@ body.has-install-bar .emergency-fab {
   align-items: center;
   gap: 8px;
   width: auto;
-  height: 44px;
+  height: 38px;
   margin: 0;
-  padding: 0 20px 0 16px;
+  padding: 0 16px 0 13px;
   border: none;
   border-radius: 999px;
   background: var(--wf-coral);
   color: var(--wf-graphite);
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
   box-shadow: 0 1px 2px rgba(232, 82, 63, 0.30), 0 6px 16px rgba(255, 107, 91, 0.30);
@@ -3522,8 +3522,8 @@ body.has-install-bar .emergency-fab {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px 18px;
-  margin: 0 0 14px;
+  gap: 6px 16px;
+  margin: 0 0 10px;
   padding: 2px 4px;
 }
 
@@ -3538,7 +3538,7 @@ body.has-install-bar .emergency-fab {
 .rota-figure + .rota-figure { padding-left: 18px; border-left: 1px solid rgba(32, 35, 39, 0.12); }
 .rota-figure b {
   font-family: var(--wf-display);
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--ink);
 }
@@ -3915,11 +3915,11 @@ a.btn-compact {
 
 .rota-grid {
   display: grid;
-  grid-template-columns: 200px repeat(7, minmax(0, 1fr)) 72px;
+  grid-template-columns: 172px repeat(7, minmax(0, 1fr)) 60px;
   /* The design's columns share whatever room there is, so the week fits
      beside the sidebar on a laptop instead of scrolling sideways. Only on
      a phone does it scroll. */
-  min-width: 860px;
+  min-width: 780px;
   padding-bottom: 6px;
 }
 
@@ -3939,8 +3939,8 @@ a.btn-compact {
 .rota-grid-hourshead {
   align-self: stretch;
   display: flex;
-  align-items: flex-end;
-  padding: 16px 12px 12px 20px;
+  align-items: center;
+  padding: 9px 12px 9px 16px;
   font-family: var(--wf-data);
   font-size: 11.5px;
   font-weight: 600;
@@ -3955,14 +3955,14 @@ a.btn-compact {
 
 .rota-grid-hourshead {
   justify-content: flex-end;
-  padding: 16px 20px 12px 8px;
+  padding: 9px 14px 9px 6px;
 }
 
 .rota-grid-dayhead {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 16px 10px 12px;
+  align-items: baseline;
+  gap: 6px;
+  padding: 9px 8px 8px;
 }
 
 .rota-grid-dayname {
@@ -3976,9 +3976,9 @@ a.btn-compact {
 
 .rota-grid-daynum {
   font-family: var(--wf-display);
-  font-size: 22px;
+  font-size: 15px;
   font-weight: 500;
-  line-height: 1.1;
+  line-height: 1.2;
   color: var(--ink);
 }
 
@@ -3987,16 +3987,15 @@ a.btn-compact {
    the sticky header don't show through it. */
 .rota-grid-dayhead.today {
   background: #FFF6F5;
-  border-radius: 14px 14px 0 0;
+  border-radius: 10px 10px 0 0;
 }
 .rota-grid-dayhead.today .rota-grid-dayname,
 .rota-grid-dayhead.today .rota-grid-daynum { color: var(--wf-coral-ink); }
 .rota-grid-dayhead.today .rota-grid-daynum { font-weight: 600; }
 
 .rota-grid-todaypill {
-  align-self: flex-start;
-  margin-top: 4px;
-  padding: 2px 8px;
+  align-self: center;
+  padding: 1px 6px;
   border-radius: 999px;
   background: var(--wf-coral-dark);
   color: var(--wf-white);
@@ -4015,20 +4014,20 @@ a.btn-compact {
   z-index: 3;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px 12px 14px 20px;
+  gap: 9px;
+  padding: 8px 10px 8px 16px;
   background: var(--surface);
   border-top: 1px solid rgba(32, 35, 39, 0.06);
 }
 
 .rota-grid-avatar {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: var(--wf-ash);
   color: var(--ink-soft);
   font-family: var(--wf-data);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   display: grid;
   place-items: center;
@@ -4049,7 +4048,7 @@ a.btn-compact {
 
 .rota-grid-name {
   font-family: var(--wf-display);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 1.25;
   white-space: nowrap;
@@ -4059,7 +4058,7 @@ a.btn-compact {
 
 .rota-grid-meta {
   font-family: var(--wf-data);
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
@@ -4076,10 +4075,10 @@ a.btn-compact {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
-  min-height: 64px;
-  padding: 10px 6px 36px;
+  min-height: 44px;
+  padding: 6px 5px 22px;
   border-top: 1px solid rgba(32, 35, 39, 0.06);
 }
 
@@ -4098,10 +4097,10 @@ a.btn-compact {
    as one more job, and blue so it can't be mistaken for the reds of a
    missed or uncovered job. */
 .rota-timeoff {
-  padding: 7px 9px;
-  border-radius: 10px;
+  padding: 5px 7px;
+  border-radius: 8px;
   font-family: var(--wf-data);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: #1A56B8;
   background: repeating-linear-gradient(-45deg, rgba(31, 111, 239, 0.10) 0 6px, rgba(31, 111, 239, 0.04) 6px 12px);
@@ -4123,14 +4122,15 @@ a.btn-compact {
 .calendar-day-col.past .calendar-job:not(.missed):not(.unassigned),
 .calendar-day-col.past .calendar-clash { opacity: 0.5; }
 
-/* A small dashed circle to book into a cell: faintly there on a free day
-   still to come, as in the design, and on hover anywhere else. */
+/* A small dashed circle to book into a cell. Only when the cell is
+   pointed at or reached by keyboard - shown on every free day it turned
+   the sheet into a wall of +. */
 .rota-grid-add {
   position: absolute;
-  left: 8px;
-  bottom: 6px;
-  width: 26px;
-  height: 26px;
+  left: 6px;
+  bottom: 2px;
+  width: 20px;
+  height: 20px;
   padding: 0;
   margin: 0;
   display: grid;
@@ -4146,8 +4146,6 @@ a.btn-compact {
   transition: opacity 0.12s ease, background 0.12s ease;
 }
 
-
-.rota-grid-add.is-open { opacity: 0.7; }
 
 .rota-grid-cell:hover .rota-grid-add,
 .rota-grid-add:focus-visible { opacity: 1; }
@@ -4165,17 +4163,17 @@ a.btn-compact {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 2px;
+  gap: 1px;
   width: 100%;
   margin: 0;
-  padding: 7px 9px 8px;
+  padding: 5px 7px 6px;
   border: none;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #F3F4F6;
   color: var(--ink);
   font-family: var(--wf-data);
-  font-size: 12px;
-  line-height: 1.3;
+  font-size: 11px;
+  line-height: 1.25;
   text-align: left;
   cursor: pointer;
   overflow: hidden;
@@ -4233,15 +4231,15 @@ a.btn-compact {
   line-clamp: 2;
   white-space: normal;
   overflow-wrap: anywhere;
-  font-size: 12.5px;
-  line-height: 1.25;
+  font-size: 11.5px;
+  line-height: 1.2;
 }
 
 .rota-chip:not(.is-day) .rota-chip-sub { padding-left: 0; }
 
 .rota-chip-sub {
   padding-left: 13px;
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
@@ -4280,10 +4278,10 @@ a.btn-compact {
   flex-direction: column;
   align-items: flex-end;
   justify-content: center;
-  padding: 14px 20px 14px 8px;
+  padding: 8px 14px 8px 6px;
   border-top: 1px solid rgba(32, 35, 39, 0.06);
   font-family: var(--wf-display);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -4296,7 +4294,7 @@ a.btn-compact {
 }
 
 @media (max-width: 1280px) {
-  .rota-grid { grid-template-columns: 168px repeat(7, minmax(0, 1fr)) 64px; }
+  .rota-grid { grid-template-columns: 150px repeat(7, minmax(0, 1fr)) 54px; }
 }
 
 @media (max-width: 720px) {

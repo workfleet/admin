@@ -316,7 +316,7 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, timeOff = []
                       {(!isUnassigned || list.length === 0) && (
                         <button
                           type="button"
-                          className={`rota-grid-add${list.length === 0 && !isUnassigned && !awayOn(cleanerId, i) && weekDays[i] >= startOfToday ? ' is-open' : ''}`}
+                          className="rota-grid-add"
                           onClick={() => onNewJob(i, cleanerId)}
                           aria-label={cleanerId ? `New job for ${row.name} on ${dayLabel}` : `New job on ${dayLabel}`}
                           title={cleanerId ? `Book ${firstName(row.name)} a job on ${dayLabel}` : `Book a job on ${dayLabel}`}
