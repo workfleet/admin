@@ -14,8 +14,8 @@ import { localDateString } from '../../lib/localDate';
 import { assignmentMinutes } from '../../lib/hoursWorked';
 import WorkAnniversaryPopup from '../components/WorkAnniversaryPopup';
 import { abbreviateName } from '../../lib/jobOverlap';
-import { shortAddress } from '../../lib/shortAddress';
-import { tintFor } from '../../lib/avatarTint';
+import { shortAddress, nameRepeatsStreet } from '../../lib/shortAddress';
+import { tintFor, tintsByOrder } from '../../lib/avatarTint';
 
 function initialsOf(fullName) {
   return String(fullName || '')
@@ -65,7 +65,7 @@ function jobWhere(job) {
   const client = job.properties?.clients?.name;
   const street = shortAddress(job.properties?.address);
   // "The Eagle, Swansea" for The Eagle would only say its name twice.
-  const sameAsName = client && street && street.toLowerCase() === client.toLowerCase();
+  const sameAsName = client && street && nameRepeatsStreet(client, street);
   return { title: client || street || 'Unknown client', street: client && street && !sameAsName ? street : null };
 }
 
@@ -166,6 +166,7 @@ export default function AdminDashboard() {
   // When each on-site job was clocked into, by job id.
   const [checkinByJob, setCheckinByJob] = useState({});
   const [tomorrow, setTomorrow] = useState(null);
+  const [teamTints, setTeamTints] = useState(new Map());
 
   const [payrollPeriod, setPayrollPeriod] = useState('this_week');
   const [payrollLoading, setPayrollLoading] = useState(true);
@@ -300,7 +301,9 @@ export default function AdminDashboard() {
       { data: tomorrowsJobs },
       { data: tomorrowsTimeOff },
     ] = await Promise.all([
-      supabase.from('profiles').select('id, full_name').in('role', BOOKABLE_ROLES).eq('active', true),
+      // In name order, so avatar colours are handed out the same way the
+      // rota hands them out and a person is one colour on both pages.
+      supabase.from('profiles').select('id, full_name').in('role', BOOKABLE_ROLES).eq('active', true).order('full_name'),
       supabase.from('jobs')
         .select('id, scheduled_at, status, duration_minutes, properties(address, clients(name)), job_assignments(cleaner_id, profiles(full_name))')
         .gte('scheduled_at', startOfDay.toISOString()).lt('scheduled_at', endOfDay.toISOString())
@@ -387,6 +390,7 @@ export default function AdminDashboard() {
       else off.push(name);
     });
     setStaffGlance({ working, holiday, off, total: withoutTestAccounts(activeCleaners).length });
+    setTeamTints(tintsByOrder(withoutTestAccounts(activeCleaners).map((c) => c.id)));
 
     const firstCheckin = {};
     (openCheckins || []).forEach((c) => {
@@ -799,7 +803,7 @@ export default function AdminDashboard() {
             </div>
             {onSiteNow.length === 0 && <p className="dash-quiet">Nobody is clocked in right now.</p>}
             {onSiteNow.map((person) => {
-              const [bg, ink] = tintFor(person.id);
+              const [bg, ink] = teamTints.get(person.id) || tintFor(person.id);
               return (
                 <div key={person.id} className="dash-person-now">
                   <span className="dash-avatar is-on" style={{ background: bg, color: ink }}>{initialsOf(person.name)}</span>
@@ -814,7 +818,7 @@ export default function AdminDashboard() {
               <div className="dash-next-up">
                 <div className="dash-avatar-stack">
                   {(nextJob.job_assignments || []).slice(0, 4).map((a) => {
-                    const [bg, ink] = tintFor(a.cleaner_id);
+                    const [bg, ink] = teamTints.get(a.cleaner_id) || tintFor(a.cleaner_id);
                     return <span key={a.cleaner_id} className="dash-avatar" style={{ background: bg, color: ink }}>{initialsOf(a.profiles?.full_name)}</span>;
                   })}
                 </div>

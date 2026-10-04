@@ -1,5 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { shortAddress } from '../lib/shortAddress';
+import { shortAddress, nameRepeatsStreet } from '../lib/shortAddress';
+
+describe('nameRepeatsStreet', () => {
+  it('spots a client name the street already says', () => {
+    expect(nameRepeatsStreet('Swansea Bus Station', 'Swansea City Bus Station')).toBe(true);
+    expect(nameRepeatsStreet('The Eagle', 'The Eagle Inn')).toBe(true);
+  });
+  it('keeps a name that adds something', () => {
+    expect(nameRepeatsStreet('The Shed Restaurant', 'Unit 1-2, J Shed Arcade')).toBe(false);
+    expect(nameRepeatsStreet('TKR Management', '7 Clarice Street')).toBe(false);
+    expect(nameRepeatsStreet('', 'Anything')).toBe(false);
+  });
+});
 
 // Real addresses from the rota, in the shapes they actually arrive in:
 // typed by hand, or filled in by the address lookup with the town, county

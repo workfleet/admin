@@ -19,7 +19,7 @@ import BackButton from '../../components/BackButton';
 import { groupOverlappingJobs, assignLanes, abbreviateName } from '../../../lib/jobOverlap';
 import { findTightTurnarounds, describeTurnaround } from '../../../lib/travelTime';
 import { buildCleanerRows, formatHours, shareMinutes, UNASSIGNED_ROW_ID } from '../../../lib/rotaGrid';
-import { shortAddress } from '../../../lib/shortAddress';
+import { shortAddress, nameRepeatsStreet } from '../../../lib/shortAddress';
 import { certificationLine, isTraining, jobHeadline, jobSubtitle, trainerLine, trainingJobFields, TRAINING_JOB_COLUMNS } from '../../../lib/training';
 import CleanerWeekGrid from './CleanerWeekGrid';
 import SeriesEditor from './SeriesEditor';
@@ -1706,12 +1706,12 @@ export default function AdminRota() {
   // underneath. Showing the street only for clients with several sites
   // left most of the rota as a list of names with no address on it, which
   // is not what the office reads a rota for. When the address starts with
-  // the client's own name ("The Eagle, Swansea") it is said once.
+  // the client's own name ("The Eagle Inn" for The Eagle) it is said once.
   const placeParts = (job) => {
     const name = job.properties?.clients?.name;
     const street = shortAddress(job.properties?.address);
     if (!street) return { place: name || 'Unknown client', client: null };
-    if (!name || street.toLowerCase() === name.toLowerCase()) return { place: street, client: null };
+    if (!name || nameRepeatsStreet(name, street)) return { place: street, client: null };
     return { place: street, client: name };
   };
 

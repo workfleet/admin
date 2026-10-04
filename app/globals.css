@@ -3399,8 +3399,8 @@ body.has-install-bar .emergency-fab {
 }
 
 .rota-title {
-  margin: 0 6px 0 0;
-  font-size: 22px;
+  margin: 0 8px 0 0;
+  font-size: 26px;
   line-height: 1.15;
   letter-spacing: -0.02em;
 }
@@ -3424,8 +3424,8 @@ body.has-install-bar .emergency-fab {
 }
 
 .rota-nav-btn {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   margin: 0;
   padding: 0;
   display: grid;
@@ -3440,9 +3440,9 @@ body.has-install-bar .emergency-fab {
 
 .rota-pill-btn {
   width: auto;
-  height: 40px;
+  height: 44px;
   margin: 0;
-  padding: 0 16px;
+  padding: 0 18px;
   border: none;
   border-radius: 999px;
   background: var(--surface);
@@ -3477,9 +3477,9 @@ body.has-install-bar .emergency-fab {
   align-items: center;
   gap: 7px;
   width: auto;
-  height: 32px;
+  height: 36px;
   margin: 0;
-  padding: 0 14px;
+  padding: 0 16px;
   border: none;
   border-radius: 999px;
   background: transparent;
@@ -3503,9 +3503,9 @@ body.has-install-bar .emergency-fab {
   align-items: center;
   gap: 8px;
   width: auto;
-  height: 40px;
+  height: 44px;
   margin: 0;
-  padding: 0 18px 0 14px;
+  padding: 0 20px 0 16px;
   border: none;
   border-radius: 999px;
   background: var(--wf-coral);
@@ -3915,8 +3915,11 @@ a.btn-compact {
 
 .rota-grid {
   display: grid;
-  grid-template-columns: 196px repeat(7, minmax(118px, 1fr)) 72px;
-  min-width: 1040px;
+  grid-template-columns: 200px repeat(7, minmax(0, 1fr)) 72px;
+  /* The design's columns share whatever room there is, so the week fits
+     beside the sidebar on a laptop instead of scrolling sideways. Only on
+     a phone does it scroll. */
+  min-width: 860px;
   padding-bottom: 6px;
 }
 
@@ -3936,8 +3939,8 @@ a.btn-compact {
 .rota-grid-hourshead {
   align-self: stretch;
   display: flex;
-  align-items: center;
-  padding: 10px 12px 10px 20px;
+  align-items: flex-end;
+  padding: 16px 12px 12px 20px;
   font-family: var(--wf-data);
   font-size: 11.5px;
   font-weight: 600;
@@ -3946,19 +3949,20 @@ a.btn-compact {
   color: var(--muted);
 }
 
-.rota-grid-corner { z-index: 5; }
+/* Above the sticky name column as well as the rest of the header, or the
+   first row's name slides over it when the sheet scrolls. */
+.rota-grid-who.rota-grid-corner { z-index: 6; }
 
 .rota-grid-hourshead {
   justify-content: flex-end;
-  padding: 10px 20px 10px 8px;
+  padding: 16px 20px 12px 8px;
 }
 
 .rota-grid-dayhead {
   display: flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 10px 10px 9px;
-  border-bottom: 1px solid rgba(32, 35, 39, 0.06);
+  flex-direction: column;
+  gap: 2px;
+  padding: 16px 10px 12px;
 }
 
 .rota-grid-dayname {
@@ -3972,9 +3976,9 @@ a.btn-compact {
 
 .rota-grid-daynum {
   font-family: var(--wf-display);
-  font-size: 16px;
+  font-size: 22px;
   font-weight: 500;
-  line-height: 1.2;
+  line-height: 1.1;
   color: var(--ink);
 }
 
@@ -3983,15 +3987,16 @@ a.btn-compact {
    the sticky header don't show through it. */
 .rota-grid-dayhead.today {
   background: #FFF6F5;
-  border-radius: 12px 12px 0 0;
+  border-radius: 14px 14px 0 0;
 }
 .rota-grid-dayhead.today .rota-grid-dayname,
 .rota-grid-dayhead.today .rota-grid-daynum { color: var(--wf-coral-ink); }
 .rota-grid-dayhead.today .rota-grid-daynum { font-weight: 600; }
 
 .rota-grid-todaypill {
-  align-self: center;
-  padding: 1px 7px;
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 2px 8px;
   border-radius: 999px;
   background: var(--wf-coral-dark);
   color: var(--wf-white);
@@ -4010,15 +4015,15 @@ a.btn-compact {
   z-index: 3;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 12px 9px 20px;
+  gap: 12px;
+  padding: 14px 12px 14px 20px;
   background: var(--surface);
   border-top: 1px solid rgba(32, 35, 39, 0.06);
 }
 
 .rota-grid-avatar {
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   background: var(--wf-ash);
   color: var(--ink-soft);
@@ -4071,10 +4076,10 @@ a.btn-compact {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
   min-width: 0;
-  min-height: 52px;
-  padding: 7px 6px 26px;
+  min-height: 64px;
+  padding: 10px 6px 36px;
   border-top: 1px solid rgba(32, 35, 39, 0.06);
 }
 
@@ -4118,15 +4123,14 @@ a.btn-compact {
 .calendar-day-col.past .calendar-job:not(.missed):not(.unassigned),
 .calendar-day-col.past .calendar-clash { opacity: 0.5; }
 
-/* A small dashed circle to book into a cell. It only appears when the
-   cell is pointed at or reached by keyboard: shown on every free day it
-   turned the sheet into a wall of +. */
+/* A small dashed circle to book into a cell: faintly there on a free day
+   still to come, as in the design, and on hover anywhere else. */
 .rota-grid-add {
   position: absolute;
   left: 8px;
-  bottom: 3px;
-  width: 22px;
-  height: 22px;
+  bottom: 6px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   margin: 0;
   display: grid;
@@ -4142,6 +4146,8 @@ a.btn-compact {
   transition: opacity 0.12s ease, background 0.12s ease;
 }
 
+
+.rota-grid-add.is-open { opacity: 0.7; }
 
 .rota-grid-cell:hover .rota-grid-add,
 .rota-grid-add:focus-visible { opacity: 1; }
@@ -4274,7 +4280,7 @@ a.btn-compact {
   flex-direction: column;
   align-items: flex-end;
   justify-content: center;
-  padding: 9px 20px 9px 8px;
+  padding: 14px 20px 14px 8px;
   border-top: 1px solid rgba(32, 35, 39, 0.06);
   font-family: var(--wf-display);
   font-size: 15px;
@@ -4287,6 +4293,10 @@ a.btn-compact {
   font-size: 11px;
   font-weight: 400;
   color: var(--muted);
+}
+
+@media (max-width: 1280px) {
+  .rota-grid { grid-template-columns: 168px repeat(7, minmax(0, 1fr)) 64px; }
 }
 
 @media (max-width: 720px) {

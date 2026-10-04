@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { coworkersOf, firstName, formatHours, freeGaps, formatGap, shareMinutes, UNASSIGNED_ROW_ID } from '../../../lib/rotaGrid';
 import { isTraining, jobHeadline, jobSubtitle } from '../../../lib/training';
 import { localDateString } from '../../../lib/localDate';
-import { tintFor } from '../../../lib/avatarTint';
+import { tintFor, tintsByOrder } from '../../../lib/avatarTint';
 
 // The rota with a row per cleaner. Across the week, each cell lists that
 // person's jobs for the day in order, so a gap on the sheet is a gap in
@@ -65,6 +65,10 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, timeOff = []
   const [over, setOver] = useState(null);
 
   const single = dayIndex !== null && dayIndex !== undefined;
+  // The team's colours, handed out down the list in order. The row for
+  // nobody and anyone who has left are not part of the team list.
+  const tints = tintsByOrder(rows.filter((r) => r.current && r.id !== UNASSIGNED_ROW_ID).map((r) => r.id));
+  const tintOf = (id) => tints.get(id) || tintFor(id);
   const shownDays = single ? [dayIndex] : weekDays.map((_, i) => i);
 
   const startOfToday = new Date(new Date().setHours(0, 0, 0, 0));
@@ -252,7 +256,7 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, timeOff = []
                 <div className="rota-grid-who" role="rowheader">
                   <span
                     className={`rota-grid-avatar ${isUnassigned ? 'unassigned' : ''}`}
-                    style={isUnassigned ? undefined : { background: tintFor(row.id)[0], color: tintFor(row.id)[1] }}
+                    style={isUnassigned ? undefined : { background: tintOf(row.id)[0], color: tintOf(row.id)[1] }}
                     aria-hidden="true"
                   >
                     {isUnassigned ? '?' : initials(row.name)}
@@ -312,7 +316,7 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, timeOff = []
                       {(!isUnassigned || list.length === 0) && (
                         <button
                           type="button"
-                          className="rota-grid-add"
+                          className={`rota-grid-add${list.length === 0 && !isUnassigned && !awayOn(cleanerId, i) && weekDays[i] >= startOfToday ? ' is-open' : ''}`}
                           onClick={() => onNewJob(i, cleanerId)}
                           aria-label={cleanerId ? `New job for ${row.name} on ${dayLabel}` : `New job on ${dayLabel}`}
                           title={cleanerId ? `Book ${firstName(row.name)} a job on ${dayLabel}` : `Book a job on ${dayLabel}`}
