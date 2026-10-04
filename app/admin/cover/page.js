@@ -46,7 +46,7 @@ export default function AdminCover() {
     if (!session) { router.push('/'); return; }
     setUserId(session.user.id);
 
-    const [{ data: offerRows }, { data: jobRows }, { data: assignmentRows }, { data: cleanerRows }] = await Promise.all([
+    const [{ data: offerRows }, { data: jobRows }, { data: cleanerRows }] = await Promise.all([
       supabase
         .from('shift_offers')
         .select(
@@ -69,11 +69,20 @@ export default function AdminCover() {
         .gte('scheduled_at', new Date().toISOString())
         .order('scheduled_at')
         .limit(100),
-      supabase.from('job_assignments').select('job_id, cleaner_id, profiles(full_name)'),
       // takes_cover (0119): someone whose work is not cleaning visits is
       // not on the list of people to hand one to.
       supabase.from('profiles').select('id, full_name').eq('role', 'cleaner').eq('active', true).eq('takes_cover', true).order('full_name'),
     ]);
+
+    // Who is on the jobs this page shows - not every assignment there has
+    // ever been, which is past the 1000 rows one request returns.
+    const shownJobIds = [...new Set([
+      ...(jobRows || []).map((j) => j.id),
+      ...(offerRows || []).map((o) => o.job_id),
+    ].filter(Boolean))];
+    const { data: assignmentRows } = shownJobIds.length > 0
+      ? await supabase.from('job_assignments').select('job_id, cleaner_id, profiles(full_name)').in('job_id', shownJobIds)
+      : { data: [] };
 
     setOffers(offerRows || []);
     setJobs(jobRows || []);

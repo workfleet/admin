@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Download, Lock, AlertTriangle, ChevronDown, ChevronRight, CheckCircle2, CalendarClock } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionAndProfile } from '../../../lib/authGate';
+import { fetchAllRows } from '../../../lib/fetchAllRows';
 import { formatHours } from '../../../lib/hoursWorked';
 import { toCSV, downloadCSV } from '../../../lib/csv';
 import { notify } from '../../../lib/notify';
@@ -235,11 +236,18 @@ export default function AdminPayroll() {
         .from('payroll_periods')
         .select('id, period_start, period_end, closed_at, note, closer:profiles!payroll_periods_closed_by_fkey(full_name)')
         .order('period_start', { ascending: false }),
-      supabase.from('payroll_period_lines').select('period_id, cleaner_id, cleaner_name, job_id, job_address, job_date, minutes, kind'),
-      supabase
+      // Every closed period's lines, a page at a time: they pass the 1000
+      // rows one request returns, and a payslip total built from part of
+      // them would be wrong without looking it.
+      fetchAllRows(() => supabase
+        .from('payroll_period_lines')
+        .select('period_id, cleaner_id, cleaner_name, job_id, job_address, job_date, minutes, kind')
+        .order('id')),
+      fetchAllRows(() => supabase
         .from('payroll_adjustments')
         .select('id, cleaner_id, cleaner_name, job_id, job_address, job_date, minutes, reason, created_at, included_in_period_id')
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false })
+        .order('id')),
     ]);
 
     const loaded = {

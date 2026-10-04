@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { notify } from '../../../lib/notify';
-import { assignmentMinutes, bookedHoursBetween, formatHours } from '../../../lib/hoursWorked';
+import { assignedJob, assignmentMinutes, bookedHoursBetween, fetchAssigneeCounts, fetchStaffHoursTotals, formatHours, HOLIDAY_ACCRUAL_RATE } from '../../../lib/hoursWorked';
 import { fetchEmploymentTypes, isSubcontractor } from '../../../lib/profilePrivate';
 import { BOOKABLE_ROLES } from '../../../lib/staffRoles';
 import { isClaimableMissedJob } from '../../../lib/missedClockin';
@@ -16,8 +16,6 @@ import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
 import CoverSuggestions from '../../components/CoverSuggestions';
 import BackButton from '../../components/BackButton';
-
-const HOLIDAY_ACCRUAL_RATE = 0.1207; // UK statutory: 5.6 weeks / 46.4 working weeks
 
 function holidayHoursUsed(cleanerId, timeOffRequests) {
   return timeOffRequests
@@ -49,8 +47,8 @@ export default function AdminRequests() {
   // Time off the office enters itself - someone rang in sick, or holiday
   // was agreed over the phone. It goes in already approved, as if the
   // cleaner had asked and the office had said yes. `staff` is who can be
-  // picked; `assignments` is every job_assignments row with its job, for
-  // filling in the hours from what that person is booked on.
+  // picked; `addTimeOffJobs` is that person's shifts around the chosen
+  // dates, for filling in the hours from what they are booked on.
   const EMPTY_TIME_OFF = { cleanerId: '', type: 'holiday', startDate: '', endDate: '', hours: '', hoursTouched: false, reason: '', note: '' };
   const [showAddTimeOff, setShowAddTimeOff] = useState(false);
   const [addTimeOff, setAddTimeOff] = useState(EMPTY_TIME_OFF);
@@ -58,8 +56,7 @@ export default function AdminRequests() {
   const [addingTimeOff, setAddingTimeOff] = useState(false);
   const [staff, setStaff] = useState([]);
   const [employmentTypes, setEmploymentTypes] = useState({});
-  const [assignments, setAssignments] = useState([]);
-  const [assigneeCountByJob, setAssigneeCountByJob] = useState({});
+  const [addTimeOffJobs, setAddTimeOffJobs] = useState({ jobs: [], counts: {} });
 
   // time extension requests
   const [extensions, setExtensions] = useState([]);
@@ -173,10 +170,36 @@ export default function AdminRequests() {
   // The hours box follows the person and the dates - what they are booked
   // to work on those days is what the holiday stands in for - until the
   // office types a figure of its own. The same rule as the cleaner's form.
+  //
+  // Only that person's shifts in a window around the dates are fetched -
+  // a day either side, since bookedHoursBetween() matches on local dates
+  // and the window is in UTC - rather than every assignment there is.
+  useEffect(() => {
+    const { type, cleanerId, startDate, endDate } = addTimeOff;
+    if (type !== 'holiday' || !cleanerId || !startDate || !endDate || endDate < startDate) {
+      setAddTimeOffJobs({ jobs: [], counts: {} });
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      const from = new Date(`${startDate}T00:00`);
+      from.setDate(from.getDate() - 1);
+      const to = new Date(`${endDate}T00:00`);
+      to.setDate(to.getDate() + 2);
+      const { data } = await supabase
+        .from('job_assignments')
+        .select('paid_minutes, jobs!inner(id, scheduled_at, status, duration_minutes)')
+        .eq('cleaner_id', cleanerId)
+        .gte('jobs.scheduled_at', from.toISOString())
+        .lt('jobs.scheduled_at', to.toISOString());
+      const jobs = (data || []).map(assignedJob).filter(Boolean);
+      const counts = await fetchAssigneeCounts(jobs.map((j) => j.id));
+      if (!cancelled) setAddTimeOffJobs({ jobs, counts });
+    })();
+    return () => { cancelled = true; };
+  }, [addTimeOff.type, addTimeOff.cleanerId, addTimeOff.startDate, addTimeOff.endDate]);
   const bookedHoursForAdd = addTimeOff.type === 'holiday' && addTimeOff.cleanerId
-    ? bookedHoursBetween(
-        assignments.filter((r) => r.cleaner_id === addTimeOff.cleanerId && r.jobs).map((r) => ({ ...r.jobs, paid_minutes: r.paid_minutes ?? null })),
-        assigneeCountByJob, addTimeOff.startDate, addTimeOff.endDate)
+    ? bookedHoursBetween(addTimeOffJobs.jobs, addTimeOffJobs.counts, addTimeOff.startDate, addTimeOff.endDate)
     : 0;
   useEffect(() => {
     if (addTimeOff.type !== 'holiday' || addTimeOff.hoursTouched) return;
@@ -194,7 +217,7 @@ export default function AdminRequests() {
     const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
-    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, { data: assignmentsData }, { data: extensionsData }, { data: reschedulesData }, { data: clientRequestsData }, { data: pausesData }, { data: emergenciesData }, { data: missedClockinData }, { data: missedShiftData }, { data: shortShiftData }, { data: pinProposalData }, { data: staffData }, employmentData] = await Promise.all([
+    const [{ data: requestsData }, { data: timeOffData }, { data: cleanerProfiles }, staffTotals, { data: extensionsData }, { data: reschedulesData }, { data: clientRequestsData }, { data: pausesData }, { data: emergenciesData }, { data: missedClockinData }, { data: missedShiftData }, { data: shortShiftData }, { data: pinProposalData }, { data: staffData }, employmentData] = await Promise.all([
       supabase
         .from('staff_requests')
         .select('id, type, description, status, created_at, resolved_at, resolution_note, resolved_by, cleaner_id, profiles!staff_requests_cleaner_id_fkey(full_name), resolver:profiles!staff_requests_resolved_by_fkey(full_name), jobs(scheduled_at, properties(address))')
@@ -206,7 +229,9 @@ export default function AdminRequests() {
       // Adjustments live on profile_private (0088); aliased so the balance
       // maths below still keys on `id`.
       supabase.from('profile_private').select('id:profile_id, holiday_adjustment_hours, profiles!inner(role)').in('profiles.role', BOOKABLE_ROLES),
-      supabase.from('job_assignments').select('cleaner_id, paid_minutes, jobs(id, status, duration_minutes, scheduled_at)'),
+      // Hours worked per person, summed in the database (0121) - the
+      // assignment history is past the 1000 rows one request returns.
+      fetchStaffHoursTotals(),
       supabase
         .from('time_extension_requests')
         .select('id, job_id, requested_minutes, reason, status, admin_note, suggested_scheduled_at, suggested_duration_minutes, created_at, cleaner_id, decided_by, profiles!time_extension_requests_cleaner_id_fkey(full_name), decider:profiles!time_extension_requests_decided_by_fkey(full_name), jobs(scheduled_at, duration_minutes, properties(address))')
@@ -259,22 +284,14 @@ export default function AdminRequests() {
       fetchEmploymentTypes(),
     ]);
 
-    // A job's duration is split evenly across everyone assigned to it.
-    const assigneeCounts = {};
-    (assignmentsData || []).forEach((row) => {
-      if (!row.jobs) return;
-      assigneeCounts[row.jobs.id] = (assigneeCounts[row.jobs.id] || 0) + 1;
-    });
-    setAssignments(assignmentsData || []);
-    setAssigneeCountByJob(assigneeCounts);
     setStaff(staffData || []);
     setEmploymentTypes(employmentData || {});
 
+    // Balances of zero would read as fact, so say they failed instead.
+    if (staffTotals.error) toast.error('Could not load holiday balances.');
     const balanceMap = {};
     (cleanerProfiles || []).forEach((p) => {
-      const worked = (assignmentsData || [])
-        .filter((row) => row.cleaner_id === p.id && row.jobs?.status === 'completed')
-        .reduce((sum, row) => sum + assignmentMinutes(row, assigneeCounts), 0) / 60;
+      const worked = staffTotals.totals[p.id]?.workedHours || 0;
       balanceMap[p.id] = worked * HOLIDAY_ACCRUAL_RATE + (p.holiday_adjustment_hours || 0);
     });
     setHolidayBalances(balanceMap);
@@ -696,11 +713,15 @@ export default function AdminRequests() {
       if (assignedCleanerIds.length > 0) {
         const newStart = new Date(target.requested_scheduled_at);
         const newEnd = new Date(newStart.getTime() + (target.jobs?.duration_minutes || 120) * 60000);
+        // Only jobs that could overlap: anything starting before the new end
+        // and no more than a day before the new start (no shift runs longer).
         const { data: otherAssignments } = await supabase
           .from('job_assignments')
           .select('jobs!inner(id, scheduled_at, duration_minutes, properties(address))')
           .in('cleaner_id', assignedCleanerIds)
-          .neq('jobs.id', target.job_id);
+          .neq('jobs.id', target.job_id)
+          .gte('jobs.scheduled_at', new Date(newStart.getTime() - 24 * 3600000).toISOString())
+          .lt('jobs.scheduled_at', newEnd.toISOString());
 
         const conflict = (otherAssignments || [])
           .map((a) => a.jobs)

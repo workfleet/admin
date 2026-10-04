@@ -9,6 +9,7 @@ import { getSessionWithRetry } from '../../../lib/authGate';
 import { toCSV, downloadCSV } from '../../../lib/csv';
 import { privateOf } from '../../../lib/profilePrivate';
 import { assignmentMinutes } from '../../../lib/hoursWorked';
+import { fetchAllRows } from '../../../lib/fetchAllRows';
 import { isTraining, jobHeadline, TRAINING_JOB_COLUMNS } from '../../../lib/training';
 import BackButton from '../../components/BackButton';
 
@@ -87,13 +88,18 @@ async function loadStaff() {
   };
 }
 
+// The reports below read every matching row a page at a time: an "all time"
+// export is past the 1000 rows one request returns, and a report that
+// quietly stops there is worse than one that takes a second longer.
 async function loadHours(range) {
-  let query = supabase
-    .from('job_assignments')
-    .select('cleaner_id, paid_minutes, profiles(full_name), jobs!inner(id, duration_minutes, status, scheduled_at)')
-    .eq('jobs.status', 'completed');
-  if (range) query = query.gte('jobs.scheduled_at', range.start.toISOString()).lt('jobs.scheduled_at', range.end.toISOString());
-  const { data } = await query;
+  const { data } = await fetchAllRows(() => {
+    let query = supabase
+      .from('job_assignments')
+      .select('cleaner_id, paid_minutes, profiles(full_name), jobs!inner(id, duration_minutes, status, scheduled_at)')
+      .eq('jobs.status', 'completed');
+    if (range) query = query.gte('jobs.scheduled_at', range.start.toISOString()).lt('jobs.scheduled_at', range.end.toISOString());
+    return query.order('id');
+  });
 
   // A job's duration is split evenly across everyone assigned to it, so a
   // 2-hour job with 2 people counts as 1 hour each - not 2 hours each.
@@ -121,13 +127,13 @@ async function loadHours(range) {
 }
 
 async function loadJobs(range) {
-  let query = supabase
-    .from('jobs')
-    .select(`id, scheduled_at, status, duration_minutes, ${TRAINING_JOB_COLUMNS}, properties(address, clients(name)), job_assignments(profiles(full_name))`)
-    .order('scheduled_at', { ascending: false })
-    .limit(1000);
-  if (range) query = query.gte('scheduled_at', range.start.toISOString()).lt('scheduled_at', range.end.toISOString());
-  const { data } = await query;
+  const { data } = await fetchAllRows(() => {
+    let query = supabase
+      .from('jobs')
+      .select(`id, scheduled_at, status, duration_minutes, ${TRAINING_JOB_COLUMNS}, properties(address, clients(name)), job_assignments(profiles(full_name))`);
+    if (range) query = query.gte('scheduled_at', range.start.toISOString()).lt('scheduled_at', range.end.toISOString());
+    return query.order('scheduled_at', { ascending: false }).order('id');
+  });
 
   return {
     columns: [
@@ -189,10 +195,11 @@ async function loadProperties() {
 }
 
 async function loadTimeOff() {
-  const { data } = await supabase
+  const { data } = await fetchAllRows(() => supabase
     .from('time_off_requests')
     .select('id, type, start_date, end_date, hours, reason, status, profiles!time_off_requests_cleaner_id_fkey(full_name)')
-    .order('start_date', { ascending: false });
+    .order('start_date', { ascending: false })
+    .order('id'));
 
   return {
     columns: [

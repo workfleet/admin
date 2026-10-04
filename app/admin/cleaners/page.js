@@ -1,45 +1,16 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { withoutTestAccounts } from '../../../lib/testAccounts';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { fetchEmploymentTypes, flattenPrivate, isSubcontractor } from '../../../lib/profilePrivate';
 import { missingEssentials } from '../../../lib/staffDetails';
-import { assignmentMinutes } from '../../../lib/hoursWorked';
+import { EMPTY_STAFF_TOTALS, fetchStaffHoursTotals, HOLIDAY_ACCRUAL_RATE } from '../../../lib/hoursWorked';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
 import BackButton from '../../components/BackButton';
-
-const HOLIDAY_ACCRUAL_RATE = 0.1207; // UK statutory: 5.6 weeks / 46.4 working weeks
-
-// A job's duration is split evenly across everyone assigned to it - a
-// 2-hour job with 2 people counts as 1 hour each, not 2 hours each.
-function buildAssigneeCounts(assignmentRows) {
-  const counts = {};
-  assignmentRows.forEach((row) => {
-    if (!row.jobs) return;
-    counts[row.jobs.id] = (counts[row.jobs.id] || 0) + 1;
-  });
-  return counts;
-}
-
-function hoursWorked(cleanerId, assignmentRows, assigneeCounts) {
-  return assignmentRows
-    .filter((row) => row.cleaner_id === cleanerId && row.jobs?.status === 'completed')
-    .reduce((sum, row) => sum + assignmentMinutes(row, assigneeCounts), 0) / 60;
-}
-
-function jobCount(cleanerId, assignmentRows) {
-  return assignmentRows.filter((row) => row.cleaner_id === cleanerId).length;
-}
-
-function holidayHoursUsed(cleanerId, timeOffRequests) {
-  return timeOffRequests
-    .filter((t) => t.cleaner_id === cleanerId && t.type === 'holiday' && t.status === 'approved')
-    .reduce((sum, t) => sum + (t.hours || 0), 0);
-}
 
 function generatePassword() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
@@ -53,8 +24,10 @@ export default function AdminCleaners() {
   const confirm = useConfirm();
   const toast = useToast();
   const [cleaners, setCleaners] = useState([]);
-  const [jobs, setJobs] = useState([]);
-  const [timeOffRequests, setTimeOffRequests] = useState([]);
+  // Lifetime hours, jobs and holiday per person, summed in the database
+  // (staff_hours_totals, 0121) - the full assignment history is past what
+  // one request can return.
+  const [totals, setTotals] = useState({});
   const [detailsById, setDetailsById] = useState({});
   // Who has bank details on file (staff_bank_details, 0099) - just the ids,
   // never the numbers, which this list has no reason to hold.
@@ -94,10 +67,9 @@ export default function AdminCleaners() {
     const { data: ownProfile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
     if (ownProfile?.role !== 'admin') { router.push('/admin'); return; }
 
-    const [{ data: cleanersData }, { data: assignmentsData }, { data: timeOffData }, { data: detailsData }, { data: bankRows }] = await Promise.all([
+    const [{ data: cleanersData }, staffTotals, { data: detailsData }, { data: bankRows }] = await Promise.all([
       supabase.from('profiles').select('id, full_name, role, created_at, active, profile_private(holiday_adjustment_hours, deactivated_at)').in('role', ['cleaner', 'supervisor', 'inventory']).order('created_at'),
-      supabase.from('job_assignments').select('cleaner_id, paid_minutes, jobs(id, status, duration_minutes)'),
-      supabase.from('time_off_requests').select('cleaner_id, type, status, hours'),
+      fetchStaffHoursTotals(),
       // Enough of each person's details (staff_details, 0092) to show a
       // phone number on the card and flag who has not filled theirs in.
       supabase.from('staff_details').select('profile_id, phone, address, emergency_contact_name, emergency_contact_phone'),
@@ -111,8 +83,9 @@ export default function AdminCleaners() {
 
     setCleaners(withoutTestAccounts(cleanersData).map(flattenPrivate));
     setEmploymentTypes(await fetchEmploymentTypes());
-    setJobs(assignmentsData || []);
-    setTimeOffRequests(timeOffData || []);
+    // A zero balance on every card would read as fact, so say it failed.
+    if (staffTotals.error) toast.error('Could not load hours and holiday totals.');
+    setTotals(staffTotals.totals);
     setDetailsById(byId);
     setBankIds(new Set((bankRows || []).map((b) => b.profile_id)));
     setLoading(false);
@@ -185,8 +158,6 @@ export default function AdminCleaners() {
     setNewPassword('');
     setNewRole('cleaner');
   };
-
-  const assigneeCounts = useMemo(() => buildAssigneeCounts(jobs), [jobs]);
 
   // Removed accounts are deactivated (see api/admin/cleaners/[id]/remove),
   // so one flag covers both.
@@ -308,13 +279,12 @@ export default function AdminCleaners() {
 
       <div className="job-list">
         {[...current, ...(showFormer ? former : [])].map((c) => {
-          const worked = hoursWorked(c.id, jobs, assigneeCounts);
-          const accrued = worked * HOLIDAY_ACCRUAL_RATE + (c.holiday_adjustment_hours || 0);
-          const used = holidayHoursUsed(c.id, timeOffRequests);
-          const remaining = accrued - used;
+          const t = totals[c.id] || EMPTY_STAFF_TOTALS;
+          const accrued = t.workedHours * HOLIDAY_ACCRUAL_RATE + (c.holiday_adjustment_hours || 0);
+          const remaining = accrued - t.holidayApprovedHours;
           const isEditingAdjustment = editingAdjustmentId === c.id;
           const subcontractor = isSubcontractor(employmentTypes[c.id]);
-          const cJobCount = jobCount(c.id, jobs);
+          const cJobCount = t.assignmentCount;
           const cDetails = detailsById[c.id] || null;
           const missing = c.active === false ? [] : missingEssentials(cDetails);
 
@@ -359,7 +329,7 @@ export default function AdminCleaners() {
                   ) : (
                   <p className="job-time">
                     Holiday: {remaining.toFixed(1)} of {accrued.toFixed(1)} hours remaining
-                    {' '}(12.07% of {worked.toFixed(1)}h worked
+                    {' '}(12.07% of {t.workedHours.toFixed(1)}h worked
                     {c.holiday_adjustment_hours ? `, ${c.holiday_adjustment_hours > 0 ? '+' : ''}${c.holiday_adjustment_hours}h adjustment` : ''})
                     {' '}
                     <button

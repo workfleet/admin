@@ -1,5 +1,23 @@
 import { describe, it, expect } from 'vitest';
-import { jobShareHours, hoursWorked, formatHours, assignedJob, assignmentMinutes, bookedHoursBetween, HOLIDAY_ACCRUAL_RATE } from '../lib/hoursWorked';
+import { jobShareHours, hoursWorked, formatHours, assignedJob, assignmentMinutes, bookedHoursBetween, staffTotalsById, HOLIDAY_ACCRUAL_RATE } from '../lib/hoursWorked';
+
+describe('staffTotalsById', () => {
+  it('turns staff_hours_totals rows into hours per person', () => {
+    // PostgREST sends numeric columns as strings once they carry decimals;
+    // a string reaching `worked * rate + adjustment` would concatenate.
+    const byId = staffTotalsById([
+      { cleaner_id: 'a', worked_minutes: '90.5', assignment_count: 3, holiday_approved_hours: '7.5', holiday_pending_hours: 0 },
+      { cleaner_id: 'b', worked_minutes: 0, assignment_count: 0, holiday_approved_hours: null, holiday_pending_hours: '4' },
+    ]);
+    expect(byId.a).toEqual({ workedHours: 90.5 / 60, assignmentCount: 3, holidayApprovedHours: 7.5, holidayPendingHours: 0 });
+    expect(byId.b.holidayApprovedHours).toBe(0);
+    expect(byId.b.holidayPendingHours).toBe(4);
+  });
+
+  it('is empty, not a crash, when the call failed', () => {
+    expect(staffTotalsById(null)).toEqual({});
+  });
+});
 
 // These figures reach staff twice - as the totals on a cleaner's own hours
 // page, and as the holiday balance the rota lets them book against. They also
