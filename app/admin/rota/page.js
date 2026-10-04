@@ -174,6 +174,9 @@ export default function AdminRota() {
   const [range, setRange] = useState('week');
   const [dayIndex, setDayIndex] = useState(() => dayIndexOf(new Date()));
   const [jobs, setJobs] = useState([]);
+  // Approved holiday and unavailability touching the week on screen, so the
+  // by-cleaner sheet can show who is away before anyone tries to book them.
+  const [timeOff, setTimeOff] = useState([]);
   const [cleaners, setCleaners] = useState([]);
   const [clients, setClients] = useState([]);
   const [properties, setProperties] = useState([]);
@@ -685,6 +688,14 @@ export default function AdminRota() {
       .order('scheduled_at', { ascending: true });
 
     setJobs(data || []);
+
+    const { data: away } = await supabase
+      .from('time_off_requests')
+      .select('id, cleaner_id, type, start_date, end_date')
+      .eq('status', 'approved')
+      .lte('start_date', localDateString(addDays(weekStart, 6)))
+      .gte('end_date', localDateString(weekStart));
+    setTimeOff(away || []);
   };
 
   // Looks for another job already on this cleaner's schedule that overlaps
@@ -1680,6 +1691,11 @@ export default function AdminRota() {
     });
 
   const todayKey = new Date().toDateString();
+  // Days already gone are drawn quieter, so the eye lands on today and
+  // what is still to come. Missed jobs stay at full strength: they are
+  // the part of the past that still needs someone to act on it.
+  const startOfToday = new Date(new Date().setHours(0, 0, 0, 0));
+  const isPastDay = (day) => day < startOfToday;
   const isCurrentWeek = weekStart.getTime() === getMonday(new Date()).getTime();
   const isOnToday = isCurrentWeek && dayIndex === dayIndexOf(new Date());
 
@@ -2073,6 +2089,7 @@ export default function AdminRota() {
           rows={cleanerRows}
           weekDays={weekDays}
           todayKey={todayKey}
+          timeOff={timeOff}
           dayIndex={dayMode ? dayIndex : null}
           onOpenJob={setSelectedJob}
           onNewJob={startNewJob}
@@ -2095,6 +2112,7 @@ export default function AdminRota() {
                   className={[
                     'calendar-day-head',
                     isToday ? 'today' : '',
+                    isPastDay(day) ? 'past' : '',
                     i > 4 ? 'weekend' : '',
                   ].filter(Boolean).join(' ')}
                 >
@@ -2133,6 +2151,7 @@ export default function AdminRota() {
                 className={[
                   'calendar-day-col',
                   isToday ? 'today' : '',
+                  isPastDay(day) ? 'past' : '',
                   i > 4 ? 'weekend' : '',
                   drag && drag.dayIndex === i ? 'drag-over' : '',
                 ].filter(Boolean).join(' ')}

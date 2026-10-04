@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { coworkersOf, firstName, formatHours, freeGaps, formatGap, shareMinutes, UNASSIGNED_ROW_ID } from '../../../lib/rotaGrid';
 import { isTraining, jobHeadline, jobSubtitle } from '../../../lib/training';
+import { localDateString } from '../../../lib/localDate';
 
 // The rota with a row per cleaner. Across the week, each cell lists that
 // person's jobs for the day in order, so a gap on the sheet is a gap in
@@ -43,6 +44,12 @@ function endOf(job) {
   return new Date(new Date(job.scheduled_at).getTime() + (job.duration_minutes || 120) * 60000);
 }
 
+// Fri 3 Oct, or 3 – 10 Oct, for the hover text on a time-off block.
+function describeSpan(start, end) {
+  const fmt = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  return start === end ? fmt(start) : `${fmt(start)} – ${fmt(end)}`;
+}
+
 function statusWord(job) {
   if (job.status === 'missed') return 'Missed';
   if (job.status === 'in_progress') return 'On site';
@@ -51,7 +58,7 @@ function statusWord(job) {
 }
 
 // `dayIndex` null draws the whole week; a number draws that one day only.
-export default function CleanerWeekGrid({ rows, weekDays, todayKey, dayIndex = null, onOpenJob, onNewJob, onDropJob }) {
+export default function CleanerWeekGrid({ rows, weekDays, todayKey, timeOff = [], dayIndex = null, onOpenJob, onNewJob, onDropJob }) {
   // The cell under a dragged job, so it can light up as the place the job
   // will land. Only meaningful mid-drag; cleared on drop or leave.
   const [over, setOver] = useState(null);
@@ -59,10 +66,19 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, dayIndex = n
   const single = dayIndex !== null && dayIndex !== undefined;
   const shownDays = single ? [dayIndex] : weekDays.map((_, i) => i);
 
+  const startOfToday = new Date(new Date().setHours(0, 0, 0, 0));
   const dayClass = (i) => {
     const isToday = weekDays[i].toDateString() === todayKey;
-    return [isToday ? 'today' : '', i > 4 ? 'weekend' : ''].filter(Boolean).join(' ');
+    const isPast = weekDays[i] < startOfToday;
+    return [isToday ? 'today' : '', isPast ? 'past' : '', i > 4 ? 'weekend' : ''].filter(Boolean).join(' ');
   };
+
+  // Approved time off is a whole-day thing, so a day is "away" when its
+  // date falls inside the request. Dates compare as YYYY-MM-DD strings.
+  const dayKeys = weekDays.map(localDateString);
+  const awayOn = (cleanerId, i) => (cleanerId
+    ? timeOff.find((t) => t.cleaner_id === cleanerId && t.start_date <= dayKeys[i] && t.end_date >= dayKeys[i])
+    : null);
 
   const readDrag = (e) => {
     try {
@@ -155,7 +171,8 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, dayIndex = n
   // starts the new job form with the day, the person and the time filled.
   const renderDayItems = (list, row, i) => {
     const cleanerId = row.id === UNASSIGNED_ROW_ID ? null : row.id;
-    if (!cleanerId) return list.map((job) => renderChip(job, row));
+    // Someone who is away has no free time to offer, however empty the day.
+    if (!cleanerId || awayOn(cleanerId, i)) return list.map((job) => renderChip(job, row));
 
     const gaps = freeGaps(list).map((g) => ({ kind: 'gap', start: g.start, gap: g }));
     const jobs = list.map((job) => {
@@ -258,6 +275,22 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, dayIndex = n
                         if (payload) onDropJob({ ...payload, toRowId: row.id, dayIndex: i });
                       }}
                     >
+                      {(() => {
+                        const away = awayOn(cleanerId, i);
+                        if (!away) return null;
+                        const word = away.type === 'holiday' ? 'Holiday' : 'Unavailable';
+                        // Booked while away is a mistake worth saying out
+                        // loud, not just two things drawn in one cell.
+                        const clash = list.length > 0;
+                        return (
+                          <div
+                            className={`rota-timeoff ${away.type}${clash ? ' is-clash' : ''}`}
+                            title={`${firstName(row.name)}: ${word.toLowerCase()} ${describeSpan(away.start_date, away.end_date)}${clash ? ' - but still booked on a job this day' : ''}`}
+                          >
+                            {word}{clash ? ' · still booked' : ''}
+                          </div>
+                        );
+                      })()}
                       {single ? renderDayItems(list, row, i) : list.map((job) => renderChip(job, row))}
                       {(!isUnassigned || list.length === 0) && (
                         <button

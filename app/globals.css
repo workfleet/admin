@@ -3471,6 +3471,37 @@ a.btn-compact {
 .rota-grid-cell.today   { background: rgba(255, 107, 91, 0.05); }
 .rota-grid-row.is-unassigned .rota-grid-cell { background-color: rgba(216, 30, 52, 0.03); }
 
+/* Approved time off. Striped so it reads as "not available" rather than
+   as one more job, and in the azure family so it can't be mistaken for
+   the reds of a missed or uncovered job. */
+.rota-timeoff {
+  padding: 5px 7px;
+  border-radius: 5px;
+  font-family: var(--wf-data);
+  font-size: 12px;
+  font-weight: 600;
+  color: #1A56B8;
+  background: repeating-linear-gradient(-45deg, rgba(31, 111, 239, 0.10) 0 6px, rgba(31, 111, 239, 0.04) 6px 12px);
+  box-shadow: inset 0 0 0 1px rgba(31, 111, 239, 0.22);
+}
+.rota-timeoff.unavailable {
+  color: var(--ink-soft);
+  background: repeating-linear-gradient(-45deg, rgba(32, 35, 39, 0.08) 0 6px, rgba(32, 35, 39, 0.03) 6px 12px);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+.rota-timeoff.is-clash {
+  color: var(--wf-overdue);
+  box-shadow: inset 0 0 0 1.5px var(--wf-overdue);
+}
+
+/* Days already gone step back. Missed and uncovered jobs keep full
+   strength - they are the part of the past still waiting on someone. */
+.rota-grid-dayhead.past { opacity: 0.55; }
+.rota-grid-cell.past > :not(.missed):not(.unassigned) { opacity: 0.5; }
+.calendar-day-head.past { opacity: 0.55; }
+.calendar-day-col.past .calendar-job:not(.missed):not(.unassigned),
+.calendar-day-col.past .calendar-clash { opacity: 0.5; }
+
 .rota-grid-cell.drag-over {
   background: rgba(255, 107, 91, 0.12);
   box-shadow: inset 0 0 0 2px var(--wf-coral);
