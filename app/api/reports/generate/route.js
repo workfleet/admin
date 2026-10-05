@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { supabaseAdmin } from '../../../../lib/supabaseAdmin';
 import { REPORT_TEMPLATES, DEFAULT_TEMPLATE } from '../../../../lib/reportTemplates';
-import { checklistRooms, roomPromptSection, parseRooms, MAX_DETAILED_PHOTOS } from '../../../../lib/detailedReport';
+import { generateDetailedReport } from '../../../../lib/generateDetailedReport';
 
 // A report with eight photos attached can run past the platform's default
 // ten-second function limit; sixty is the most the current plan allows.
@@ -42,17 +42,12 @@ export async function POST(request) {
 
   const { data: tasks } = await supabaseAdmin.from('tasks').select('description, completed').eq('job_id', jobId);
   const { data: photoRows } = await supabaseAdmin
-    .from('photos').select('id, url').eq('job_id', jobId).order('created_at', { ascending: false })
-    .limit(template.roomByRoom ? MAX_DETAILED_PHOTOS : 8);
+    .from('photos').select('id, url').eq('job_id', jobId).order('created_at', { ascending: false }).limit(8);
 
-  // The room report points at photos by their number in this list, so the
-  // ids are kept in the same order as the image blocks sent.
   const imageBlocks = [];
-  const sentPhotoIds = [];
-  for (const photo of photoRows || []) {
+  for (const photo of template.roomByRoom ? [] : photoRows || []) {
     const { data: file } = await supabaseAdmin.storage.from('job-photos').download(photo.url);
     if (!file) continue;
-    sentPhotoIds.push(photo.id);
     const ext = photo.url.split('.').pop().toLowerCase();
     const mediaType = IMAGE_MEDIA_TYPES[ext] || 'image/jpeg';
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -86,14 +81,28 @@ export async function POST(request) {
       + '\n';
   }
 
-  let roomSection = '';
+  const templateKey = templateId && REPORT_TEMPLATES[templateId] ? templateId : DEFAULT_TEMPLATE;
+  const save = async (columns) => {
+    const { data: saved, error: saveError } = await supabaseAdmin
+      .from('job_reports')
+      .upsert(
+        { job_id: jobId, input_notes: notes || null, template: templateKey, generated_by: admin.id, rooms: null, ...columns },
+        { onConflict: 'job_id' }
+      )
+      .select()
+      .single();
+    if (saveError) return NextResponse.json({ error: 'save_failed', detail: saveError.message }, { status: 500 });
+    return NextResponse.json(saved);
+  };
+
+  // Room by room has its own prompt, model and photo handling, written for
+  // a letting agent: lib/generateDetailedReport.js.
   if (template.roomByRoom) {
-    const { data: checklistItems } = job.property_id
-      ? await supabaseAdmin.from('property_checklist_items').select('room, sort_order').eq('property_id', job.property_id).order('sort_order', { ascending: true })
-      : { data: [] };
-    roomSection = `
-${roomPromptSection({ rooms: checklistRooms(checklistItems), photoCount: imageBlocks.length })}
-`;
+    try {
+      return await save(await generateDetailedReport({ sb: supabaseAdmin, jobId, notes, photoCheckText }));
+    } catch (err) {
+      return NextResponse.json({ error: 'generation_failed', detail: err.message }, { status: 500 });
+    }
   }
 
   const promptText = `You are writing a professional property cleaning report for a cleaning company's internal records.
@@ -110,11 +119,10 @@ ${notes?.trim() || '(no notes provided)'}
 ${imageBlocks.length} photo(s) from the job are attached below.
 ${photoCheckText}
 ${template.promptInstructions}
-${roomSection}
 Be concise, specific, and professional. Do not invent details that aren't supported by the notes or visible in the photos - if there isn't much to say for a section, keep it brief rather than padding it out.
 
 Respond with ONLY valid JSON, no other text, in exactly this shape:
-{"summary": "...", "issues": "...", "suggestions": "..."${template.roomByRoom ? ', "rooms": [...]' : ''}}
+{"summary": "...", "issues": "...", "suggestions": "..."}
 
 - "summary" -> the "${template.sectionLabels.summary}" section.
 - "issues" -> the "${template.sectionLabels.issues}" section (write "None noted." if there's nothing to report).
@@ -126,7 +134,7 @@ Respond with ONLY valid JSON, no other text, in exactly this shape:
   try {
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-5',
-      max_tokens: template.roomByRoom ? 4096 : 1024,
+      max_tokens: 1024,
       messages: [
         {
           role: 'user',
@@ -143,25 +151,9 @@ Respond with ONLY valid JSON, no other text, in exactly this shape:
     return NextResponse.json({ error: 'generation_failed', detail: err.message }, { status: 500 });
   }
 
-  const { data: saved, error: saveError } = await supabaseAdmin
-    .from('job_reports')
-    .upsert(
-      {
-        job_id: jobId,
-        input_notes: notes || null,
-        summary: reportJson.summary || null,
-        issues: reportJson.issues || null,
-        suggestions: reportJson.suggestions || null,
-        rooms: template.roomByRoom ? parseRooms(reportJson.rooms, sentPhotoIds) : null,
-        template: templateId && REPORT_TEMPLATES[templateId] ? templateId : DEFAULT_TEMPLATE,
-        generated_by: admin.id,
-      },
-      { onConflict: 'job_id' }
-    )
-    .select()
-    .single();
-
-  if (saveError) return NextResponse.json({ error: 'save_failed', detail: saveError.message }, { status: 500 });
-
-  return NextResponse.json(saved);
+  return save({
+    summary: reportJson.summary || null,
+    issues: reportJson.issues || null,
+    suggestions: reportJson.suggestions || null,
+  });
 }

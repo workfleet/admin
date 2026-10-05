@@ -10,6 +10,7 @@ import { COMPANY } from '../../../../lib/companyBranding';
 import BackButton from '../../../components/BackButton';
 import ReportRooms from '../../../components/ReportRooms';
 import { downloadReportPdf } from '../../../../lib/downloadReportPdf';
+import { REPORT_TEMPLATES, DEFAULT_TEMPLATE } from '../../../../lib/reportTemplates';
 
 export default function ClientJobDetail() {
   const { id } = useParams();
@@ -65,7 +66,7 @@ export default function ClientJobDetail() {
 
     const { data: reportData } = await supabase
       .from('job_reports')
-      .select('summary, issues, suggestions, rooms, created_at')
+      .select('summary, issues, suggestions, rooms, template, created_at')
       .eq('job_id', id)
       .eq('visible_to_client', true)
       .maybeSingle();
@@ -132,6 +133,10 @@ export default function ClientJobDetail() {
   if (loading) return <div>Loading...</div>;
   if (!job) return <div>Job not found.</div>;
 
+  // The detailed report's headings say who each part is for ("For the
+  // landlord", "Tenant housekeeping"), so they come from its template.
+  const reportLabels = (REPORT_TEMPLATES[report?.template] || REPORT_TEMPLATES[DEFAULT_TEMPLATE]).sectionLabels;
+
   const staffNames = (job.job_assignments || []).map((a) => a.profiles?.full_name).filter(Boolean);
 
   return (
@@ -163,20 +168,20 @@ export default function ClientJobDetail() {
           <h2>Clean Report</h2>
           {report.summary && (
             <div style={{ marginBottom: 10 }}>
-              <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Summary</strong>
+              <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{reportLabels.summary}</strong>
               <p style={{ margin: '4px 0 0', fontSize: 14 }}>{report.summary}</p>
             </div>
           )}
           <ReportRooms rooms={report.rooms} photoUrls={Object.fromEntries(photos.map((p) => [p.id, p.signedUrl]))} />
           {report.issues && (
             <div style={{ marginBottom: 10 }}>
-              <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Issues Found</strong>
+              <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{reportLabels.issues}</strong>
               <p style={{ margin: '4px 0 0', fontSize: 14 }}>{report.issues}</p>
             </div>
           )}
           {report.suggestions && (
             <div>
-              <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Suggestions</strong>
+              <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{reportLabels.suggestions}</strong>
               <p style={{ margin: '4px 0 0', fontSize: 14 }}>{report.suggestions}</p>
             </div>
           )}

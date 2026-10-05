@@ -8,6 +8,14 @@ const nextConfig = {
   // so this leaves a way to build somewhere else: NEXT_DIST_DIR=.next-build.
   distDir: process.env.NEXT_DIST_DIR || '.next',
 
+  // The report PDF reads its fonts from disk at render time, so
+  // the serverless bundle has to carry them (lib/reportPdfDocument.js).
+  experimental: {
+    outputFileTracingIncludes: {
+      '/api/reports/pdf': ['./lib/fonts/**'],
+    },
+  },
+
   // Android fetches the site's app-association file from a fixed path it will
   // not negotiate on. `.well-known` is a hidden directory as far as the App
   // Router is concerned, so the handler lives at a routable path and this puts
