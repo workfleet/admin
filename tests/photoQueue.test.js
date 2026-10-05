@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { makePhotoPath } from '../lib/photoQueue';
+import { isAlreadyUploaded, makePhotoPath, withTimeout } from '../lib/photoQueue';
+import { isTransientError } from '../lib/clockQueue';
 
 // The storage path is the load-bearing pure part of the photo queue. It is
 // decided when the photo is taken, not when it uploads, which is what lets a
@@ -50,5 +51,33 @@ describe('makePhotoPath', () => {
     const path = makePhotoPath('job-1', TAKEN, undefined);
     expect(path.startsWith('job-1/')).toBe(true);
     expect(path.endsWith('.jpg')).toBe(true);
+  });
+});
+
+describe('withTimeout', () => {
+  it('passes a result through when it arrives in time', async () => {
+    await expect(withTimeout(Promise.resolve({ data: 1, error: null }), 50)).resolves.toEqual({ data: 1, error: null });
+  });
+
+  it('turns a hang into an error, which is what sends the photo to the queue', async () => {
+    const { error } = await withTimeout(new Promise(() => {}), 10);
+    expect(error).toBeInstanceOf(Error);
+    // No code, so isTransientError reads it as a connection problem and the
+    // job page falls back to its saved copy.
+    expect(isTransientError(error)).toBe(true);
+  });
+});
+
+describe('isAlreadyUploaded', () => {
+  it('recognises a replay finding its own file', () => {
+    expect(isAlreadyUploaded({ message: 'The resource already exists', status: 400 })).toBe(true);
+    expect(isAlreadyUploaded({ message: 'Duplicate', statusCode: '409' })).toBe(true);
+    expect(isAlreadyUploaded({ message: 'x', status: 409 })).toBe(true);
+  });
+
+  it('does not mistake a real failure for one', () => {
+    expect(isAlreadyUploaded(null)).toBe(false);
+    expect(isAlreadyUploaded(new Error('Failed to fetch'))).toBe(false);
+    expect(isAlreadyUploaded({ message: 'new row violates row-level security policy', status: 403 })).toBe(false);
   });
 });

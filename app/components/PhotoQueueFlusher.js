@@ -1,11 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ImageUp } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../lib/authGate';
 import { useToast } from './ToastProvider';
-import { pendingPhotos, removePhoto } from '../../lib/photoQueue';
+import { isAlreadyUploaded, pendingPhotos, removePhoto, withTimeout } from '../../lib/photoQueue';
 
 // Sends job photos taken while offline. See lib/photoQueue.js.
 //
@@ -21,19 +21,33 @@ export default function PhotoQueueFlusher() {
   const toast = useToast();
   const [pending, setPending] = useState(0);
 
-  const flush = useCallback(async () => {
+  // One flush at a time. Uploads on a weak signal can outlast the retry
+  // timer, and two flushes walking the same queue both found no photos row
+  // and both inserted one.
+  const running = useRef(false);
+
+  const flushQueue = useCallback(async () => {
     const queue = await pendingPhotos();
     setPending(queue.length);
     if (queue.length === 0) return;
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
 
     const session = await getSessionWithRetry();
-    if (!session) return;
+    if (!session || session.offline) return;
 
     let sent = 0;
+    let failedInARow = 0;
     for (const photo of queue) {
       const done = await flushPhoto(photo, session.user.id);
-      if (!done) break; // still no usable connection - keep the rest for later
+      if (!done) {
+        // Two in a row is the connection, not the photo - keep the rest for
+        // later. One on its own may be just that photo (a job taken off
+        // them, say), and must not hold back the ones behind it.
+        failedInARow += 1;
+        if (failedInARow >= 2) break;
+        continue;
+      }
+      failedInARow = 0;
       await removePhoto(photo.id);
       sent += 1;
     }
@@ -44,6 +58,16 @@ export default function PhotoQueueFlusher() {
       toast.success(sent === 1 ? 'Your photo has been sent.' : `${sent} photos have been sent.`);
     }
   }, [toast]);
+
+  const flush = useCallback(async () => {
+    if (running.current) return;
+    running.current = true;
+    try {
+      await flushQueue();
+    } finally {
+      running.current = false;
+    }
+  }, [flushQueue]);
 
   useEffect(() => {
     flush();
@@ -78,28 +102,29 @@ export default function PhotoQueueFlusher() {
 
 // True when the photo is dealt with and can leave the queue.
 async function flushPhoto(photo, userId) {
-  const { error: uploadError } = await supabase.storage
+  const { error: uploadError } = await withTimeout(supabase.storage
     .from('job-photos')
-    .upload(photo.path, photo.blob, { contentType: 'image/jpeg', upsert: true });
+    .upload(photo.path, photo.blob, { contentType: 'image/jpeg' }));
 
-  // upsert:true makes a replay harmless - the path was decided when the photo
-  // was taken, so re-uploading overwrites the same object with itself rather
-  // than adding a second copy under a new name.
-  if (uploadError) return false;
+  // The path was decided when the photo was taken, so a replay of one that
+  // already landed finds its own file there rather than adding a second copy
+  // under a new name - which counts as uploaded. See isAlreadyUploaded.
+  if (uploadError && !isAlreadyUploaded(uploadError)) return false;
 
   // The row may already exist from a flush that uploaded and then lost the
   // connection before inserting. The path is unique per photo, so finding one
   // means this is a replay and there is nothing left to do.
-  const { data: existing } = await supabase
+  const { data: existing, error: lookupError } = await withTimeout(supabase
     .from('photos')
     .select('id')
     .eq('url', photo.path)
-    .maybeSingle();
+    .maybeSingle());
+  if (lookupError) return false;
   if (existing) return true;
 
-  const { error: insertError } = await supabase
+  const { error: insertError } = await withTimeout(supabase
     .from('photos')
-    .insert({ job_id: photo.jobId, uploaded_by: userId, url: photo.path, caption: photo.caption });
+    .insert({ job_id: photo.jobId, uploaded_by: userId, url: photo.path, caption: photo.caption }));
 
   return !insertError;
 }

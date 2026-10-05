@@ -26,8 +26,9 @@ import {
 } from '../../../../lib/missedClockin';
 import { tooEarlyMessage, tooEarlyToCheckIn } from '../../../../lib/clockIn';
 import { shiftShortfall } from '../../../../lib/shortShift';
-import { enqueue, isCheckinPending, isTransientError, makeId, pendingCheckinFor } from '../../../../lib/clockQueue';
-import { makePhotoPath, pendingPhotos, queuePhoto } from '../../../../lib/photoQueue';
+import { enqueue, isCheckinPending, isTransientError, makeId, pendingCheckinFor, readQueue } from '../../../../lib/clockQueue';
+import { makePhotoPath, pendingPhotos, queuePhoto, withTimeout } from '../../../../lib/photoQueue';
+import { loadJobSnapshot, saveJobSnapshot, warmPageShell } from '../../../../lib/jobSnapshot';
 import { missingAreas } from '../../../../lib/photoCheck';
 import { isTraining, jobHeadline, jobSubtitle, trainerLine, TRAINING_JOB_COLUMNS } from '../../../../lib/training';
 import { useConfirm } from '../../../components/ConfirmProvider';
@@ -83,6 +84,10 @@ export default function JobDetailPage() {
   // page sat on 'Loading...' for good whenever the query failed or came
   // back empty - no signal, a job taken off them, an expired session.
   const [loadError, setLoadError] = useState(null);
+  // When the page is showing the copy kept on the phone (lib/jobSnapshot.js)
+  // because there was no signal: the time that copy was saved. Null online.
+  const [savedCopyAt, setSavedCopyAt] = useState(null);
+  const [canSnapshot, setCanSnapshot] = useState(false);
   const [tasks, setTasks] = useState([]);
   const [photos, setPhotos] = useState([]);
   const [checkin, setCheckin] = useState(null);
@@ -128,6 +133,24 @@ export default function JobDetailPage() {
   useEffect(() => {
     loadJob();
   }, [id]);
+
+  // Keeps the offline copy in step with what the cleaner does here, not just
+  // with the last load. A copy saved before they checked in would otherwise
+  // offer Check In again after an offline reload, and queue a second shift.
+  useEffect(() => {
+    if (!canSnapshot || !job || !userId) return;
+    saveJobSnapshot(id, userId, { job, tasks, checklistItems, checkin });
+  }, [canSnapshot, job, tasks, checklistItems, checkin, userId, id]);
+
+  // Showing the saved copy: swap it for the real thing once signal is back,
+  // so the cleaner is not left working from it after it stops being needed.
+  useEffect(() => {
+    if (!savedCopyAt) return undefined;
+    const onOnline = () => loadJob();
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedCopyAt]);
 
   // The status strip counts up while someone is on site, so it needs its own
   // clock. Every 30s is enough for a figure shown to the minute.
@@ -198,14 +221,17 @@ export default function JobDetailPage() {
     setUserId(session.user.id);
 
     setLoadError(null);
-    const { data: jobData, error: jobError } = await supabase
+    // Limited for the same reason as photo uploads: one bar of signal hangs
+    // rather than failing, and a hang never reaches the saved copy below.
+    const { data: jobData, error: jobError } = await withTimeout(supabase
       .from('jobs')
       .select(`id, scheduled_at, status, duration_minutes, property_id, ${TRAINING_JOB_COLUMNS}, properties(address, notes, access_details, client_access_notes, lat, lng, geofence_radius_m, clients(name))`)
       .eq('id', id)
-      .maybeSingle();
+      .maybeSingle(), 15 * 1000);
 
     if (jobError) {
       if (jobError.code === 'PGRST301') { router.push('/'); return; }
+      if (isTransientError(jobError) && await showSavedCopy(session.user.id)) return;
       setLoadError(isTransientError(jobError) ? 'offline' : 'failed');
       return;
     }
@@ -279,31 +305,19 @@ export default function JobDetailPage() {
       .order('scheduled_at', { referencedTable: 'jobs', ascending: true })
       .limit(1);
 
+    setSavedCopyAt(null);
     setJob(jobData);
     setTasks(taskData || []);
-    // Photos still waiting to upload are shown alongside the sent ones, and
-    // survive a reload because they live in IndexedDB rather than in state.
-    // A cleaner who cannot see the photo they just took will take it again.
-    const waiting = await pendingPhotos(id);
     setPhotos([
-      ...waiting.map((p) => ({
-        id: `pending:${p.path}`,
-        url: p.path,
-        created_at: p.takenAt,
-        signedUrl: URL.createObjectURL(p.blob),
-        pendingSync: true,
-      })).reverse(),
+      ...(await waitingPhotoTiles()),
       ...(await withSignedUrls(photoData || [])),
     ]);
-    // A check-in still sitting on the phone is the current clock state even
-    // though the server has no row for it yet. Showing Check In again here
-    // got a second shift queued for the same job.
-    const queued = checkinData ? null : pendingCheckinFor(id);
-    setCheckin(checkinData || (queued && {
-      id: queued.id, job_id: id, cleaner_id: session.user.id,
-      checked_in_at: queued.at, checked_out_at: queued.checkedOutAt,
-      lat: queued.lat, lng: queued.lng, pendingSync: true,
-    }));
+    setCheckin(checkinData || queuedCheckin(session.user.id));
+    // Only a load where the parts that make the page workable all arrived is
+    // worth keeping for offline: one that lost signal halfway would replace a
+    // good copy with an empty one. See the snapshot effect below.
+    setCanSnapshot(!!(taskData && checklistData));
+    warmPageShell(window.location.pathname);
     setExtensionRequests(extensionData || []);
     setChecklistItems(checklistData || []);
     setCoverOffer(offerData || null);
@@ -317,6 +331,52 @@ export default function JobDetailPage() {
       setClaimFrom(timeValue(from));
       setClaimTo(timeValue(to));
     }
+  };
+
+  // Photos still waiting to upload are shown alongside the sent ones, and
+  // survive a reload because they live in IndexedDB rather than in state.
+  // A cleaner who cannot see the photo they just took will take it again.
+  const waitingPhotoTiles = async () =>
+    (await pendingPhotos(id)).map((p) => ({
+      id: `pending:${p.path}`,
+      url: p.path,
+      created_at: p.takenAt,
+      signedUrl: URL.createObjectURL(p.blob),
+      pendingSync: true,
+    })).reverse();
+
+  // A check-in still sitting on the phone is the current clock state even
+  // though the server has no row for it yet. Showing Check In again here
+  // got a second shift queued for the same job.
+  const queuedCheckin = (cleanerId) => {
+    const queued = pendingCheckinFor(id);
+    return queued && {
+      id: queued.id, job_id: id, cleaner_id: cleanerId,
+      checked_in_at: queued.at, checked_out_at: queued.checkedOutAt,
+      lat: queued.lat, lng: queued.lng, pendingSync: true,
+    };
+  };
+
+  // No signal: show the copy kept the last time this job opened, so the
+  // photo button and the clock still work. Returns false when there is no
+  // copy, and the page falls back to the "no signal" message.
+  const showSavedCopy = async (cleanerId) => {
+    const snap = loadJobSnapshot(id, cleanerId);
+    if (!snap) return false;
+    let savedCheckin = snap.checkin;
+    // A check-out tapped offline against a check-in the server already has.
+    const queuedOut = savedCheckin && !savedCheckin.checked_out_at
+      && readQueue().find((e) => e.kind === 'check_out' && e.checkinId === savedCheckin.id && !e.failedAt);
+    if (queuedOut) savedCheckin = { ...savedCheckin, checked_out_at: queuedOut.at, pendingSync: true };
+
+    setSavedCopyAt(snap.savedAt);
+    setCanSnapshot(false);
+    setJob(snap.job);
+    setTasks(snap.tasks || []);
+    setChecklistItems(snap.checklistItems || []);
+    setPhotos(await waitingPhotoTiles());
+    setCheckin(savedCheckin || queuedCheckin(cleanerId));
+    return true;
   };
 
   // photos.url stores the job-photos storage path (not a public URL) since
@@ -923,15 +983,29 @@ export default function JobDetailPage() {
     const takenAt = new Date().toISOString();
     const fileName = makePhotoPath(id, takenAt, rawFile.name);
 
-    const { error: uploadError } = await supabase.storage
-      .from('job-photos')
-      .upload(fileName, file, { contentType: 'image/jpeg' });
-
     // "Check your signal and try again" was no use to somebody who has no
     // signal and is about to drive away: the photo could only be taken while
     // they were standing in front of the room. It is kept instead, and sent
-    // when the phone next has a connection.
-    if (uploadError) {
+    // when the phone next has a connection. That covers no signal at all,
+    // one bar that never finishes (the timeout), and a file that landed but
+    // whose photos row did not - the queue finds the file and writes the row.
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    let photoRow = null;
+    if (!offline) {
+      const { error: uploadError } = await withTimeout(supabase.storage
+        .from('job-photos')
+        .upload(fileName, file, { contentType: 'image/jpeg' }));
+      if (!uploadError) {
+        const { data } = await withTimeout(supabase
+          .from('photos')
+          .insert({ job_id: id, uploaded_by: userId, url: fileName })
+          .select()
+          .single());
+        photoRow = data || null;
+      }
+    }
+
+    if (!photoRow) {
       const queued = await queuePhoto({ jobId: id, blob: file, path: fileName, takenAt });
       setUploading(false);
       if (!queued) {
@@ -948,12 +1022,6 @@ export default function JobDetailPage() {
       toast.success('No signal — that photo is saved on your phone and will send itself.');
       return;
     }
-
-    const { data: photoRow } = await supabase
-      .from('photos')
-      .insert({ job_id: id, uploaded_by: userId, url: fileName })
-      .select()
-      .single();
 
     const [withUrl] = await withSignedUrls([photoRow]);
     setPhotos((prev) => [withUrl, ...prev]);
@@ -1064,6 +1132,17 @@ export default function JobDetailPage() {
       </div>
 
       <div className="visit-body">
+        {savedCopyAt && (
+          <div role="status" className="queue-banner is-photos" style={{ marginBottom: 12 }}>
+            <span>
+              No signal — showing this job as it was at {clock(savedCopyAt)}
+              {new Date(savedCopyAt).toDateString() === new Date().toDateString()
+                ? '' : ` on ${new Date(savedCopyAt).toLocaleDateString([], { day: 'numeric', month: 'short' })}`}.
+              {' '}Photos and clock-ins still save on your phone and send when you’re back in range.
+            </span>
+          </div>
+        )}
+
         {/* ---- State 1: not checked in yet ---- */}
         {beforeCheckIn && (
           <>
