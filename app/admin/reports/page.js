@@ -7,6 +7,8 @@ import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { REPORT_TEMPLATES, DEFAULT_TEMPLATE } from '../../../lib/reportTemplates';
 import BackButton from '../../components/BackButton';
+import JobPhotoGrid from '../../components/JobPhotoGrid';
+import { photoNamePrefix } from '../../../lib/photoDownload';
 
 export default function AdminReports() {
   const router = useRouter();
@@ -185,17 +187,10 @@ export default function AdminReports() {
                   <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                     Photos
                   </strong>
-                  <div className="photo-grid">
-                    {jobPhotos.map((p) => (
-                      <img
-                        key={p.id}
-                        src={p.signedUrl}
-                        alt={p.caption || 'job photo'}
-                        onClick={() => window.open(p.signedUrl, '_blank', 'noopener,noreferrer')}
-                        style={{ cursor: 'pointer' }}
-                      />
-                    ))}
-                  </div>
+                  <JobPhotoGrid
+                    photos={jobPhotos}
+                    namePrefix={photoNamePrefix(job.properties?.address, job.scheduled_at)}
+                  />
                 </div>
               )}
 

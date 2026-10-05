@@ -16,6 +16,8 @@ import AddressAutocomplete from '../../components/AddressAutocomplete';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
 import BackButton from '../../components/BackButton';
+import JobPhotoGrid from '../../components/JobPhotoGrid';
+import { photoNamePrefix } from '../../../lib/photoDownload';
 import { groupOverlappingJobs, assignLanes, abbreviateName } from '../../../lib/jobOverlap';
 import { findTightTurnarounds, describeTurnaround } from '../../../lib/travelTime';
 import { buildCleanerRows, formatHours, shareMinutes, UNASSIGNED_ROW_ID } from '../../../lib/rotaGrid';
@@ -2465,17 +2467,10 @@ export default function AdminRota() {
           {jobPhotos.length > 0 && (
             <div style={{ marginTop: 16 }}>
               <label>Photos</label>
-              <div className="photo-grid">
-                {jobPhotos.map((p) => (
-                  <img
-                    key={p.id}
-                    src={p.signedUrl}
-                    alt={p.caption || 'job photo'}
-                    onClick={() => window.open(p.signedUrl, '_blank', 'noopener,noreferrer')}
-                    style={{ cursor: 'pointer' }}
-                  />
-                ))}
-              </div>
+              <JobPhotoGrid
+                photos={jobPhotos}
+                namePrefix={photoNamePrefix(selectedJob.properties?.address, selectedJob.scheduled_at)}
+              />
               {jobPhotoCheck?.result?.areas?.length > 0 && (
                 <div style={{ marginTop: 10, fontSize: 13 }}>
                   <div style={{ fontWeight: 600, marginBottom: 4 }}>
