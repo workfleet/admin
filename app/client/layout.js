@@ -3,14 +3,17 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, History, MessageCircle, FileText, HelpCircle, Settings, Phone, LogOut, Menu, X } from 'lucide-react';
+import { LayoutDashboard, History, MessageCircle, FileText, HelpCircle, Settings, Phone, LogOut, Menu, X, ClipboardList } from 'lucide-react';
 import EnablePush from '../components/EnablePush';
 import { getSessionAndProfile } from '../../lib/authGate';
+import { supabase } from '../../lib/supabaseClient';
 import { signOutAndClearPresence } from '../../lib/signOut';
 
 const NAV_ITEMS = [
   { href: '/client', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/client/history', label: 'History', icon: History },
+  // Only for clients with detailed reports switched on (0122).
+  { href: '/client/reports', label: 'Reports', icon: ClipboardList, detailedOnly: true },
   { href: '/client/documents', label: 'Documents', icon: FileText },
   { href: '/client/messages', label: 'Messages', icon: MessageCircle },
   { href: '/client/contacts', label: 'Contacts', icon: Phone },
@@ -24,6 +27,7 @@ export default function ClientLayout({ children }) {
   const [authorized, setAuthorized] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [detailedReports, setDetailedReports] = useState(false);
 
   useEffect(() => {
     checkAccess();
@@ -45,6 +49,14 @@ export default function ClientLayout({ children }) {
     if (profile?.role === 'cleaner') { router.push('/cleaner'); return; }
 
     setAuthorized(true);
+
+    // Not part of the access check: if this read fails the menu just
+    // goes without the Reports link.
+    const { data: own } = await supabase.from('profiles').select('client_id').eq('id', session.user.id).single();
+    if (own?.client_id) {
+      const { data: client } = await supabase.from('clients').select('detailed_reports').eq('id', own.client_id).single();
+      setDetailedReports(!!client?.detailed_reports);
+    }
   };
 
   const logout = async () => {
@@ -95,7 +107,7 @@ export default function ClientLayout({ children }) {
         </div>
 
         <nav className="sidebar-nav">
-          {NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.filter((item) => !item.detailedOnly || detailedReports).map((item) => {
             const active = pathname === item.href;
             const Icon = item.icon;
             return (

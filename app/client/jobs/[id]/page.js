@@ -8,6 +8,8 @@ import { supabase } from '../../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../../lib/authGate';
 import { COMPANY } from '../../../../lib/companyBranding';
 import BackButton from '../../../components/BackButton';
+import ReportRooms from '../../../components/ReportRooms';
+import { downloadReportPdf } from '../../../../lib/downloadReportPdf';
 
 export default function ClientJobDetail() {
   const { id } = useParams();
@@ -25,6 +27,8 @@ export default function ClientJobDetail() {
   const [submittingRating, setSubmittingRating] = useState(false);
 
   const [report, setReport] = useState(null);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
 
   const [myReschedule, setMyReschedule] = useState(null);
   const [showRescheduleForm, setShowRescheduleForm] = useState(false);
@@ -61,7 +65,7 @@ export default function ClientJobDetail() {
 
     const { data: reportData } = await supabase
       .from('job_reports')
-      .select('summary, issues, suggestions, created_at')
+      .select('summary, issues, suggestions, rooms, created_at')
       .eq('job_id', id)
       .eq('visible_to_client', true)
       .maybeSingle();
@@ -117,6 +121,14 @@ export default function ClientJobDetail() {
     }
   };
 
+  const downloadPdf = async () => {
+    setDownloading(true);
+    setDownloadError('');
+    const failure = await downloadReportPdf({ job: id });
+    setDownloading(false);
+    if (failure) setDownloadError(failure);
+  };
+
   if (loading) return <div>Loading...</div>;
   if (!job) return <div>Job not found.</div>;
 
@@ -155,6 +167,7 @@ export default function ClientJobDetail() {
               <p style={{ margin: '4px 0 0', fontSize: 14 }}>{report.summary}</p>
             </div>
           )}
+          <ReportRooms rooms={report.rooms} photoUrls={Object.fromEntries(photos.map((p) => [p.id, p.signedUrl]))} />
           {report.issues && (
             <div style={{ marginBottom: 10 }}>
               <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Issues Found</strong>
@@ -167,6 +180,10 @@ export default function ClientJobDetail() {
               <p style={{ margin: '4px 0 0', fontSize: 14 }}>{report.suggestions}</p>
             </div>
           )}
+          <button type="button" className="btn-secondary" onClick={downloadPdf} disabled={downloading} style={{ marginTop: 12 }} title="Save this report, with its photos, as a PDF">
+            {downloading ? 'Making PDF...' : 'Download PDF'}
+          </button>
+          {downloadError && <p style={{ color: 'var(--wf-overdue)', fontSize: 13, marginTop: 8 }}>{downloadError}</p>}
         </div>
       )}
 

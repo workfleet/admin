@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Mic, Square } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
@@ -9,6 +10,8 @@ import { REPORT_TEMPLATES, DEFAULT_TEMPLATE } from '../../../lib/reportTemplates
 import BackButton from '../../components/BackButton';
 import JobPhotoGrid from '../../components/JobPhotoGrid';
 import { photoNamePrefix } from '../../../lib/photoDownload';
+import ReportRooms from '../../components/ReportRooms';
+import { downloadReportPdf } from '../../../lib/downloadReportPdf';
 
 export default function AdminReports() {
   const router = useRouter();
@@ -25,6 +28,7 @@ export default function AdminReports() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
   const [recording, setRecording] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     load();
@@ -38,7 +42,7 @@ export default function AdminReports() {
     // rota's future scheduled jobs take every slot, hiding all the real ones.
     const { data } = await supabase
       .from('jobs')
-      .select('id, scheduled_at, status, properties(address), job_reports(id, summary, issues, suggestions, input_notes, template, created_at, visible_to_client)')
+      .select('id, scheduled_at, status, properties(address, clients(detailed_reports)), job_reports(id, summary, issues, suggestions, rooms, input_notes, template, created_at, visible_to_client)')
       .in('status', ['in_progress', 'completed'])
       .order('scheduled_at', { ascending: false })
       .limit(200);
@@ -55,7 +59,10 @@ export default function AdminReports() {
     setExpandedJobId(isOpen ? null : job.id);
     setEditingReport(false);
     setNotes(isOpen ? '' : existing?.input_notes || '');
-    setTemplate(isOpen ? DEFAULT_TEMPLATE : existing?.template || DEFAULT_TEMPLATE);
+    // Clients with detailed reports switched on (TKR) start on the
+    // room-by-room template.
+    const startTemplate = job.properties?.clients?.detailed_reports ? 'detailed' : DEFAULT_TEMPLATE;
+    setTemplate(isOpen ? DEFAULT_TEMPLATE : existing?.template || startTemplate);
     setError('');
     setJobPhotos([]);
 
@@ -106,6 +113,14 @@ export default function AdminReports() {
     setJobs((prev) => prev.map((j) => (
       j.id === job.id ? { ...j, job_reports: [{ ...report, visible_to_client: visible }] } : j
     )));
+  };
+
+  const downloadPdf = async (jobId) => {
+    setDownloading(true);
+    setError('');
+    const failure = await downloadReportPdf({ job: jobId });
+    setDownloading(false);
+    if (failure) setError(failure);
   };
 
   const toggleRecording = () => {
@@ -161,6 +176,9 @@ export default function AdminReports() {
           <h1>Reports</h1>
           <p className="page-subtitle">AI-generated job reports — visible to admins only</p>
         </div>
+        <Link href="/admin/reports/monthly">
+          <button type="button" className="btn-secondary" title="A month of visits at one property, for the client">Monthly reports</button>
+        </Link>
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
@@ -230,6 +248,10 @@ export default function AdminReports() {
                       </strong>
                       <p style={{ margin: '4px 0 0' }}>{report.summary}</p>
                     </div>
+                    <ReportRooms
+                      rooms={report.rooms}
+                      photoUrls={Object.fromEntries(jobPhotos.map((p) => [p.id, p.signedUrl]))}
+                    />
                     <div style={{ marginBottom: 10 }}>
                       <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                         {(REPORT_TEMPLATES[report.template] || REPORT_TEMPLATES[DEFAULT_TEMPLATE]).sectionLabels.issues}
@@ -251,9 +273,15 @@ export default function AdminReports() {
                       />
                       Add to client portal
                     </label>
-                    <button className="btn-secondary" onClick={() => setEditingReport(true)} title="Write it again from new notes - the current report is replaced">
-                      Regenerate
-                    </button>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button className="btn-secondary" onClick={() => setEditingReport(true)} title="Write it again from new notes - the current report is replaced">
+                        Regenerate
+                      </button>
+                      <button className="btn-secondary" onClick={() => downloadPdf(job.id)} disabled={downloading} title="Save this report, with its photos, as a PDF">
+                        {downloading ? 'Making PDF...' : 'Download PDF'}
+                      </button>
+                    </div>
+                    {error && <p style={{ color: 'var(--wf-overdue)', fontSize: 13, marginTop: 8 }}>{error}</p>}
                   </div>
                 ) : (
                   <>
