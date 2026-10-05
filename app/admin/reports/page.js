@@ -15,6 +15,7 @@ export default function AdminReports() {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [segment, setSegment] = useState('todo');
 
   const [expandedJobId, setExpandedJobId] = useState(null);
   const [jobPhotos, setJobPhotos] = useState([]);
@@ -33,11 +34,14 @@ export default function AdminReports() {
     const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
+    // Only jobs that have happened. Ordering newest-first without this let the
+    // rota's future scheduled jobs take every slot, hiding all the real ones.
     const { data } = await supabase
       .from('jobs')
       .select('id, scheduled_at, status, properties(address), job_reports(id, summary, issues, suggestions, input_notes, template, created_at, visible_to_client)')
+      .in('status', ['in_progress', 'completed'])
       .order('scheduled_at', { ascending: false })
-      .limit(100);
+      .limit(200);
 
     setJobs(data || []);
     setLoading(false);
@@ -136,9 +140,16 @@ export default function AdminReports() {
     setRecording(true);
   };
 
-  const filteredJobs = jobs.filter((j) =>
+  const segments = {
+    todo: { label: 'Needs a report', match: (j) => !reportFor(j) },
+    done: { label: 'Report written', match: (j) => !!reportFor(j) },
+    all: { label: 'All', match: () => true },
+  };
+
+  const searchedJobs = jobs.filter((j) =>
     !search.trim() || (j.properties?.address || '').toLowerCase().includes(search.trim().toLowerCase())
   );
+  const filteredJobs = searchedJobs.filter(segments[segment].match);
 
   if (loading) return <div className="page-inner">Loading...</div>;
 
@@ -159,6 +170,19 @@ export default function AdminReports() {
           placeholder="Search by address..."
           style={{ marginBottom: 0 }}
         />
+      </div>
+
+      <div className="segmented" style={{ marginBottom: 16 }}>
+        {Object.entries(segments).map(([key, s]) => (
+          <button
+            key={key}
+            type="button"
+            className={`segmented-btn${segment === key ? ' is-active' : ''}`}
+            onClick={() => setSegment(key)}
+          >
+            {s.label} ({searchedJobs.filter(s.match).length})
+          </button>
+        ))}
       </div>
 
       {filteredJobs.length === 0 && <p className="empty-state">No jobs found.</p>}
