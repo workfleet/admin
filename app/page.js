@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
 import { signOutAndClearPresence } from '../lib/signOut';
-import { getSessionAndProfile } from '../lib/authGate';
+import { getSessionAndProfile, loginErrorMessage } from '../lib/authGate';
 import Logo from './components/Logo';
 
 // The hard-navigation below depends on Supabase actually having written
@@ -38,12 +38,13 @@ export default function LoginPage() {
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Through the shared gate rather than a bare getSession(): the app icon
+  // opens here, and on a weak signal the token refresh fails and getSession()
+  // hands back null even though the cleaner never signed out. The gate keeps a
+  // remembered sign-in in the app in that case instead of stranding them on a
+  // login form that cannot reach the server either.
   useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) await redirectByRole();
-    };
-    checkSession();
+    redirectByRole();
   }, []);
 
   // No longer takes a userId - re-fetches session itself via
@@ -109,7 +110,7 @@ export default function LoginPage() {
     setLoading(false);
 
     if (loginError) {
-      setError(loginError.message);
+      setError(loginErrorMessage(loginError));
       return;
     }
 
