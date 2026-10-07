@@ -474,8 +474,8 @@ export default function JobDetailPage() {
 
     // Still clocked into a shift that is not over yet. Ben's wrong tap was
     // made while he was on Saturday's shift, and this is the question that
-    // would have caught it even inside the hour before a start. A shift
-    // whose time has already run out does not block - that is somebody who
+    // catches a wrong tap on the right day, which the day check cannot. A
+    // shift whose time has already run out does not block - that is somebody who
     // forgot to clock out, and reconcile_job_statuses() closes it for them.
     const { data: openShifts } = await supabase
       .from('checkins')
