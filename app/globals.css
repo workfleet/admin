@@ -1447,8 +1447,10 @@ a.rota-figure:hover b { text-decoration: underline; text-underline-offset: 3px; 
 }
 .dash-job-state.is-onsite { color: var(--wf-verified-ink); }
 .dash-job-state.is-onsite .dash-state-dot { background: var(--wf-verified); box-shadow: 0 0 0 3px rgba(52, 199, 123, 0.25); }
+.dash-job-state.is-held,
 .dash-job-state.is-missed,
 .dash-job-state.is-late { color: var(--wf-overdue); }
+.dash-job-state.is-held .dash-state-dot,
 .dash-job-state.is-missed .dash-state-dot,
 .dash-job-state.is-late .dash-state-dot { background: var(--wf-overdue); box-shadow: none; }
 .dash-job-state.is-done .dash-state-dot,

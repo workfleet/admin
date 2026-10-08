@@ -305,7 +305,7 @@ export default function AdminDashboard() {
       // rota hands them out and a person is one colour on both pages.
       supabase.from('profiles').select('id, full_name').in('role', BOOKABLE_ROLES).eq('active', true).order('full_name'),
       supabase.from('jobs')
-        .select('id, scheduled_at, status, duration_minutes, properties(address, clients(name)), job_assignments(cleaner_id, profiles(full_name))')
+        .select('id, scheduled_at, status, duration_minutes, hours_review_needed, properties(address, clients(name)), job_assignments(cleaner_id, profiles(full_name))')
         .gte('scheduled_at', startOfDay.toISOString()).lt('scheduled_at', endOfDay.toISOString())
         .order('scheduled_at', { ascending: true }),
       supabase.from('jobs')
@@ -555,7 +555,11 @@ export default function AdminDashboard() {
   const timeGreeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 
   const now = Date.now();
-  const onSiteJobs = todaysJobs.filter((j) => j.status === 'in_progress');
+  // A shift that clocked out well short of its booking is held at
+  // in_progress for the office to confirm (0079), so status alone can't say
+  // who is on site. Held and nobody clocked back in means they've gone.
+  const heldJobs = todaysJobs.filter((j) => j.status === 'in_progress' && j.hours_review_needed && !checkinByJob[j.id]);
+  const onSiteJobs = todaysJobs.filter((j) => j.status === 'in_progress' && !heldJobs.includes(j));
   const missedJobs = todaysJobs.filter((j) => j.status === 'missed');
   const doneJobs = todaysJobs.filter((j) => j.status === 'completed');
   const comingUp = todaysJobs.filter((j) => j.status === 'scheduled');
@@ -591,7 +595,11 @@ export default function AdminDashboard() {
     if (state === 'onsite' && checkinByJob[job.id]) detail.push(`clocked in ${clockOf(checkinByJob[job.id])}`);
     if (state === 'onsite') detail.push(`until ${clockOf(new Date(end))}`);
     return (
-      <div key={job.id} className={`dash-job is-${state}`} onClick={() => router.push(`/admin/rota?job=${job.id}`)}>
+      <div
+        key={job.id}
+        className={`dash-job is-${state}`}
+        onClick={() => router.push(state === 'held' ? '/admin/requests?section=shortShifts' : `/admin/rota?job=${job.id}`)}
+      >
         <span className="dash-job-time">{clockOf(job.scheduled_at)}</span>
         <div className="dash-job-main">
           <div className="dash-job-place">{title}</div>
@@ -615,6 +623,7 @@ export default function AdminDashboard() {
           <span className={`dash-job-state is-${late ? 'late' : state}`}>
             <span className="dash-state-dot" />
             {state === 'onsite' ? 'On site'
+              : state === 'held' ? 'Left early · check hours'
               : state === 'missed' ? 'Missed'
                 : state === 'done' ? 'Done'
                 : late ? `Not clocked in · ${describeGap(now - start)} late`
@@ -691,6 +700,13 @@ export default function AdminDashboard() {
               <div className="dash-group">
                 <div className="dash-group-label is-onsite">On site now</div>
                 {onSiteJobs.map((job) => renderTodayJob(job, 'onsite'))}
+              </div>
+            )}
+
+            {heldJobs.length > 0 && (
+              <div className="dash-group">
+                <div className="dash-group-label is-urgent">Hours to check</div>
+                {heldJobs.map((job) => renderTodayJob(job, 'held'))}
               </div>
             )}
 
