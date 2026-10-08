@@ -277,6 +277,10 @@ export default function AdminRota() {
   const [editAddress, setEditAddress] = useState('');
   const [editAddressCoords, setEditAddressCoords] = useState(null);
   const [savingJob, setSavingJob] = useState(false);
+  // True while Add Job is checking clashes and booking, which can take a
+  // few seconds for a long series - the button says so and can't be
+  // pressed twice into duplicate shifts.
+  const [creatingJob, setCreatingJob] = useState(false);
   const [jobSaveError, setJobSaveError] = useState('');
   const [addCleanerSelection, setAddCleanerSelection] = useState('');
   // The one person on the open job whose hours are being typed, and the
@@ -1122,6 +1126,20 @@ export default function AdminRota() {
 
   const createJob = async (e) => {
     e.preventDefault();
+    if (creatingJob) return;
+    setCreatingJob(true);
+    try {
+      await bookNewJob();
+    } finally {
+      setCreatingJob(false);
+    }
+  };
+
+  // Says what happened either way. The form used to close silently on
+  // success and on failure alike, and shifts booked for another week
+  // never appeared on the one being looked at - so a booking that worked
+  // looked exactly like one that hadn't.
+  const bookNewJob = async () => {
     const training = formKind === 'training';
     if (training) {
       if (!trainingTitle.trim() || !jobDate || !jobHour) return;
@@ -1216,7 +1234,10 @@ export default function AdminRota() {
         .select('id, client_id, address, lat, lng')
         .single();
 
-      if (!newProperty) return;
+      if (!newProperty) {
+        toast.error('Could not save the new address, so nothing was booked. Try again.');
+        return;
+      }
       property = newProperty;
       setProperties((prev) => [...prev, newProperty]);
     }
@@ -1236,7 +1257,13 @@ export default function AdminRota() {
         })
         .select('id')
         .single();
-      seriesId = seriesRow?.id || null;
+      // Without the series the shifts would go on as unlinked one-offs that
+      // "Edit series" and "Delete future" can't reach, so stop here.
+      if (!seriesRow) {
+        toast.error('Could not set up the repeat, so nothing was booked. Try again.');
+        return;
+      }
+      seriesId = seriesRow.id;
     }
 
     const { data: insertedJobs } = await supabase
@@ -1257,51 +1284,84 @@ export default function AdminRota() {
       })))
       .select(`id, scheduled_at, status, duration_minutes, series_id, ${TRAINING_JOB_COLUMNS}, properties(address, clients(name))`);
 
-    if (insertedJobs && insertedJobs.length > 0) {
-      const assignmentsByJob = {};
-      if (formCleanerIds.length > 0) {
-        const { data: { session: bookedBy } } = await supabase.auth.getSession();
-        const handFields = (cid) => (handMinutes
-          ? {
-            paid_minutes: handMinutes[cid],
-            paid_minutes_reason: 'Hours set when the job was booked',
-            paid_minutes_set_by: bookedBy?.user?.id ?? null,
-            paid_minutes_set_at: new Date().toISOString(),
-          }
-          : {});
-        const { data: allAssignments } = await supabase
-          .from('job_assignments')
-          .insert(insertedJobs.flatMap((j) => formCleanerIds.map((cid) => ({ job_id: j.id, cleaner_id: cid, ...handFields(cid) }))))
-          .select('job_id, cleaner_id, paid_minutes, profiles(full_name)');
+    // Nothing booked: say so and leave the form filled in to try again.
+    if (!insertedJobs || insertedJobs.length === 0) {
+      if (seriesId) await supabase.from('job_series').delete().eq('id', seriesId);
+      toast.error(`Could not book the ${training ? 'training' : 'shift'}${occurrenceDates.length === 1 ? '' : 's'}. Nothing was saved - try again.`);
+      return;
+    }
 
-        (allAssignments || []).forEach((a) => {
-          if (!assignmentsByJob[a.job_id]) assignmentsByJob[a.job_id] = [];
-          assignmentsByJob[a.job_id].push(a);
-        });
-      }
+    const assignmentsByJob = {};
+    let assignmentsFailed = false;
+    if (formCleanerIds.length > 0) {
+      const { data: { session: bookedBy } } = await supabase.auth.getSession();
+      const handFields = (cid) => (handMinutes
+        ? {
+          paid_minutes: handMinutes[cid],
+          paid_minutes_reason: 'Hours set when the job was booked',
+          paid_minutes_set_by: bookedBy?.user?.id ?? null,
+          paid_minutes_set_at: new Date().toISOString(),
+        }
+        : {});
+      const { data: allAssignments, error: assignError } = await supabase
+        .from('job_assignments')
+        .insert(insertedJobs.flatMap((j) => formCleanerIds.map((cid) => ({ job_id: j.id, cleaner_id: cid, ...handFields(cid) }))))
+        .select('job_id, cleaner_id, paid_minutes, profiles(full_name)');
+      assignmentsFailed = !!assignError;
 
-      const fullJobs = insertedJobs.map((j) => ({ ...j, job_assignments: assignmentsByJob[j.id] || [] }));
-      const inWeek = fullJobs.filter((j) => {
-        const jd = new Date(j.scheduled_at);
-        return jd >= weekStart && jd < addDays(weekStart, 7);
+      (allAssignments || []).forEach((a) => {
+        if (!assignmentsByJob[a.job_id]) assignmentsByJob[a.job_id] = [];
+        assignmentsByJob[a.job_id].push(a);
       });
-      if (inWeek.length > 0) {
-        setJobs((prev) => [...prev, ...inWeek].sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at)));
-      }
+    }
 
-      // One notification per cleaner for the series, not one per
-      // occurrence - avoids spamming e.g. 8 "new shift" alerts at once.
+    // Shifts booked for another week would never show on this one, so go
+    // to the week of the first of them; changing week reloads the rota.
+    const sorted = insertedJobs
+      .map((j) => ({ ...j, job_assignments: assignmentsByJob[j.id] || [] }))
+      .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
+    const firstBooked = new Date(sorted[0].scheduled_at);
+    const inWeek = sorted.filter((j) => {
+      const jd = new Date(j.scheduled_at);
+      return jd >= weekStart && jd < addDays(weekStart, 7);
+    });
+    if (inWeek.length > 0) {
+      setJobs((prev) => [...prev, ...inWeek].sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at)));
+    } else {
+      setWeekStart(getMonday(firstBooked));
+      setDayIndex(dayIndexOf(firstBooked));
+    }
+
+    // One notification per cleaner for the series, not one per
+    // occurrence - avoids spamming e.g. 8 "new shift" alerts at once.
+    if (!assignmentsFailed) {
       const firstJob = insertedJobs[0];
       formCleanerIds.forEach((cid) => {
         notify({ type: 'shift_assigned', cleanerId: cid, address: jobHeadline(firstJob), scheduledAt: firstJob.scheduled_at });
       });
+    }
 
-      const template = templates.find((t) => t.id === formTemplateId);
-      if (template && template.job_template_items.length > 0) {
-        await supabase.from('tasks').insert(
-          insertedJobs.flatMap((j) => template.job_template_items.map((item) => ({ job_id: j.id, description: item.description })))
-        );
-      }
+    const template = templates.find((t) => t.id === formTemplateId);
+    if (template && template.job_template_items.length > 0) {
+      await supabase.from('tasks').insert(
+        insertedJobs.flatMap((j) => template.job_template_items.map((item) => ({ job_id: j.id, description: item.description })))
+      );
+    }
+
+    const noun = training ? 'training session' : 'shift';
+    const count = sorted.length;
+    const dayLabel = (d) => d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+    const when = count === 1
+      ? `${dayLabel(firstBooked)} at ${firstBooked.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+      : `${dayLabel(firstBooked)} to ${dayLabel(new Date(sorted[count - 1].scheduled_at))}`;
+    const names = formCleanerIds.map((cid) => cleaners.find((c) => c.id === cid)?.full_name).filter(Boolean);
+    const who = names.length === 0 ? ', with no one on yet' : ` for ${names.join(' and ')}`;
+    const moved = inWeek.length === 0 ? ' - showing that week now' : '';
+
+    if (assignmentsFailed) {
+      toast.error(`${count} ${noun}${count === 1 ? '' : 's'} booked (${when}), but the cleaners could not be put on them. Add them from the rota.`);
+    } else {
+      toast.success(`${count} ${noun}${count === 1 ? '' : 's'} booked, ${when}${who}${moved}.`);
     }
     resetForm();
   };
@@ -2972,7 +3032,7 @@ export default function AdminRota() {
 
             <div className="job-form-actions">
               <button type="button" className="btn-secondary" onClick={resetForm}>Cancel</button>
-              <button type="submit" className="btn-primary" title="Create this job and notify anyone you have assigned to it">Add Job</button>
+              <button type="submit" className="btn-primary" disabled={creatingJob} title="Create this job and notify anyone you have assigned to it">{creatingJob ? 'Booking…' : 'Add Job'}</button>
             </div>
           </form>
         </div>
