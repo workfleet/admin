@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { withoutTestAccounts } from '../../../lib/testAccounts';
+import { setStaffActive } from '../../../lib/setStaffActive';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { fetchEmploymentTypes, flattenPrivate, isSubcontractor } from '../../../lib/profilePrivate';
 import { missingEssentials } from '../../../lib/staffDetails';
@@ -112,18 +113,13 @@ export default function AdminCleaners() {
 
   const toggleActive = async (cleaner) => {
     const nextActive = !cleaner.active;
-    if (!nextActive && !(await confirm(`Deactivate ${cleaner.full_name || 'this cleaner'}? They won't be able to log in until reactivated.`, { danger: true, confirmLabel: 'Deactivate' }))) return;
+    if (!nextActive && !(await confirm(`Deactivate ${cleaner.full_name || 'this cleaner'}? They'll be signed out of the app on every device and won't be able to log in until reactivated.`, { danger: true, confirmLabel: 'Deactivate' }))) return;
 
-    const { data, error } = await supabase
-      .from('profiles').update({ active: nextActive }).eq('id', cleaner.id)
-      .select('id, active').single();
-
-    if (error) { toast.error('Could not update this account.'); return; }
-
-    if (data) {
-      setCleaners((prev) => prev.map((c) => (c.id === cleaner.id ? { ...c, active: data.active } : c)));
-      toast.success(nextActive ? 'Account reactivated.' : 'Account deactivated.');
+    const outcome = await setStaffActive(cleaner.id, nextActive);
+    if (outcome.active !== null) {
+      setCleaners((prev) => prev.map((c) => (c.id === cleaner.id ? { ...c, active: outcome.active } : c)));
     }
+    if (outcome.ok) toast.success(outcome.message); else toast.error(outcome.message);
   };
 
   const createCleaner = async (e) => {

@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Home, Calendar, User, HelpCircle, Settings, MessageCircle, Package } from 'lucide-react';
 import { getSessionAndProfile } from '../../lib/authGate';
+import { signOutAndClearPresence } from '../../lib/signOut';
 import PresenceIndicator from '../components/PresenceIndicator';
 import EmergencyButton from '../components/EmergencyButton';
 import EnablePush from '../components/EnablePush';
@@ -51,6 +52,11 @@ export default function CleanerLayout({ children }) {
     if (!session) { router.push('/'); return; }
 
     if (error) { setLoadError(true); return; }
+
+    // Deactivated while signed in: the server has banned their login, but
+    // the access token in hand can outlive that by up to an hour. Turn them
+    // away on this load rather than when it expires.
+    if (profile?.active === false) { await signOutAndClearPresence(); router.push('/'); return; }
 
     if (profile?.role === 'admin' || profile?.role === 'supervisor') { router.push('/admin'); return; }
     if (profile?.role === 'client') { router.push('/client'); return; }

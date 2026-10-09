@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '../../../../../../lib/supabaseAdmin';
+import { setSignInBlocked } from '../../../../../../lib/staffAccess';
 
 async function requireAdmin(request) {
   const authHeader = request.headers.get('authorization') || '';
@@ -85,6 +86,13 @@ export async function POST(request, { params }) {
     .from('profiles').update({ active: false }).eq('id', id);
   if (deactivateError) {
     return NextResponse.json({ error: 'deactivate_failed' }, { status: 502 });
+  }
+
+  // As with Deactivate: a removed person must not keep the app on a phone
+  // that is still signed in.
+  const blockError = await setSignInBlocked(supabaseAdmin, id, true);
+  if (blockError) {
+    return NextResponse.json({ error: 'sign_in_not_blocked' }, { status: 502 });
   }
 
   return NextResponse.json({ ok: true, releasedEmail: originalEmail });

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '../../../../lib/supabaseClient';
+import { setStaffActive } from '../../../../lib/setStaffActive';
 import { getSessionWithRetry } from '../../../../lib/authGate';
 import { fetchEmploymentTypes, flattenPrivate, isSubcontractor } from '../../../../lib/profilePrivate';
 import { useConfirm } from '../../../components/ConfirmProvider';
@@ -434,17 +435,11 @@ export default function CleanerProfile() {
 
   const toggleActive = async () => {
     const nextActive = !cleaner.active;
-    if (!nextActive && !(await confirm(`Deactivate ${cleaner.full_name || 'this cleaner'}? They won't be able to log in until reactivated.`, { danger: true, confirmLabel: 'Deactivate' }))) return;
+    if (!nextActive && !(await confirm(`Deactivate ${cleaner.full_name || 'this cleaner'}? They'll be signed out of the app on every device and won't be able to log in until reactivated.`, { danger: true, confirmLabel: 'Deactivate' }))) return;
 
-    const { data, error } = await supabase
-      .from('profiles').update({ active: nextActive }).eq('id', id)
-      .select('id, active').single();
-
-    if (error) { toast.error('Could not update this account.'); return; }
-    if (data) {
-      setCleaner((c) => ({ ...c, active: data.active }));
-      toast.success(nextActive ? 'Account reactivated.' : 'Account deactivated.');
-    }
+    const outcome = await setStaffActive(id, nextActive);
+    if (outcome.active !== null) setCleaner((c) => ({ ...c, active: outcome.active }));
+    if (outcome.ok) toast.success(outcome.message); else toast.error(outcome.message);
   };
 
   const startEditAccount = () => {
@@ -706,7 +701,7 @@ export default function CleanerProfile() {
               {editingAccount ? 'Cancel' : 'Edit Account'}
             </button>
             <button className="btn-secondary" onClick={exportCleanerData} title="Download everything held about this person as a file - use this to answer a data request">Export Data</button>
-            <button className="btn-secondary" onClick={toggleActive} title="Switch this account between active and deactivated - deactivating blocks login but keeps all their history">
+            <button className="btn-secondary" onClick={toggleActive} title="Switch this account between active and deactivated - deactivating signs them out everywhere and blocks login, but keeps all their history">
               {cleaner.active === false ? 'Reactivate' : 'Deactivate'}
             </button>
             {cleaner.active !== false && (

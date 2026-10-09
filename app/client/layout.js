@@ -44,6 +44,11 @@ export default function ClientLayout({ children }) {
 
     if (error) { setLoadError(true); return; }
 
+    // Deactivated while signed in: the server has banned their login, but
+    // the access token in hand can outlive that by up to an hour. Turn them
+    // away on this load rather than when it expires.
+    if (profile?.active === false) { await signOutAndClearPresence(); router.push('/'); return; }
+
     if (profile?.role === 'admin' || profile?.role === 'supervisor') { router.push('/admin'); return; }
     if (profile?.role === 'inventory') { router.push('/admin/inventory'); return; }
     if (profile?.role === 'cleaner') { router.push('/cleaner'); return; }
