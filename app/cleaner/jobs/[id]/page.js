@@ -225,7 +225,7 @@ export default function JobDetailPage() {
     // rather than failing, and a hang never reaches the saved copy below.
     const { data: jobData, error: jobError } = await withTimeout(supabase
       .from('jobs')
-      .select(`id, scheduled_at, status, duration_minutes, property_id, ${TRAINING_JOB_COLUMNS}, properties(address, notes, access_details, client_access_notes, lat, lng, geofence_radius_m, clients(name))`)
+      .select(`id, scheduled_at, status, duration_minutes, notes, property_id, ${TRAINING_JOB_COLUMNS}, properties(address, notes, access_details, client_access_notes, lat, lng, geofence_radius_m, clients(name))`)
       .eq('id', id)
       .maybeSingle(), 15 * 1000);
 
@@ -1164,6 +1164,16 @@ export default function JobDetailPage() {
                   showDirections={false}
                 />
                 <a className="visit-map-chip" href={mapsHref} target="_blank" rel="noreferrer">Directions</a>
+              </div>
+            )}
+
+            {/* What the office wrote on this one visit from the rota - often a
+                door code or 'oven clean only'. It was saved but never shown
+                here until 2026-10-12, so it goes first. */}
+            {job.notes && (
+              <div className="visit-card visit-access">
+                <div className="visit-card-label">Notes for this visit</div>
+                <p className="visit-access-body" style={{ whiteSpace: 'pre-wrap' }}>{job.notes}</p>
               </div>
             )}
 
