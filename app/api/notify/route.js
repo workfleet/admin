@@ -82,7 +82,7 @@ const OFFICE_ONLY_TYPES = new Set([
 const CLEANER_RAISED_TYPES = new Set([
   'missed_clockin_claimed', 'short_shift_checkout', 'time_off_requested',
   'time_extension_requested', 'emergency_alert', 'shift_cover_needed',
-  'shift_cover_filled', 'cleaner_arrived',
+  'shift_cover_filled', 'cleaner_arrived', 'shift_cover_requested',
 ]);
 
 const BELL_URL_BY_ROLE = {
@@ -208,6 +208,37 @@ async function pushCoverOffer(payload, callerId) {
     });
   }
   await pushToUserIds(rest.map((c) => c.cleaner_id), generic);
+}
+
+// A cleaner has asked for a cover shift (0125) and the office has to approve
+// it, so this goes out the moment they ask rather than waiting for the bell
+// sweep, which only runs while somebody has the app open. Everything in it
+// is read from the database: the caller must really have a waiting ask on
+// that offer, so nobody can ring the office about a shift they never asked
+// for. Its tap opens the Cover page, where Approve is.
+async function pushCoverRequest(payload, callerId) {
+  if (!payload.offerId) return;
+  const [{ data: ask }, { data: offer }] = await Promise.all([
+    supabaseAdmin
+      .from('shift_offer_responses')
+      .select('cleaner_id, profiles(full_name)')
+      .eq('offer_id', payload.offerId).eq('cleaner_id', callerId).eq('response', 'requested')
+      .maybeSingle(),
+    supabaseAdmin
+      .from('shift_offers')
+      .select('status, jobs(scheduled_at, properties(address))')
+      .eq('id', payload.offerId)
+      .maybeSingle(),
+  ]);
+  if (!ask || !offer || offer.status !== 'open') return;
+
+  const { data: staff } = await supabaseAdmin.from('profiles').select('id').in('role', ['admin', 'supervisor']).eq('active', true);
+  await pushToUserIds((staff || []).map((s) => s.id), {
+    title: `Cover request: ${ask.profiles?.full_name || 'A cleaner'}`,
+    body: `${offer.jobs?.properties?.address || 'A shift'} on ${formatShiftTime(offer.jobs?.scheduled_at)} - tap to approve or turn down.`,
+    tag: `cover-request-${payload.offerId}-${callerId}`,
+    url: '/admin/cover',
+  });
 }
 
 // A chat message, to everyone else in the conversation. Recipients and the
@@ -336,6 +367,11 @@ export async function POST(request) {
   if (payload.type === 'flush') {
     const sent = await flushPendingPushes();
     return NextResponse.json({ ok: true, sent });
+  }
+
+  if (payload.type === 'shift_cover_requested') {
+    await pushCoverRequest(payload, user.id);
+    return NextResponse.json({ pushed: true });
   }
 
   if (payload.type === 'shift_cover_needed') {

@@ -154,6 +154,9 @@ export default function ShiftCoverCard({ userId, onChange, onCounts, preloaded }
 
     if (data === 'requested') {
       setRequestedIds((prev) => [...prev, offer.id]);
+      // Straight to the office's phones, so an early shift is not waiting
+      // on somebody happening to have the app open.
+      notify({ type: 'shift_cover_requested', offerId: offer.id });
       toast.success("Asked — the office will let you know if it's yours.");
       return;
     }
