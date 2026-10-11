@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { LifeBuoy, Clock } from 'lucide-react';
+import { LifeBuoy, Clock, Hand } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { withoutTestAccounts } from '../../../lib/testAccounts';
 import { getSessionWithRetry } from '../../../lib/authGate';
@@ -23,6 +23,9 @@ export default function AdminCover() {
   const [offers, setOffers] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [assignments, setAssignments] = useState([]);
+  // Cleaners who have asked for an open shift (0125) - the office approves
+  // one, and only then does it go on their rota.
+  const [requests, setRequests] = useState([]);
   const [cleaners, setCleaners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState(null);
@@ -80,18 +83,31 @@ export default function AdminCover() {
       ...(jobRows || []).map((j) => j.id),
       ...(offerRows || []).map((o) => o.job_id),
     ].filter(Boolean))];
-    const { data: assignmentRows } = shownJobIds.length > 0
-      ? await supabase.from('job_assignments').select('job_id, cleaner_id, profiles(full_name)').in('job_id', shownJobIds)
-      : { data: [] };
+    const openOfferIds = (offerRows || []).filter((o) => o.status === 'open').map((o) => o.id);
+    const [{ data: assignmentRows }, { data: requestRows }] = await Promise.all([
+      shownJobIds.length > 0
+        ? supabase.from('job_assignments').select('job_id, cleaner_id, profiles(full_name)').in('job_id', shownJobIds)
+        : { data: [] },
+      openOfferIds.length > 0
+        ? supabase
+          .from('shift_offer_responses')
+          .select('offer_id, cleaner_id, created_at, profiles(full_name)')
+          .eq('response', 'requested')
+          .in('offer_id', openOfferIds)
+          .order('created_at')
+        : { data: [] },
+    ]);
 
     setOffers(offerRows || []);
     setJobs(jobRows || []);
     setAssignments(assignmentRows || []);
+    setRequests(requestRows || []);
     setCleaners(withoutTestAccounts(cleanerRows));
     setLoading(false);
   };
 
   const assigneesFor = (jobId) => assignments.filter((a) => a.job_id === jobId);
+  const requestsFor = (offerId) => requests.filter((r) => r.offer_id === offerId);
 
   const loadCandidates = async (offer) => {
     setCandidatesLoading(offer.id);
@@ -200,10 +216,12 @@ export default function AdminCover() {
     setSaving(false);
     if (error) { toast.error('Assigned, but the cover request stayed open — refresh and close it.'); return; }
 
-    const cleaner = cleaners.find((c) => c.id === chosenId);
+    const cleaner = cleaners.find((c) => c.id === chosenId)
+      || { full_name: requests.find((r) => r.cleaner_id === chosenId)?.profiles?.full_name };
     setOffers((prev) =>
       prev.map((o) => (o.id === offer.id ? { ...o, status: 'filled', filler: { full_name: cleaner?.full_name }, filled_at: new Date().toISOString() } : o))
     );
+    setRequests((prev) => prev.filter((r) => r.offer_id !== offer.id));
     setAssigningOfferId(null);
     setAssignCleanerId('');
     toast.success(`${cleaner?.full_name || 'Cleaner'} is now on this shift.`);
@@ -214,6 +232,16 @@ export default function AdminCover() {
       address: offer.jobs?.properties?.address,
       scheduledAt: offer.jobs?.scheduled_at,
     });
+  };
+
+  const turnDown = async (request) => {
+    const { data, error } = await supabase.rpc('turn_down_cover_request', {
+      target_offer_id: request.offer_id,
+      target_cleaner_id: request.cleaner_id,
+    });
+    if (error || data !== 'ok') { toast.error("Couldn't turn that down - they may have withdrawn it."); load(); return; }
+    setRequests((prev) => prev.filter((r) => !(r.offer_id === request.offer_id && r.cleaner_id === request.cleaner_id)));
+    toast.success(`${request.profiles?.full_name || 'They'} will be told it went to someone else.`);
   };
 
   if (loading) return <div className="page-inner">Loading...</div>;
@@ -229,7 +257,7 @@ export default function AdminCover() {
         <div>
           <h1>Shift Cover</h1>
           <p className="page-subtitle">
-            Shifts that need someone — the best matches are told first, and anyone free can take it
+            Shifts that need someone — free cleaners can ask for them, and you approve who gets each one
           </p>
         </div>
         <button
@@ -274,7 +302,7 @@ export default function AdminCover() {
           <button
             type="submit"
             disabled={saving}
-            title="Offer this shift to every free cleaner - first to accept takes it"
+            title="Offer this shift to every free cleaner - they ask for it and you approve one"
           >
             {saving ? 'Opening...' : 'Open Cover Request'}
           </button>
@@ -327,6 +355,42 @@ export default function AdminCover() {
                 </button>
               </div>
             </div>
+
+            {requestsFor(offer.id).length > 0 && (
+              <div style={{ background: 'var(--wf-verified-bg)', borderRadius: 10, padding: '8px 12px' }}>
+                <div className="field-label" style={{ marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Hand size={14} /> Asked for this shift
+                </div>
+                {requestsFor(offer.id).map((r) => (
+                  <div key={r.cleaner_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '4px 0' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 600 }}>{r.profiles?.full_name || 'A cleaner'}</span>
+                      <span style={{ fontSize: 12, color: 'var(--muted)' }}> · asked {formatWhen(r.created_at)}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        className="btn-compact"
+                        onClick={() => assignCover(offer, r.cleaner_id)}
+                        disabled={saving}
+                        title={`Give this shift to ${r.profiles?.full_name || 'them'} - it goes on their rota and everyone else who asked is told`}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary btn-compact"
+                        onClick={() => turnDown(r)}
+                        disabled={saving}
+                        title="Say no to this person - the shift stays open for others"
+                      >
+                        Turn down
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {assigningOfferId === offer.id && (
               <div style={{ background: 'var(--wf-ash)', borderRadius: 10, padding: 12 }}>

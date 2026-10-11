@@ -2,23 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { Bell, BellRing } from 'lucide-react';
-import { supabase } from '../../lib/supabaseClient';
 import { useToast } from './ToastProvider';
-
-// Converts the VAPID public key (base64url) to the Uint8Array shape
-// pushManager.subscribe() expects for applicationServerKey.
-function urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const raw = atob(base64);
-  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
-}
+import { pushSupported, hasPushSubscription, subscribeToPush, onPushChanged } from '../../lib/pushSubscription';
 
 // Bell icon in each portal's top bar - lets this device opt in to push
 // notifications. Deliberately a manual opt-in rather than auto-subscribing
 // on login: browsers require a user gesture before requesting notification
 // permission, and silently prompting on every login would just train
-// people to dismiss it.
+// people to dismiss it. The cleaner home page also has a bigger card for
+// the same thing (EnablePushCard); both go through lib/pushSubscription.
 //
 // `describe` is what the pushes are, in the words of whoever is looking at
 // the bell: the office gets alerts and requests, a cleaner gets shift
@@ -32,61 +24,24 @@ export default function EnablePush({ iconColor = 'var(--muted)', describe = 'ale
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    setSupported('serviceWorker' in navigator && 'PushManager' in window && Boolean(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY));
-    checkExistingSubscription();
+    setSupported(pushSupported());
+    hasPushSubscription().then(setSubscribed);
+    return onPushChanged(() => setSubscribed(true));
   }, []);
-
-  const checkExistingSubscription = async () => {
-    if (!('serviceWorker' in navigator)) return;
-    const reg = await navigator.serviceWorker.ready.catch(() => null);
-    // iPhone Safari in an ordinary browser tab registers the service worker
-    // but has no pushManager on it - push there exists only once the app is
-    // on the Home Screen. Reading it anyway threw on every page load
-    // (Sentry, 2026-09-09) and told nobody anything.
-    if (!reg || !reg.pushManager) return;
-    try {
-      const existing = await reg.pushManager.getSubscription();
-      setSubscribed(Boolean(existing));
-    } catch {
-      setSubscribed(false);
-    }
-  };
 
   const enable = async () => {
     if (subscribed || busy) return;
     setBusy(true);
+    const result = await subscribeToPush();
+    setBusy(false);
 
-    try {
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') {
-        toast.error('Notifications were not allowed - you can enable them in your browser settings.');
-        setBusy(false);
-        return;
-      }
-
-      const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY),
-      });
-
-      const { data: { session } } = await supabase.auth.getSession();
-      const json = sub.toJSON();
-      const { error } = await supabase.from('push_subscriptions').upsert({
-        user_id: session.user.id,
-        endpoint: json.endpoint,
-        p256dh: json.keys.p256dh,
-        auth: json.keys.auth,
-      }, { onConflict: 'endpoint' });
-
-      if (error) throw error;
-
+    if (result === 'ok') {
       setSubscribed(true);
       toast.success(`Notifications for ${describe} will now push to this device.`);
-    } catch {
+    } else if (result === 'denied') {
+      toast.error('Notifications were not allowed - you can enable them in your browser settings.');
+    } else {
       toast.error('Could not enable push notifications on this device.');
-    } finally {
-      setBusy(false);
     }
   };
 

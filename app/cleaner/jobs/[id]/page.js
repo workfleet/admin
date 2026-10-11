@@ -939,7 +939,7 @@ export default function JobDetailPage() {
     setCoverOffer(data);
     setShowCoverForm(false);
     setCoverReason('');
-    toast.success('Sent. Other cleaners can now pick this shift up.');
+    toast.success('Sent. Other cleaners can now ask for it - it stays yours until the office approves someone.');
 
     const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', userId).single();
     notify({

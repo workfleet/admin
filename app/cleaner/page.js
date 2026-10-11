@@ -9,7 +9,8 @@ import { getSessionWithRetry } from '../../lib/authGate';
 import { purgeOldNotifications } from '../../lib/notifications';
 import { getWorkAnniversaryYears } from '../../lib/workAnniversary';
 import WorkAnniversaryPopup from '../components/WorkAnniversaryPopup';
-import ShiftCoverCard, { fetchOpenOffers, fetchDeclined } from '../components/ShiftCoverCard';
+import ShiftCoverCard, { fetchOpenOffers, fetchMyResponses, responsesByKind } from '../components/ShiftCoverCard';
+import EnablePushCard from '../components/EnablePushCard';
 import KeyHoldingsCard from '../components/KeyHoldingsCard';
 import BackButton from '../components/BackButton';
 import Logo from '../components/Logo';
@@ -170,7 +171,7 @@ export default function CleanerDashboard() {
       // under the greeting is there at first paint instead of arriving
       // later and shoving the Open job button under someone's thumb.
       fetchOpenOffers(),
-      fetchDeclined(session.user.id),
+      fetchMyResponses(session.user.id),
       // The trading name the office set, so a rename never needs a deploy.
       supabase.from('company_settings').select('trading_name').limit(1).maybeSingle(),
     ]);
@@ -195,7 +196,7 @@ export default function CleanerDashboard() {
     setUnreadMessages(unread);
     setFeedback(ratingSummary(ratingRows));
 
-    const declined = (responseRows || []).map((r) => r.offer_id);
+    const declined = responsesByKind(responseRows).hidden;
     const split = splitOffers(liveOffers(offerRows), declined, session.user.id);
     setCoverCounts({ mine: split.mine.length, available: split.available.length });
     setCoverSeed({ offerRows, responseRows });
@@ -327,7 +328,7 @@ export default function CleanerDashboard() {
             <a
               href="#shifts-needing-cover"
               style={pillStyle}
-              title="Jump to the shifts up for grabs - first to accept gets it"
+              title="Jump to the shifts up for grabs - ask for any you can do"
             >
               <LifeBuoy size={15} style={{ color: 'var(--wf-teal-ink)' }} />
               {coverCounts.available} {coverCounts.available === 1 ? 'shift needs' : 'shifts need'} cover
@@ -335,6 +336,8 @@ export default function CleanerDashboard() {
           )}
         </div>
       )}
+
+      <EnablePushCard />
 
       {/* The job they are on right now goes ahead of everything, in the
           verified green the rest of the app uses for "clocked in". */}

@@ -94,10 +94,10 @@ export default function CoverSuggestions({ offers, onDone }) {
           <p style={{ fontSize: 12, color: 'var(--muted)', margin: '2px 0 0' }}>
             {remaining.length === 0
               ? 'Every shift has someone on it.'
-              : 'Assign someone now, or leave it and the first cleaner to claim it takes it.'}
+              : 'Assign someone now, or leave it for cleaners to ask for and approve one on the Cover page.'}
           </p>
         </div>
-        <button type="button" className="btn-compact" onClick={onDone}>{remaining.length === 0 ? 'Close' : 'Leave for claims'}</button>
+        <button type="button" className="btn-compact" onClick={onDone}>{remaining.length === 0 ? 'Close' : 'Leave for asks'}</button>
       </div>
       {Object.entries(filled).map(([id, name]) => {
         const offer = offers.find((o) => o.id === id);

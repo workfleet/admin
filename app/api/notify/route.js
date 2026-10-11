@@ -177,7 +177,7 @@ async function pushCoverOffer(payload, callerId) {
   const when = formatShiftTime(payload.scheduledAt);
   const generic = {
     title: 'Shift needs cover',
-    body: `${payload.address || 'A shift'} on ${when} - first to accept takes it.`,
+    body: `${payload.address || 'A shift'} on ${when} - tap to ask for it.`,
     tag: 'shift-cover',
     url: '/cleaner',
   };
@@ -204,7 +204,7 @@ async function pushCoverOffer(payload, callerId) {
     await pushToUserIds([c.cleaner_id], {
       ...generic,
       title: 'Shift needs cover - good match for you',
-      body: `${payload.address || 'A shift'} on ${when}.${reason ? ` ${reason}.` : ''} First to accept takes it.`,
+      body: `${payload.address || 'A shift'} on ${when}.${reason ? ` ${reason}.` : ''} Tap to ask for it.`,
     });
   }
   await pushToUserIds(rest.map((c) => c.cleaner_id), generic);

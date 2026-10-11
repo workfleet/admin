@@ -21,7 +21,21 @@ const CLAIM_MESSAGES = {
   clashes: 'That clashes with another shift you\'re already on.',
   not_eligible: "Your account can't pick up cover shifts — check with the office.",
   not_found: 'That shift is no longer available.',
+  already_requested: "You've already asked for that one — the office will let you know.",
 };
+
+// What this cleaner has said about each offer (shift_offer_responses).
+// "Not me" and an ask the office turned down both hide the offer; an ask
+// still waiting shows it with its own state.
+export function responsesByKind(rows) {
+  const hidden = [];
+  const requested = [];
+  (rows || []).forEach((r) => {
+    if (r.response === 'declined' || r.response === 'turned_down') hidden.push(r.offer_id);
+    if (r.response === 'requested') requested.push(r.offer_id);
+  });
+  return { hidden, requested };
+}
 
 const formatWhen = (value) =>
   new Date(value).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -63,8 +77,8 @@ export async function fetchOpenOffers() {
   };
 }
 
-export function fetchDeclined(userId) {
-  return supabase.from('shift_offer_responses').select('offer_id').eq('cleaner_id', userId).eq('response', 'declined');
+export function fetchMyResponses(userId) {
+  return supabase.from('shift_offer_responses').select('offer_id, response').eq('cleaner_id', userId);
 }
 
 // `preloaded` (optional) is { offerRows, responseRows } the page already
@@ -77,6 +91,8 @@ export default function ShiftCoverCard({ userId, onChange, onCounts, preloaded }
   const confirm = useConfirm();
   const [offers, setOffers] = useState([]);
   const [declinedIds, setDeclinedIds] = useState([]);
+  // Offers this cleaner has asked for and the office has not answered yet.
+  const [requestedIds, setRequestedIds] = useState([]);
   const [busyId, setBusyId] = useState(null);
   // How well each open offer fits this cleaner, from rank_cover_candidates
   // (0084) - which, for a cleaner, returns only their own row. Used to put
@@ -99,11 +115,13 @@ export default function ShiftCoverCard({ userId, onChange, onCounts, preloaded }
   const load = async (seed) => {
     const [{ data: offerRows }, { data: responseRows }] = seed
       ? [{ data: seed.offerRows }, { data: seed.responseRows }]
-      : await Promise.all([fetchOpenOffers(), fetchDeclined(userId)]);
+      : await Promise.all([fetchOpenOffers(), fetchMyResponses(userId)]);
 
     const live = liveOffers(offerRows);
     setOffers(live);
-    setDeclinedIds((responseRows || []).map((r) => r.offer_id));
+    const { hidden, requested } = responsesByKind(responseRows);
+    setDeclinedIds(hidden);
+    setRequestedIds(requested);
 
     // Best effort: an offer with no fit row simply shows without a badge.
     const fitRows = await Promise.all(
@@ -118,10 +136,13 @@ export default function ShiftCoverCard({ userId, onChange, onCounts, preloaded }
     setFits(Object.fromEntries(fitRows));
   };
 
+  // Asking, not taking: since 0125 the office approves who covers a shift,
+  // so this records the ask and the shift stays off the rota until then.
   const accept = async (offer) => {
     const ok = await confirm(
-      `Take this shift on ${formatWhen(offer.jobs.scheduled_at)} at ${offer.jobs?.properties?.address}?`,
-      { title: 'Pick up this shift' }
+      `Ask for the shift on ${formatWhen(offer.jobs.scheduled_at)} at ${offer.jobs?.properties?.address}? `
+      + "The office will confirm who gets it, and it goes on your rota once they've approved you.",
+      { title: 'Ask for this shift' }
     );
     if (!ok) return;
 
@@ -129,14 +150,21 @@ export default function ShiftCoverCard({ userId, onChange, onCounts, preloaded }
     const { data, error } = await supabase.rpc('claim_shift_offer', { target_offer_id: offer.id });
     setBusyId(null);
 
-    if (error) { toast.error("Couldn't pick that up — try again."); return; }
+    if (error) { toast.error("Couldn't send that — try again."); return; }
+
+    if (data === 'requested') {
+      setRequestedIds((prev) => [...prev, offer.id]);
+      toast.success("Asked — the office will let you know if it's yours.");
+      return;
+    }
 
     if (data !== 'ok') {
-      toast.error(CLAIM_MESSAGES[data] || "Couldn't pick that up.");
+      toast.error(CLAIM_MESSAGES[data] || "Couldn't send that.");
       load();
       return;
     }
 
+    // 'ok' is the database before 0125, which still assigns straight away.
     setOffers((prev) => prev.filter((o) => o.id !== offer.id));
     toast.success("It's yours — it's on your rota now.");
     onChange?.();
@@ -147,6 +175,15 @@ export default function ShiftCoverCard({ userId, onChange, onCounts, preloaded }
       address: offer.jobs?.properties?.address,
       scheduledAt: offer.jobs?.scheduled_at,
     });
+  };
+
+  const withdrawAsk = async (offer) => {
+    setBusyId(offer.id);
+    const { data, error } = await supabase.rpc('withdraw_cover_request', { target_offer_id: offer.id });
+    setBusyId(null);
+    if (error || data !== 'ok') { toast.error("Couldn't withdraw that — the office may already have answered."); load(); return; }
+    setRequestedIds((prev) => prev.filter((id) => id !== offer.id));
+    toast.success('Withdrawn — the shift is still up for grabs.');
   };
 
   const decline = async (offer) => {
@@ -223,7 +260,7 @@ export default function ShiftCoverCard({ userId, onChange, onCounts, preloaded }
         <div className="card" style={{ background: 'var(--wf-ash)' }}>
           <h2>Shifts needing cover ({available.length})</h2>
           <p style={{ fontSize: 13, color: 'var(--muted)', margin: '-4px 0 10px' }}>
-            First to accept gets it.
+            Ask for any you can do — the office confirms who gets each one.
           </p>
           {available.map((offer) => (
             <div key={offer.id} className="task-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
@@ -260,15 +297,32 @@ export default function ShiftCoverCard({ userId, onChange, onCounts, preloaded }
                   )}
                 </div>
               </div>
+              {requestedIds.includes(offer.id) ? (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 13, color: 'var(--wf-teal-ink)', fontWeight: 600 }}>
+                    Asked — waiting for the office to confirm
+                  </span>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => withdrawAsk(offer)}
+                    disabled={busyId === offer.id}
+                    style={{ flexShrink: 0 }}
+                    title="Take back your ask - the shift stays up for grabs"
+                  >
+                    Withdraw
+                  </button>
+                </div>
+              ) : (
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
                   type="button"
                   onClick={() => accept(offer)}
                   disabled={busyId === offer.id}
                   style={{ flex: 1 }}
-                  title="Take this shift on - it goes straight onto your rota"
+                  title="Ask the office for this shift - it goes on your rota once they approve you"
                 >
-                  {busyId === offer.id ? 'Just a sec...' : "I'll take it"}
+                  {busyId === offer.id ? 'Just a sec...' : 'Ask for this shift'}
                 </button>
                 <button
                   type="button"
@@ -281,6 +335,7 @@ export default function ShiftCoverCard({ userId, onChange, onCounts, preloaded }
                   Not me
                 </button>
               </div>
+              )}
             </div>
           ))}
         </div>

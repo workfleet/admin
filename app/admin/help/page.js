@@ -41,7 +41,7 @@ const HELP_SECTIONS = [
   },
   {
     title: 'Covering a Shift Someone Can\'t Make',
-    body: 'When a cleaner taps "Ask for cover" on a shift, it appears under Shift Cover and is offered to every other cleaner who is free — the first to accept takes it over. The shift stays with the original cleaner until someone actually picks it up, so nothing is ever left uncovered. You can also open a cover request yourself from that page, assign someone directly, or cancel the request.',
+    body: 'When a cleaner taps "Ask for cover" on a shift, it appears under Shift Cover and is offered to every other cleaner who is free. Cleaners ask for it, and you approve one from that page — only then does it move onto their rota. The shift stays with the original cleaner until you do, so nothing is ever left uncovered. You can also open a cover request yourself from that page, assign someone directly, or cancel the request.',
   },
   {
     title: 'Key Register — Who Has What',
