@@ -28,16 +28,39 @@ const formatWhen = (value) =>
 
 // The two reads behind the card, exported so the home page can run them
 // up front and hand the rows in as `preloaded`.
-export function fetchOpenOffers() {
-  return supabase
-    .from('shift_offers')
-    .select(
-      'id, job_id, reason, released_by, expires_at, created_at,'
-      + ' jobs(scheduled_at, duration_minutes, properties(address)),'
-      + ' releaser:profiles!shift_offers_released_by_fkey(full_name)'
-    )
-    .eq('status', 'open')
-    .order('created_at', { ascending: false });
+//
+// Open offers come from open_cover_shifts() (0124) rather than a select
+// with a jobs embed: a cleaner can't read the job or property of a shift
+// they aren't on, so the embed came back empty and every offer but their
+// own was dropped. Rows are reshaped to the embed's shape the card uses.
+export async function fetchOpenOffers() {
+  const { data, error } = await supabase.rpc('open_cover_shifts');
+  // Until 0124 is run, fall back to the old read so a cleaner at least
+  // keeps seeing their own cover requests.
+  if (error) {
+    return supabase
+      .from('shift_offers')
+      .select(
+        'id, job_id, reason, released_by, expires_at, created_at,'
+        + ' jobs(scheduled_at, duration_minutes, properties(address)),'
+        + ' releaser:profiles!shift_offers_released_by_fkey(full_name)'
+      )
+      .eq('status', 'open')
+      .order('created_at', { ascending: false });
+  }
+  return {
+    error,
+    data: (data || []).map((r) => ({
+      id: r.id,
+      job_id: r.job_id,
+      reason: r.reason,
+      released_by: r.released_by,
+      expires_at: r.expires_at,
+      created_at: r.created_at,
+      jobs: { scheduled_at: r.scheduled_at, duration_minutes: r.duration_minutes, properties: { address: r.address } },
+      releaser: r.releaser_name ? { full_name: r.releaser_name } : null,
+    })),
+  };
 }
 
 export function fetchDeclined(userId) {
