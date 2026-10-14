@@ -65,7 +65,9 @@ describe('buildInvoiceBreakdown', () => {
     expect(b.lines[0].visits).toHaveLength(1);
     expect(b.warnings.join(' ')).toMatch(/1 missed visit isn't charged/);
     expect(b.warnings.join(' ')).toMatch(/hasn't happened yet/);
-    expect(b.warnings.join(' ')).toMatch(/2 cleaners/);
+    // Two cleaners: still the booked hour, charged once, no warning.
+    expect(b.lines[0].amount).toBe(24);
+    expect(b.warnings).toHaveLength(2);
   });
 
   it('dates visits in UK time', () => {
