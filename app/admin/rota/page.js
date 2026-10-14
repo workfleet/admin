@@ -23,6 +23,7 @@ import { findTightTurnarounds, describeTurnaround } from '../../../lib/travelTim
 import { buildCleanerRows, formatHours, shareMinutes, UNASSIGNED_ROW_ID } from '../../../lib/rotaGrid';
 import { shortAddress, nameRepeatsStreet } from '../../../lib/shortAddress';
 import { certificationLine, isTraining, jobHeadline, jobSubtitle, trainerLine, trainingJobFields, TRAINING_JOB_COLUMNS } from '../../../lib/training';
+import { refreshesOf } from '../../../lib/invoiceBreakdown';
 import CleanerWeekGrid from './CleanerWeekGrid';
 import SeriesEditor from './SeriesEditor';
 
@@ -68,7 +69,7 @@ function dayIndexOf(date) {
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => h);
 const MINUTE_OPTIONS = [0, 15, 30, 45];
 
-const JOB_SELECT = `id, scheduled_at, status, duration_minutes, notes, series_id, property_id, ${TRAINING_JOB_COLUMNS}, properties(address, lat, lng, clients(name)), job_assignments(cleaner_id, paid_minutes, profiles(full_name))`;
+const JOB_SELECT = `id, scheduled_at, status, duration_minutes, notes, room_refreshes, series_id, property_id, ${TRAINING_JOB_COLUMNS}, properties(address, lat, lng, clients(name)), job_assignments(cleaner_id, paid_minutes, profiles(full_name))`;
 
 function formatHour12(h) {
   const period = h < 12 ? 'AM' : 'PM';
@@ -274,6 +275,9 @@ export default function AdminRota() {
   // to edit it: { series, futureJobs } - null while the editor is closed.
   const [seriesEdit, setSeriesEdit] = useState(null);
   const [editNotes, setEditNotes] = useState('');
+  // Rooms refreshed on this visit, [{ room, minutes }] - they go on the
+  // client's invoice as their own lines (TKR asked for this).
+  const [editRefreshes, setEditRefreshes] = useState([]);
   const [editAddress, setEditAddress] = useState('');
   const [editAddressCoords, setEditAddressCoords] = useState(null);
   const [savingJob, setSavingJob] = useState(false);
@@ -467,6 +471,7 @@ export default function AdminRota() {
     setEditDuration(selectedJob.duration_minutes || 120);
     setEditUseCustomDuration(!QUICK_DURATIONS.includes(selectedJob.duration_minutes));
     setEditNotes(selectedJob.notes || '');
+    setEditRefreshes(refreshesOf(selectedJob));
     setEditAddress(selectedJob.properties?.address || '');
     setEditAddressCoords(null);
     setJobSaveError('');
@@ -484,6 +489,15 @@ export default function AdminRota() {
     // this form once didn't, and a completed visit re-dated a fortnight
     // ahead took its check-in with it and blocked the cleaner from
     // clocking in. Only a job that is still 'scheduled' can be moved.
+    const refreshes = editRefreshes
+      .map((r) => ({ room: r.room.trim(), minutes: Number(r.minutes) || 0 }))
+      .filter((r) => r.room);
+    if (refreshes.reduce((t, r) => t + r.minutes, 0) > editDuration) {
+      setSavingJob(false);
+      setJobSaveError('The room refreshes add up to more than the visit is booked for. Make the visit longer to include them.');
+      return;
+    }
+
     const timeLocked = selectedJob.status !== 'scheduled';
     const previousAt = selectedJob.scheduled_at;
     const scheduledAtDate = timeLocked ? new Date(previousAt) : new Date(`${editDate}T${editHour}:${editMinute}`);
@@ -523,6 +537,7 @@ export default function AdminRota() {
         scheduled_at: scheduledAtDate.toISOString(),
         duration_minutes: editDuration,
         notes: editNotes.trim() || null,
+        ...(isTraining(selectedJob) ? {} : { room_refreshes: refreshes }),
       })
       .eq('id', selectedJob.id)
       .select(JOB_SELECT)
@@ -2402,6 +2417,52 @@ export default function AdminRota() {
                 }}
               />
             </div>
+
+            {!isTraining(selectedJob) && (
+              <div className="field" style={{ marginTop: 10 }}>
+                <label className="field-label">Room refreshes</label>
+                {editRefreshes.map((r, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      value={r.room}
+                      onChange={(e) => setEditRefreshes((prev) => prev.map((x, j) => (j === i ? { ...x, room: e.target.value } : x)))}
+                      placeholder="e.g. Room 1"
+                      style={{ flex: 1, marginBottom: 0 }}
+                    />
+                    <select
+                      value={r.minutes}
+                      onChange={(e) => setEditRefreshes((prev) => prev.map((x, j) => (j === i ? { ...x, minutes: Number(e.target.value) } : x)))}
+                      style={{ width: 'auto', marginBottom: 0 }}
+                      aria-label="How long the refresh takes"
+                    >
+                      {DURATION_OPTIONS.slice(0, 16).map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => setEditRefreshes((prev) => prev.filter((_, j) => j !== i))}
+                      aria-label="Remove this room refresh"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setEditRefreshes((prev) => [...prev, { room: '', minutes: 60 }])}
+                >
+                  + Add a room refresh
+                </button>
+                <p style={{ fontSize: 12, color: 'var(--muted)', margin: '6px 0 0' }}>
+                  The refresh time is part of this visit&apos;s length, so make the visit long enough to include it.
+                  On the invoice breakdown it shows as its own line, with the room and the date.
+                </p>
+              </div>
+            )}
 
             <button
               type="button"

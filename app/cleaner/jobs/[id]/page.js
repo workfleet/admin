@@ -31,6 +31,7 @@ import { makePhotoPath, pendingPhotos, queuePhoto, withTimeout } from '../../../
 import { loadJobSnapshot, saveJobSnapshot, warmPageShell } from '../../../../lib/jobSnapshot';
 import { missingAreas } from '../../../../lib/photoCheck';
 import { isTraining, jobHeadline, jobSubtitle, trainerLine, TRAINING_JOB_COLUMNS } from '../../../../lib/training';
+import { refreshesOf, formatHours } from '../../../../lib/invoiceBreakdown';
 import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 
@@ -225,7 +226,7 @@ export default function JobDetailPage() {
     // rather than failing, and a hang never reaches the saved copy below.
     const { data: jobData, error: jobError } = await withTimeout(supabase
       .from('jobs')
-      .select(`id, scheduled_at, status, duration_minutes, notes, property_id, ${TRAINING_JOB_COLUMNS}, properties(address, notes, access_details, client_access_notes, lat, lng, geofence_radius_m, clients(name))`)
+      .select(`id, scheduled_at, status, duration_minutes, notes, room_refreshes, property_id, ${TRAINING_JOB_COLUMNS}, properties(address, notes, access_details, client_access_notes, lat, lng, geofence_radius_m, clients(name))`)
       .eq('id', id)
       .maybeSingle(), 15 * 1000);
 
@@ -1174,6 +1175,15 @@ export default function JobDetailPage() {
               <div className="visit-card visit-access">
                 <div className="visit-card-label">Notes for this visit</div>
                 <p className="visit-access-body" style={{ whiteSpace: 'pre-wrap' }}>{job.notes}</p>
+              </div>
+            )}
+
+            {refreshesOf(job).length > 0 && (
+              <div className="visit-card visit-access">
+                <div className="visit-card-label">Room refresh on this visit</div>
+                {refreshesOf(job).map((r, i) => (
+                  <p key={i} className="visit-access-body">{r.room}: {formatHours(r.minutes)} of this visit</p>
+                ))}
               </div>
             )}
 
