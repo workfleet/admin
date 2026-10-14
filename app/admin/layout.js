@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Download, Folder, Package, KeyRound, LifeBuoy, Banknote, Video, Bell, Menu, X, Receipt } from 'lucide-react';
 import { signOutAndClearPresence } from '../../lib/signOut';
 import { getSessionAndProfile } from '../../lib/authGate';
+import { canSeeInvoices } from '../../lib/invoiceAccess';
 import PresenceIndicator from '../components/PresenceIndicator';
 import ZoomControl from '../components/ZoomControl';
 import EmergencyBanner from '../components/EmergencyBanner';
@@ -40,7 +41,7 @@ const NAV_ITEMS = [
   // Payroll figures have been admin-only since supervisors arrived (0035);
   // the page checks the role again itself.
   { href: '/admin/payroll', label: 'Payroll', icon: Banknote, adminOnly: true },
-  { href: '/admin/invoices', label: 'Invoices', icon: Receipt, adminOnly: true },
+  { href: '/admin/invoices', label: 'Invoices', icon: Receipt, adminOnly: true, invoicesOnly: true },
   { href: '/admin/templates', label: 'Templates', icon: ListChecks },
   { href: '/admin/documents', label: 'Documents', icon: Folder },
   { href: '/admin/training', label: 'Training', icon: Video },
@@ -61,6 +62,7 @@ export default function AdminLayout({ children }) {
   const [role, setRole] = useState(null);
   // In here for the stock screens only - not office staff.
   const [stockOnly, setStockOnly] = useState(false);
+  const [showInvoices, setShowInvoices] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [loadError, setLoadError] = useState(false);
 
@@ -90,13 +92,14 @@ export default function AdminLayout({ children }) {
       return;
     }
     setRole(profile.role);
+    setShowInvoices(canSeeInvoices(session));
     setStockOnly(!isOffice);
     setAuthorized(true);
   };
 
   const navItems = stockOnly
     ? [...NAV_ITEMS.filter((item) => item.href === INVENTORY_HOME), INVENTORY_JOBS_ITEM]
-    : NAV_ITEMS.filter((item) => !item.adminOnly || role === 'admin');
+    : NAV_ITEMS.filter((item) => (!item.adminOnly || role === 'admin') && (!item.invoicesOnly || showInvoices));
 
   const handleLogout = async () => {
     await signOutAndClearPresence();

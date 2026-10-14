@@ -12,6 +12,7 @@ import {
 } from '../../../lib/invoiceBreakdown';
 import { toCSV, downloadCSV } from '../../../lib/csv';
 import { localDateString } from '../../../lib/localDate';
+import { canSeeInvoices } from '../../../lib/invoiceAccess';
 import { useToast } from '../../components/ToastProvider';
 import BackButton from '../../components/BackButton';
 
@@ -48,8 +49,8 @@ export default function InvoiceBreakdown() {
     (async () => {
       const { session, profile } = await getSessionAndProfile();
       if (!session) { router.push('/'); return; }
-      // Charges are admin-only, like payroll.
-      if (profile?.role !== 'admin') { router.push('/admin'); return; }
+      // Jess's own login only (lib/invoiceAccess.js).
+      if (profile?.role !== 'admin' || !canSeeInvoices(session)) { router.push('/admin'); return; }
 
       const { data, error: clientsError } = await supabase.from('clients').select('id, name, hourly_rate').order('name');
       if (clientsError) { setError('Couldn\'t load the clients.'); setLoading(false); return; }
