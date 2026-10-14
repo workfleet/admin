@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildInvoiceBreakdown, refreshesOf, propertyLineText, refreshLineText, breakdownText, formatHours, quickbooksRows, QUICKBOOKS_COLUMNS } from '../lib/invoiceBreakdown';
+import { buildInvoiceBreakdown, refreshesOf, propertyLineText, refreshLineText, breakdownText, formatHours, quickbooksRows, QUICKBOOKS_COLUMNS, invoicingDay, invoicePeriod } from '../lib/invoiceBreakdown';
 import { toCSV } from '../lib/csv';
 
 const properties = [
@@ -82,6 +82,27 @@ describe('refreshesOf', () => {
     expect(refreshesOf({ room_refreshes: [{ room: ' ', minutes: 30 }, { room: 'Room 2', minutes: 0 }, { room: 'Room 3', minutes: '45' }] }))
       .toEqual([{ room: 'Room 3', minutes: 45 }]);
     expect(refreshesOf({})).toEqual([]);
+  });
+});
+
+describe('invoicingDay', () => {
+  it('is the 30th, or the working day before', () => {
+    expect(invoicingDay(2026, 9)).toEqual([2026, 9, 30]); // Fri 30 Oct
+    expect(invoicingDay(2026, 4)).toEqual([2026, 4, 29]); // Sat 30 May
+    expect(invoicingDay(2027, 1)).toEqual([2027, 1, 26]); // Feb: Sun 28th, so Fri 26th
+    expect(invoicingDay(2027, 7)).toEqual([2027, 7, 27]); // Mon 30 Aug is the bank holiday
+    expect(invoicingDay(2029, 2)).toEqual([2029, 2, 29]); // Fri 30 Mar is Good Friday
+  });
+});
+
+describe('invoicePeriod', () => {
+  it('runs from last invoicing day to this one, UK midnight to UK midnight', () => {
+    const p = invoicePeriod('2026-10');
+    expect(p.start).toBe('2026-09-29T23:00:00.000Z'); // 30 Sep, BST
+    expect(p.end).toBe('2026-10-30T00:00:00.000Z'); // 30 Oct, GMT
+    expect(p.invoiceDay).toBe('2026-10-30');
+    expect(p.covers).toBe('30 September 2026 to 29 October 2026');
+    expect(invoicePeriod('2027-01').start).toBe('2026-12-30T00:00:00.000Z');
   });
 });
 

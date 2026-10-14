@@ -5,10 +5,10 @@ import { useRouter } from 'next/navigation';
 import { Copy, AlertTriangle, Download } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionAndProfile } from '../../../lib/authGate';
-import { monthBounds, monthLabel, recentMonths } from '../../../lib/detailedReport';
+import { monthLabel, recentMonths } from '../../../lib/detailedReport';
 import {
   buildInvoiceBreakdown, breakdownText, formatHours, gbp, propertyLineText, refreshLineText,
-  quickbooksRows, QUICKBOOKS_COLUMNS,
+  quickbooksRows, QUICKBOOKS_COLUMNS, invoicePeriod,
 } from '../../../lib/invoiceBreakdown';
 import { toCSV, downloadCSV } from '../../../lib/csv';
 import { localDateString } from '../../../lib/localDate';
@@ -23,8 +23,9 @@ export default function InvoiceBreakdown() {
   const toast = useToast();
   const [clients, setClients] = useState([]);
   const [clientId, setClientId] = useState('');
-  // Invoices go out after the month ends, so last month is the usual one.
-  const [month, setMonth] = useState(recentMonths(2)[1]);
+  // The invoice goes out on this month's 30th (lib/invoiceBreakdown.js).
+  const [month, setMonth] = useState(recentMonths(1)[0]);
+  const period = invoicePeriod(month);
   const [rateInput, setRateInput] = useState('');
   const [breakdown, setBreakdown] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -34,6 +35,14 @@ export default function InvoiceBreakdown() {
   const [invoiceNo, setInvoiceNo] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(localDateString(new Date()));
   const [product, setProduct] = useState('Cleaning');
+
+  // Numbered like TKR-2026-10 (QuickBooks custom transaction numbers) and
+  // dated the invoicing day, matching the file the monthly task sends.
+  useEffect(() => {
+    const client = clients.find((c) => c.id === clientId);
+    setInvoiceNo(client ? `${client.name.split(/\s+/)[0].toUpperCase()}-${month}` : '');
+    setInvoiceDate(period?.invoiceDay || localDateString(new Date()));
+  }, [clientId, month, clients.length]);
 
   useEffect(() => {
     (async () => {
@@ -63,7 +72,7 @@ export default function InvoiceBreakdown() {
     (async () => {
       setLoadingMonth(true);
       setError('');
-      const bounds = monthBounds(month);
+      const bounds = invoicePeriod(month);
       const { data: properties, error: propError } = await supabase
         .from('properties').select('id, address').eq('client_id', clientId);
       const ids = (properties || []).map((p) => p.id);
@@ -149,6 +158,7 @@ export default function InvoiceBreakdown() {
           </div>
         </div>
         <p style={{ fontSize: 13, color: 'var(--muted)', margin: '10px 0 0' }}>
+          {period && <>Sent on {new Date(`${period.invoiceDay}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}, this invoice covers visits from {period.covers}. Later visits go on next month&apos;s. </>}
           Charged on each visit&apos;s booked length. Only visits that happened are included - missed visits and ones not closed on the rota are left out.
           Add room refreshes on the rota by opening the visit.
         </p>
