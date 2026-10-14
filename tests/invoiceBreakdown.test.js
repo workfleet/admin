@@ -86,7 +86,7 @@ describe('refreshesOf', () => {
 });
 
 describe('quickbooksRows', () => {
-  it('makes one import row per invoice line, due 30 days after the invoice date', () => {
+  it('makes one import row per invoice line, due on receipt', () => {
     const b = buildInvoiceBreakdown({
       properties,
       rate: 24,
@@ -98,7 +98,7 @@ describe('quickbooksRows', () => {
     const rows = quickbooksRows(b, { invoiceNo: '1042', customer: 'TKR Management', invoiceDate: '2026-11-01', item: 'Cleaning', rate: 24 });
     expect(rows).toHaveLength(3);
     expect(rows[0]).toMatchObject({
-      invoiceNo: '1042', customer: 'TKR Management', invoiceDate: '01/11/2026', dueDate: '01/12/2026', terms: 'Net 30',
+      invoiceNo: '1042', customer: 'TKR Management', invoiceDate: '01/11/2026', dueDate: '01/11/2026', terms: 'Due on receipt',
       item: 'Cleaning', description: '20 Olive Street - 1 cleaning visit: 2 October 2026', quantity: '1.50', rate: '24.00', amount: '36.00',
     });
     // Like QuickBooks' sample: later lines of the same invoice leave the customer and dates blank.

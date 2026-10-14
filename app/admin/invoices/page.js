@@ -221,7 +221,7 @@ export default function InvoiceBreakdown() {
                 <h2 style={{ margin: '0 0 4px' }}>Put it into QuickBooks</h2>
                 <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
                   Download the file, then in QuickBooks go to Settings (the cog), Import data, Invoices, and upload it. It makes one invoice
-                  to {client?.name}, due in 30 days, with every line above.
+                  to {client?.name}, due on receipt, with every line above.
                 </p>
                 <div className="field-row">
                   <div className="field">
