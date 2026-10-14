@@ -2,13 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Copy, AlertTriangle } from 'lucide-react';
+import { Copy, AlertTriangle, Download } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionAndProfile } from '../../../lib/authGate';
 import { monthBounds, monthLabel, recentMonths } from '../../../lib/detailedReport';
 import {
   buildInvoiceBreakdown, breakdownText, formatHours, gbp, propertyLineText, refreshLineText,
+  quickbooksRows, QUICKBOOKS_COLUMNS,
 } from '../../../lib/invoiceBreakdown';
+import { toCSV, downloadCSV } from '../../../lib/csv';
+import { localDateString } from '../../../lib/localDate';
 import { useToast } from '../../components/ToastProvider';
 import BackButton from '../../components/BackButton';
 
@@ -27,6 +30,10 @@ export default function InvoiceBreakdown() {
   const [loading, setLoading] = useState(true);
   const [loadingMonth, setLoadingMonth] = useState(false);
   const [error, setError] = useState('');
+  // For the QuickBooks import file.
+  const [invoiceNo, setInvoiceNo] = useState('');
+  const [invoiceDate, setInvoiceDate] = useState(localDateString(new Date()));
+  const [product, setProduct] = useState('Cleaning');
 
   useEffect(() => {
     (async () => {
@@ -90,6 +97,16 @@ export default function InvoiceBreakdown() {
     } catch {
       toast.error('Couldn\'t copy - select the text and copy it instead.');
     }
+  };
+
+  const downloadForQuickBooks = () => {
+    if (!invoiceNo.trim()) { toast.error('Enter the invoice number first - the next one in QuickBooks.'); return; }
+    if (!product.trim()) { toast.error('Enter the product or service name from QuickBooks.'); return; }
+    const rows = quickbooksRows(breakdown, {
+      invoiceNo: invoiceNo.trim(), customer: client.name, invoiceDate, item: product.trim(), rate: rate || 0,
+      memo: `HMO Cleaning - ${monthLabel(month)}`,
+    });
+    downloadCSV(`${client.name} ${month} invoice ${invoiceNo.trim()}.csv`, toCSV(QUICKBOOKS_COLUMNS, rows));
   };
 
   if (loading) return <div className="page-inner">Loading...</div>;
@@ -196,8 +213,33 @@ export default function InvoiceBreakdown() {
               <div className="card">
                 <TotalRow label={`Total for ${monthName}`} amount={breakdown.total} strong />
                 <p style={{ fontSize: 13, color: 'var(--muted)', margin: '6px 0 0' }}>
-                  QuickBooks adds the invoice number, date, your business details and payment details.
+                  QuickBooks adds your business details and payment details.
                 </p>
+              </div>
+
+              <div className="card" style={{ marginTop: 16 }}>
+                <h2 style={{ margin: '0 0 4px' }}>Put it into QuickBooks</h2>
+                <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
+                  Download the file, then in QuickBooks go to Settings (the cog), Import data, Invoices, and upload it. It makes one invoice
+                  to {client?.name}, due in 30 days, with every line above.
+                </p>
+                <div className="field-row">
+                  <div className="field">
+                    <label className="field-label">Invoice number</label>
+                    <input type="text" value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="The next one in QuickBooks" style={{ marginBottom: 0 }} />
+                  </div>
+                  <div className="field">
+                    <label className="field-label">Invoice date</label>
+                    <input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value || localDateString(new Date()))} style={{ marginBottom: 0 }} />
+                  </div>
+                  <div className="field">
+                    <label className="field-label">Product/service in QuickBooks</label>
+                    <input type="text" value={product} onChange={(e) => setProduct(e.target.value)} style={{ marginBottom: 0 }} />
+                  </div>
+                </div>
+                <button type="button" className="btn-primary" onClick={downloadForQuickBooks} style={{ marginTop: 12 }}>
+                  <Download size={16} /> Download for QuickBooks
+                </button>
               </div>
             </>
           )}

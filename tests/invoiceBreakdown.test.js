@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildInvoiceBreakdown, refreshesOf, propertyLineText, refreshLineText, breakdownText, formatHours } from '../lib/invoiceBreakdown';
+import { buildInvoiceBreakdown, refreshesOf, propertyLineText, refreshLineText, breakdownText, formatHours, quickbooksRows, QUICKBOOKS_COLUMNS } from '../lib/invoiceBreakdown';
+import { toCSV } from '../lib/csv';
 
 const properties = [
   { id: 'olive', address: '20 Olive Street, Swansea, SA1 1AA' },
@@ -81,6 +82,31 @@ describe('refreshesOf', () => {
     expect(refreshesOf({ room_refreshes: [{ room: ' ', minutes: 30 }, { room: 'Room 2', minutes: 0 }, { room: 'Room 3', minutes: '45' }] }))
       .toEqual([{ room: 'Room 3', minutes: 45 }]);
     expect(refreshesOf({})).toEqual([]);
+  });
+});
+
+describe('quickbooksRows', () => {
+  it('makes one import row per invoice line, due 30 days after the invoice date', () => {
+    const b = buildInvoiceBreakdown({
+      properties,
+      rate: 24,
+      jobs: [
+        job({ scheduled_at: '2026-10-02T09:00:00Z', duration_minutes: 150, room_refreshes: [{ room: 'Room 1', minutes: 60 }] }),
+        job({ property_id: 'comm', scheduled_at: '2026-10-05T09:00:00Z' }),
+      ],
+    });
+    const rows = quickbooksRows(b, { invoiceNo: '1042', customer: 'TKR Management', invoiceDate: '2026-11-01', item: 'Cleaning', rate: 24 });
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toMatchObject({
+      invoiceNo: '1042', customer: 'TKR Management', invoiceDate: '01/11/2026', dueDate: '01/12/2026', terms: 'Net 30',
+      item: 'Cleaning', description: '20 Olive Street - 1 cleaning visit: 2 October 2026', quantity: '1.50', rate: '24.00', amount: '36.00',
+    });
+    // Like QuickBooks' sample: later lines of the same invoice leave the customer and dates blank.
+    expect(rows[1].customer).toBeUndefined();
+    expect(rows[1].invoiceNo).toBe('1042');
+    expect(rows[2]).toMatchObject({ serviceDate: '02/10/2026', description: 'Room refresh - Room 1, 20 Olive Street - 2 October 2026', quantity: '1.00', amount: '24.00' });
+    expect(toCSV(QUICKBOOKS_COLUMNS, rows).split('\n')[0])
+      .toBe('*InvoiceNo,*Customer,*InvoiceDate,*DueDate,Terms,Location,Memo,Item(Product/Service),ItemDescription,ItemQuantity,ItemRate,*ItemAmount,Service Date,Note to customer');
   });
 });
 
