@@ -58,6 +58,12 @@ describe('quote pricing', () => {
     }
   });
 
+  it('does not list the free standard inclusions, only extras chosen', () => {
+    const text = JSON.stringify(quoteSections(ovenQuote));
+    expect(text).not.toMatch(/Included as standard|Fridge clean|Washing machine/);
+    expect(text).toContain('Also included: Double oven clean.');
+  });
+
   it('renders both documents', async () => {
     for (const quote of [contractQuote, ovenQuote]) {
       expect((await renderToBuffer(createElement(QuotePdfDocument, { quote }))).length).toBeGreaterThan(1000);
