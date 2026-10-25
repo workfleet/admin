@@ -20,7 +20,7 @@ import JobPhotoGrid from '../../components/JobPhotoGrid';
 import { photoNamePrefix } from '../../../lib/photoDownload';
 import { groupOverlappingJobs, assignLanes, abbreviateName } from '../../../lib/jobOverlap';
 import { findTightTurnarounds, describeTurnaround } from '../../../lib/travelTime';
-import { buildCleanerRows, formatHours, shareMinutes, UNASSIGNED_ROW_ID } from '../../../lib/rotaGrid';
+import { buildCleanerRows, formatHours, ROW_ORDERS, shareMinutes, UNASSIGNED_ROW_ID } from '../../../lib/rotaGrid';
 import { shortAddress, nameRepeatsStreet } from '../../../lib/shortAddress';
 import { certificationLine, isTraining, jobHeadline, jobSubtitle, trainerLine, trainingJobFields, TRAINING_JOB_COLUMNS } from '../../../lib/training';
 import { refreshesOf } from '../../../lib/invoiceBreakdown';
@@ -60,6 +60,10 @@ const VIEWS = ['cleaners', 'calendar'];
 // Whether the by-cleaner sheet shows the week or one day of it.
 const RANGE_STORAGE_KEY = 'admin-rota-range';
 const RANGES = ['week', 'day'];
+// The order the team comes down the by-cleaner sheet - A to Z, most hours
+// first, or the office's own arrangement - and that arrangement itself.
+const ROW_ORDER_STORAGE_KEY = 'admin-rota-row-order';
+const CUSTOM_ORDER_STORAGE_KEY = 'admin-rota-custom-order';
 
 // Monday is 0. Used to open the day view on today rather than on Monday.
 function dayIndexOf(date) {
@@ -165,6 +169,10 @@ export default function AdminRota() {
   // Only the by-cleaner sheet has a day mode.
   const [range, setRange] = useState('week');
   const [dayIndex, setDayIndex] = useState(() => dayIndexOf(new Date()));
+  // How the by-cleaner rows are ordered, and the office's own order (a list
+  // of staff ids) for when they have arranged it themselves.
+  const [rowOrder, setRowOrder] = useState('name');
+  const [customOrder, setCustomOrder] = useState([]);
   const [jobs, setJobs] = useState([]);
   // Approved holiday and unavailability touching the week on screen, so the
   // by-cleaner sheet can show who is away before anyone tries to book them.
@@ -315,6 +323,10 @@ export default function AdminRota() {
       if (VIEWS.includes(saved)) setView(saved);
       const savedRange = window.localStorage.getItem(RANGE_STORAGE_KEY);
       if (RANGES.includes(savedRange)) setRange(savedRange);
+      const savedOrder = window.localStorage.getItem(ROW_ORDER_STORAGE_KEY);
+      if (ROW_ORDERS.includes(savedOrder)) setRowOrder(savedOrder);
+      const savedCustom = JSON.parse(window.localStorage.getItem(CUSTOM_ORDER_STORAGE_KEY) || '[]');
+      if (Array.isArray(savedCustom)) setCustomOrder(savedCustom.filter((id) => typeof id === 'string'));
     } catch {
       // Private browsing or blocked storage: the calendar is a fine default.
     }
@@ -328,6 +340,20 @@ export default function AdminRota() {
   const chooseRange = (next) => {
     setRange(next);
     try { window.localStorage.setItem(RANGE_STORAGE_KEY, next); } catch { /* see above */ }
+  };
+
+  const chooseRowOrder = (next) => {
+    setRowOrder(next);
+    try { window.localStorage.setItem(ROW_ORDER_STORAGE_KEY, next); } catch { /* see above */ }
+  };
+
+  // A row moved on the sheet. The list kept is the whole team in its new
+  // order, plus anyone remembered from before who isn't on this list (off
+  // the bookable roles for now), so their place isn't forgotten.
+  const reorderRows = (ids) => {
+    const next = [...ids, ...customOrder.filter((id) => !ids.includes(id))];
+    setCustomOrder(next);
+    try { window.localStorage.setItem(CUSTOM_ORDER_STORAGE_KEY, JSON.stringify(next)); } catch { /* see above */ }
   };
 
   // Day mode moves a day at a time and rolls over into the next or previous
@@ -2095,6 +2121,26 @@ export default function AdminRota() {
               </button>
             </div>
           )}
+          {view === 'cleaners' && (
+            <div className="rota-seg" role="group" aria-label="Order of the team">
+              {[
+                ['name', 'A–Z', 'Staff in name order'],
+                ['hours', 'Most hours', 'Whoever is working the most at the top'],
+                ['custom', 'Arrange', 'Your own order - drag a name, or use the arrows, to move someone up or down'],
+              ].map(([key, label, hint]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`rota-seg-btn${rowOrder === key ? ' is-active' : ''}`}
+                  onClick={() => chooseRowOrder(key)}
+                  aria-pressed={rowOrder === key}
+                  title={hint}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
           <button type="button" className="rota-new-btn" onClick={() => setShowForm(true)} title="Schedule a new job and assign staff to it">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
             New job
@@ -2161,6 +2207,9 @@ export default function AdminRota() {
           timeOff={timeOff}
           placeParts={placeParts}
           dayIndex={dayMode ? dayIndex : null}
+          rowOrder={rowOrder}
+          customOrder={customOrder}
+          onReorder={reorderRows}
           onOpenJob={setSelectedJob}
           onNewJob={startNewJob}
           onDropJob={handleGridDrop}
@@ -2279,6 +2328,8 @@ export default function AdminRota() {
               job to another day to move it, or onto another row to hand it to that cleaner - the
               time stays the same, and the usual clash and time-off checks still run. Tight travel
               counts the gaps between one cleaner&apos;s jobs that are shorter than the drive.
+              Most hours puts whoever is working the most at the top; Arrange lets you drag a
+              name, or use its arrows, to put the team in your own order.
             </>
           ) : (
             <>

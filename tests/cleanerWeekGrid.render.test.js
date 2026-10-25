@@ -160,3 +160,34 @@ describe('CleanerWeekGrid on one day', () => {
     expect(html).toContain('11h');
   });
 });
+
+describe('CleanerWeekGrid row order', () => {
+  const render = (props) => renderToStaticMarkup(createElement(CleanerWeekGrid, {
+    rows: buildCleanerRows(jobs, cleaners, weekDays),
+    weekDays,
+    todayKey: weekDays[1].toDateString(),
+    onOpenJob: () => {},
+    onNewJob: () => {},
+    onDropJob: () => {},
+    ...props,
+  }));
+  const namePos = (html, name) => html.indexOf(`rota-grid-name">${name}`);
+
+  it('puts whoever has the most hours first', () => {
+    // Amira has 2h plus half of 2.5h; Ben only his half.
+    const html = render({ rowOrder: 'hours' });
+    expect(namePos(html, 'Amira Shah')).toBeLessThan(namePos(html, 'Ben Okafor'));
+  });
+
+  it('follows the office order and shows move arrows when arranging', () => {
+    const html = render({ rowOrder: 'custom', customOrder: ['ben', 'amira'], onReorder: () => {} });
+    expect(namePos(html, 'Ben Okafor')).toBeGreaterThan(-1);
+    expect(namePos(html, 'Ben Okafor')).toBeLessThan(namePos(html, 'Amira Shah'));
+    expect(html).toContain('Move Ben Okafor up');
+    expect(html).toContain('rota-grid-move');
+  });
+
+  it('has no arrows outside arrange mode', () => {
+    expect(render({ rowOrder: 'name' })).not.toContain('rota-grid-move');
+  });
+});

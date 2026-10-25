@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { coworkersOf, firstName, formatHours, freeGaps, formatGap, shareMinutes, UNASSIGNED_ROW_ID } from '../../../lib/rotaGrid';
+import { coworkersOf, firstName, formatHours, freeGaps, formatGap, moveId, orderRows, shareMinutes, UNASSIGNED_ROW_ID } from '../../../lib/rotaGrid';
 import { isTraining, jobHeadline, jobSubtitle } from '../../../lib/training';
 import { localDateString } from '../../../lib/localDate';
 import { tintFor, tintsByOrder } from '../../../lib/avatarTint';
@@ -21,6 +21,7 @@ import { tintFor, tintsByOrder } from '../../../lib/avatarTint';
 
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const DRAG_MIME = 'application/x-rota-job';
+const ROW_MIME = 'application/x-rota-row';
 
 function initials(name) {
   return String(name || '')
@@ -59,17 +60,31 @@ function statusWord(job) {
 }
 
 // `dayIndex` null draws the whole week; a number draws that one day only.
-export default function CleanerWeekGrid({ rows, weekDays, todayKey, timeOff = [], placeParts, dayIndex = null, onOpenJob, onNewJob, onDropJob }) {
+// `rowOrder` is 'name', 'hours' or 'custom' (see orderRows). In 'custom' the
+// names grow a handle: drag one onto another row, or use the arrows, and
+// `onReorder` is handed the team's ids in their new order.
+export default function CleanerWeekGrid({ rows: givenRows, weekDays, todayKey, timeOff = [], placeParts, dayIndex = null, rowOrder = 'name', customOrder = [], onReorder, onOpenJob, onNewJob, onDropJob }) {
   // The cell under a dragged job, so it can light up as the place the job
   // will land. Only meaningful mid-drag; cleared on drop or leave.
   const [over, setOver] = useState(null);
+  // The row a dragged name would land on.
+  const [rowOver, setRowOver] = useState(null);
 
   const single = dayIndex !== null && dayIndex !== undefined;
-  // The team's colours, handed out down the list in order. The row for
-  // nobody and anyone who has left are not part of the team list.
-  const tints = tintsByOrder(rows.filter((r) => r.current && r.id !== UNASSIGNED_ROW_ID).map((r) => r.id));
+  // The team's colours, handed out down the A to Z list, before any
+  // reordering, so moving someone up the sheet doesn't change their colour.
+  // The row for nobody and anyone who has left are not part of the team.
+  const tints = tintsByOrder(givenRows.filter((r) => r.current && r.id !== UNASSIGNED_ROW_ID).map((r) => r.id));
   const tintOf = (id) => tints.get(id) || tintFor(id);
   const shownDays = single ? [dayIndex] : weekDays.map((_, i) => i);
+  const minutesShown = (row) => {
+    const cleanerId = row.id === UNASSIGNED_ROW_ID ? null : row.id;
+    return shownDays.reduce((sum, i) => sum + row.days[i].reduce((s, j) => s + shareMinutes(j, cleanerId), 0), 0);
+  };
+  const rows = orderRows(givenRows, rowOrder, customOrder, minutesShown);
+  const arranging = rowOrder === 'custom' && typeof onReorder === 'function';
+  const teamIds = rows.filter((r) => r.current && r.id !== UNASSIGNED_ROW_ID).map((r) => r.id);
+  const moveRow = (id, toIndex) => onReorder(moveId(teamIds, id, toIndex));
 
   const startOfToday = new Date(new Date().setHours(0, 0, 0, 0));
   const dayClass = (i) => {
@@ -251,9 +266,64 @@ export default function CleanerWeekGrid({ rows, weekDays, todayKey, timeOff = []
             // hold a job.
             if (!row.current && shownJobs === 0) return null;
 
+            const place = teamIds.indexOf(row.id);
+            const movable = arranging && place !== -1;
+            const rowDragProps = movable ? {
+              draggable: true,
+              onDragStart: (e) => {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData(ROW_MIME, row.id);
+                e.dataTransfer.setData('text/plain', row.name);
+              },
+              onDragEnd: () => setRowOver(null),
+              onDragOver: (e) => {
+                if (!e.dataTransfer.types.includes(ROW_MIME)) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                if (rowOver !== row.id) setRowOver(row.id);
+              },
+              onDragLeave: (e) => {
+                if (e.currentTarget.contains(e.relatedTarget)) return;
+                setRowOver((o) => (o === row.id ? null : o));
+              },
+              onDrop: (e) => {
+                e.preventDefault();
+                setRowOver(null);
+                const dragged = e.dataTransfer.getData(ROW_MIME);
+                if (dragged && dragged !== row.id) moveRow(dragged, place);
+              },
+            } : {};
+
             return (
               <div key={row.id} className={`rota-grid-row ${isUnassigned ? 'is-unassigned' : ''} ${row.current ? '' : 'is-former'}`} role="row">
-                <div className="rota-grid-who" role="rowheader">
+                <div
+                  className={`rota-grid-who${movable ? ' is-movable' : ''}${rowOver === row.id ? ' row-drag-over' : ''}`}
+                  role="rowheader"
+                  title={movable ? `Drag ${firstName(row.name)} up or down the rota` : undefined}
+                  {...rowDragProps}
+                >
+                  {movable && (
+                    <span className="rota-grid-move">
+                      <button
+                        type="button"
+                        onClick={() => moveRow(row.id, place - 1)}
+                        disabled={place === 0}
+                        aria-label={`Move ${row.name} up`}
+                        title="Move up"
+                      >
+                        ▲
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveRow(row.id, place + 1)}
+                        disabled={place === teamIds.length - 1}
+                        aria-label={`Move ${row.name} down`}
+                        title="Move down"
+                      >
+                        ▼
+                      </button>
+                    </span>
+                  )}
                   <span
                     className={`rota-grid-avatar ${isUnassigned ? 'unassigned' : ''}`}
                     style={isUnassigned ? undefined : { background: tintOf(row.id)[0], color: tintOf(row.id)[1] }}

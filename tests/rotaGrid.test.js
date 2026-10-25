@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildCleanerRows, coworkersOf, firstName, formatHours, freeGaps, formatGap, shareMinutes, UNASSIGNED_ROW_ID } from '../lib/rotaGrid';
+import { buildCleanerRows, moveId, orderRows, coworkersOf, firstName, formatHours, freeGaps, formatGap, shareMinutes, UNASSIGNED_ROW_ID } from '../lib/rotaGrid';
 
 // The by-cleaner rota is a row per person with the days across. A job that
 // lands on the wrong row, or on no row, is a job the office can't see.
@@ -163,5 +163,37 @@ describe('formatGap', () => {
     expect(formatGap(90)).toBe('1h 30m');
     expect(formatGap(120)).toBe('2h');
     expect(formatGap(45)).toBe('45m');
+  });
+});
+
+describe('orderRows', () => {
+  const chloe = { id: 'chloe', full_name: 'Chloe Day' };
+  const rowsFor = (jobs) => buildCleanerRows(jobs, [amira, ben, chloe], weekDays);
+  const ids = (rows) => rows.map((r) => r.id);
+
+  it('keeps the staff list order for A to Z', () => {
+    expect(ids(orderRows(rowsFor([]), 'name'))).toEqual([UNASSIGNED_ROW_ID, 'amira', 'ben', 'chloe']);
+  });
+
+  it('puts the most hours first, ties in name order, nobody and leavers fixed', () => {
+    const rows = rowsFor([
+      job('a', '2026-09-15T09:00:00', 60, [on('amira', 'Amira Shah')]),
+      job('c', '2026-09-15T09:00:00', 240, [on('chloe', 'Chloe Day')]),
+      job('z', '2026-09-16T09:00:00', 600, [on('zed', 'Zed Former')]),
+    ]);
+    expect(ids(orderRows(rows, 'hours'))).toEqual([UNASSIGNED_ROW_ID, 'chloe', 'amira', 'ben', 'zed']);
+  });
+
+  it('follows the office order, with anyone new at the end', () => {
+    expect(ids(orderRows(rowsFor([]), 'custom', ['chloe', 'amira']))).toEqual([UNASSIGNED_ROW_ID, 'chloe', 'amira', 'ben']);
+  });
+});
+
+describe('moveId', () => {
+  it('moves an id up and down, clamped at the ends', () => {
+    expect(moveId(['a', 'b', 'c'], 'c', 0)).toEqual(['c', 'a', 'b']);
+    expect(moveId(['a', 'b', 'c'], 'a', 1)).toEqual(['b', 'a', 'c']);
+    expect(moveId(['a', 'b', 'c'], 'a', 9)).toEqual(['b', 'c', 'a']);
+    expect(moveId(['a', 'b', 'c'], 'b', -1)).toEqual(['b', 'a', 'c']);
   });
 });
