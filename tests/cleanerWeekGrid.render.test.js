@@ -179,15 +179,20 @@ describe('CleanerWeekGrid row order', () => {
     expect(namePos(html, 'Amira Shah')).toBeLessThan(namePos(html, 'Ben Okafor'));
   });
 
-  it('follows the office order and shows move arrows when arranging', () => {
+  it('follows the office order', () => {
     const html = render({ rowOrder: 'custom', customOrder: ['ben', 'amira'], onReorder: () => {} });
     expect(namePos(html, 'Ben Okafor')).toBeGreaterThan(-1);
     expect(namePos(html, 'Ben Okafor')).toBeLessThan(namePos(html, 'Amira Shah'));
-    expect(html).toContain('Move Ben Okafor up');
-    expect(html).toContain('rota-grid-move');
   });
 
-  it('has no arrows outside arrange mode', () => {
-    expect(render({ rowOrder: 'name' })).not.toContain('rota-grid-move');
+  it('gives every team member a drag grip in any order, but not the nobody or leaver rows', () => {
+    const html = render({ rowOrder: 'name', onReorder: () => {} });
+    expect((html.match(/class="rota-grid-grip"/g) || []).length).toBe(2);
+    expect(html).toContain('Move Ben Okafor');
+    expect(html).toContain('data-team-row="amira"');
+  });
+
+  it('has no grip when the page cannot save an order', () => {
+    expect(render({ rowOrder: 'name' })).not.toContain('rota-grid-grip');
   });
 });

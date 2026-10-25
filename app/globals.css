@@ -3939,7 +3939,7 @@ a.btn-compact {
 
 .rota-grid {
   display: grid;
-  grid-template-columns: 172px repeat(7, minmax(0, 1fr)) 60px;
+  grid-template-columns: 188px repeat(7, minmax(0, 1fr)) 60px;
   /* The design's columns share whatever room there is, so the week fits
      beside the sidebar on a laptop instead of scrolling sideways. Only on
      a phone does it scroll. */
@@ -4094,29 +4094,38 @@ a.btn-compact {
 
 .rota-grid-row.is-unassigned .rota-grid-name { color: var(--wf-overdue); }
 
-/* Arrange mode: a name can be dragged up or down, or nudged with arrows. */
-.rota-grid-who.is-movable { cursor: grab; padding-left: 6px; }
-.rota-grid-who.row-drag-over { box-shadow: inset 0 3px 0 var(--brand-primary); }
-
-.rota-grid-move {
-  display: flex;
-  flex-direction: column;
+/* The grip by a name: press and drag it to move that person up or down.
+   touch-action: none stops a finger drag from scrolling the page instead. */
+.rota-grid-grip {
   flex-shrink: 0;
-}
-
-.rota-grid-move button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 32px;
+  margin: 0 -4px 0 -10px;
+  padding: 0;
   border: none;
+  border-radius: 6px;
   background: transparent;
   color: var(--muted);
-  font-size: 9px;
-  line-height: 1;
-  padding: 3px 4px;
-  cursor: pointer;
-  border-radius: 4px;
+  fill: currentColor;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-.rota-grid-move button:hover:not(:disabled) { color: var(--ink); background: var(--wf-ash); }
-.rota-grid-move button:disabled { opacity: 0.25; cursor: default; }
+.rota-grid-grip:hover,
+.rota-grid-grip:focus-visible { color: var(--ink); background: var(--wf-ash); }
+.rota-grid-row.is-row-dragging .rota-grid-grip { cursor: grabbing; }
+
+/* No text gets selected while a person is dragged across the names. */
+.rota-grid-wrap.is-moving-row { user-select: none; -webkit-user-select: none; cursor: grabbing; }
+
+/* The person being moved fades, and a line shows where they will land. */
+.rota-grid-row.is-row-dragging > * { opacity: 0.45; }
+.rota-grid-row.drop-before > * { box-shadow: inset 0 3px 0 var(--brand-primary); }
+.rota-grid-row.drop-after > * { box-shadow: inset 0 -3px 0 var(--brand-primary); }
 .rota-grid-row.is-former .rota-grid-name { color: var(--muted); }
 
 .rota-grid-cell {
@@ -4342,12 +4351,12 @@ a.btn-compact {
 }
 
 @media (max-width: 1280px) {
-  .rota-grid { grid-template-columns: 150px repeat(7, minmax(0, 1fr)) 54px; }
+  .rota-grid { grid-template-columns: 164px repeat(7, minmax(0, 1fr)) 54px; }
 }
 
 @media (max-width: 720px) {
   .rota-grid {
-    grid-template-columns: 140px repeat(7, 124px) 60px;
+    grid-template-columns: 152px repeat(7, 124px) 60px;
   }
   .rota-grid-who { padding-left: 12px; gap: 8px; }
   .rota-grid-avatar { width: 28px; height: 28px; font-size: 11px; }
@@ -4369,7 +4378,7 @@ a.btn-compact {
    two lines and the free time between jobs is drawn as a slot: dashed, no
    fill, so it reads as space to put something in rather than as a job. */
 .rota-grid.is-day {
-  grid-template-columns: 184px minmax(0, 1fr) 76px;
+  grid-template-columns: 198px minmax(0, 1fr) 76px;
   min-width: 0;
 }
 
@@ -4422,7 +4431,7 @@ a.btn-compact {
 
 @media (max-width: 720px) {
   .rota-grid.is-day {
-    grid-template-columns: 120px minmax(0, 1fr) 56px;
+    grid-template-columns: 132px minmax(0, 1fr) 56px;
   }
   .rota-grid.is-day .rota-chip-line { flex-wrap: wrap; white-space: normal; }
 }

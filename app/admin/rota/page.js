@@ -361,10 +361,13 @@ export default function AdminRota() {
   // the bookable roles for now), so their place isn't forgotten. It is
   // saved for everyone; if the save fails the sheet goes back to what is
   // stored, so nobody arranges a rota only they can see.
+  // Moving someone from A to Z or Most hours starts the office order from
+  // what was on screen, so the sheet switches to it.
   const reorderRows = async (ids) => {
     const before = customOrder;
     const next = [...ids, ...before.filter((id) => !ids.includes(id))];
     setCustomOrder(next);
+    if (rowOrder !== 'custom') chooseRowOrder('custom');
     const { error } = settingsId
       ? await supabase.from('company_settings').update({ rota_staff_order: next }).eq('id', settingsId)
       : { error: new Error('no company_settings row') };
@@ -2154,7 +2157,7 @@ export default function AdminRota() {
               {[
                 ['name', 'A–Z', 'Staff in name order'],
                 ['hours', 'Most hours', 'Whoever is working the most at the top'],
-                ['custom', 'Arrange', 'The office order, shared with everyone - drag a name, or use the arrows, to move someone up or down'],
+                ['custom', 'Arrange', 'The office order, shared with everyone - drag the grip by a name to move someone up or down'],
               ].map(([key, label, hint]) => (
                 <button
                   key={key}
@@ -2356,8 +2359,8 @@ export default function AdminRota() {
               job to another day to move it, or onto another row to hand it to that cleaner - the
               time stays the same, and the usual clash and time-off checks still run. Tight travel
               counts the gaps between one cleaner&apos;s jobs that are shorter than the drive.
-              Most hours puts whoever is working the most at the top; Arrange lets you drag a
-              name, or use its arrows, to put the team in order - everyone in the office sees
+              Most hours puts whoever is working the most at the top. Drag the grip beside a
+              name to move that person up or down; that switches to Arrange, and everyone in the office sees
               the same arrangement.
             </>
           ) : (

@@ -21,7 +21,6 @@ import { tintFor, tintsByOrder } from '../../../lib/avatarTint';
 
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const DRAG_MIME = 'application/x-rota-job';
-const ROW_MIME = 'application/x-rota-row';
 
 function initials(name) {
   return String(name || '')
@@ -60,15 +59,16 @@ function statusWord(job) {
 }
 
 // `dayIndex` null draws the whole week; a number draws that one day only.
-// `rowOrder` is 'name', 'hours' or 'custom' (see orderRows). In 'custom' the
-// names grow a handle: drag one onto another row, or use the arrows, and
-// `onReorder` is handed the team's ids in their new order.
+// `rowOrder` is 'name', 'hours' or 'custom' (see orderRows). Every team
+// name has a grip: drag it up or down (or focus it and press the arrow
+// keys) and `onReorder` is handed the team's ids in their new order.
 export default function CleanerWeekGrid({ rows: givenRows, weekDays, todayKey, timeOff = [], placeParts, dayIndex = null, rowOrder = 'name', customOrder = [], onReorder, onOpenJob, onNewJob, onDropJob }) {
   // The cell under a dragged job, so it can light up as the place the job
   // will land. Only meaningful mid-drag; cleared on drop or leave.
   const [over, setOver] = useState(null);
-  // The row a dragged name would land on.
-  const [rowOver, setRowOver] = useState(null);
+  // A person being moved up or down: who, the row they'd land next to, and
+  // whether that's above or below it.
+  const [rowDrag, setRowDrag] = useState(null);
 
   const single = dayIndex !== null && dayIndex !== undefined;
   // The team's colours, handed out down the A to Z list, before any
@@ -82,9 +82,47 @@ export default function CleanerWeekGrid({ rows: givenRows, weekDays, todayKey, t
     return shownDays.reduce((sum, i) => sum + row.days[i].reduce((s, j) => s + shareMinutes(j, cleanerId), 0), 0);
   };
   const rows = orderRows(givenRows, rowOrder, customOrder, minutesShown);
-  const arranging = rowOrder === 'custom' && typeof onReorder === 'function';
+  const canMove = typeof onReorder === 'function';
   const teamIds = rows.filter((r) => r.current && r.id !== UNASSIGNED_ROW_ID).map((r) => r.id);
   const moveRow = (id, toIndex) => onReorder(moveId(teamIds, id, toIndex));
+
+  // Moving a person up or down: press the grip by their name and drag. This
+  // runs on pointer events rather than the browser's drag and drop, which
+  // a finger on a phone or tablet can't do. While the pointer moves, the
+  // row under it shows a line where the person will land - above that row
+  // in its top half, below it in its bottom half.
+  const startRowDrag = (e, id) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    e.preventDefault();
+    // Capture keeps the moves coming to the grip once the pointer leaves it.
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* moves still arrive while over it */ }
+    setRowDrag({ id, targetId: null, after: false });
+  };
+  const moveRowDrag = (e) => {
+    if (!rowDrag) return;
+    // Near the top or bottom of the window the page scrolls, so someone
+    // can be carried past what's on screen.
+    if (e.clientY < 70) window.scrollBy(0, -14);
+    else if (e.clientY > window.innerHeight - 70) window.scrollBy(0, 14);
+    // A row is display: contents and has no box of its own, so the height
+    // comes from the cell under the pointer.
+    const hit = document.elementFromPoint(e.clientX, e.clientY);
+    const target = hit?.closest('[data-team-row]');
+    const cell = hit?.closest('[role="cell"], [role="rowheader"]');
+    if (!target || !cell) return;
+    const box = cell.getBoundingClientRect();
+    const next = { id: rowDrag.id, targetId: target.dataset.teamRow, after: e.clientY > box.top + box.height / 2 };
+    if (next.targetId !== rowDrag.targetId || next.after !== rowDrag.after) setRowDrag(next);
+  };
+  const endRowDrag = () => {
+    const drag = rowDrag;
+    setRowDrag(null);
+    if (!drag || !drag.targetId || drag.targetId === drag.id) return;
+    const rest = teamIds.filter((x) => x !== drag.id);
+    const at = rest.indexOf(drag.targetId) + (drag.after ? 1 : 0);
+    if (teamIds.indexOf(drag.id) === at) return;
+    onReorder(moveId(teamIds, drag.id, at));
+  };
 
   const startOfToday = new Date(new Date().setHours(0, 0, 0, 0));
   const dayClass = (i) => {
@@ -233,7 +271,7 @@ export default function CleanerWeekGrid({ rows: givenRows, weekDays, todayKey, t
   };
 
   return (
-    <div className="calendar rota-grid-wrap">
+    <div className={`calendar rota-grid-wrap${rowDrag ? ' is-moving-row' : ''}`}>
       <div className="rota-grid-scroll">
         <div className={`rota-grid ${single ? 'is-day' : ''}`} role="table" aria-label={single ? 'Rota by cleaner for the day' : 'Rota by cleaner'}>
           <div className="rota-grid-head" role="row">
@@ -267,62 +305,40 @@ export default function CleanerWeekGrid({ rows: givenRows, weekDays, todayKey, t
             if (!row.current && shownJobs === 0) return null;
 
             const place = teamIds.indexOf(row.id);
-            const movable = arranging && place !== -1;
-            const rowDragProps = movable ? {
-              draggable: true,
-              onDragStart: (e) => {
-                e.dataTransfer.effectAllowed = 'move';
-                e.dataTransfer.setData(ROW_MIME, row.id);
-                e.dataTransfer.setData('text/plain', row.name);
-              },
-              onDragEnd: () => setRowOver(null),
-              onDragOver: (e) => {
-                if (!e.dataTransfer.types.includes(ROW_MIME)) return;
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'move';
-                if (rowOver !== row.id) setRowOver(row.id);
-              },
-              onDragLeave: (e) => {
-                if (e.currentTarget.contains(e.relatedTarget)) return;
-                setRowOver((o) => (o === row.id ? null : o));
-              },
-              onDrop: (e) => {
-                e.preventDefault();
-                setRowOver(null);
-                const dragged = e.dataTransfer.getData(ROW_MIME);
-                if (dragged && dragged !== row.id) moveRow(dragged, place);
-              },
-            } : {};
+            const movable = canMove && place !== -1;
+            const dropMark = rowDrag && rowDrag.targetId === row.id && rowDrag.id !== row.id
+              ? (rowDrag.after ? ' drop-after' : ' drop-before')
+              : '';
 
             return (
-              <div key={row.id} className={`rota-grid-row ${isUnassigned ? 'is-unassigned' : ''} ${row.current ? '' : 'is-former'}`} role="row">
-                <div
-                  className={`rota-grid-who${movable ? ' is-movable' : ''}${rowOver === row.id ? ' row-drag-over' : ''}`}
-                  role="rowheader"
-                  title={movable ? `Drag ${firstName(row.name)} up or down the rota` : undefined}
-                  {...rowDragProps}
-                >
+              <div
+                key={row.id}
+                className={`rota-grid-row ${isUnassigned ? 'is-unassigned' : ''} ${row.current ? '' : 'is-former'}${rowDrag?.id === row.id ? ' is-row-dragging' : ''}${dropMark}`}
+                role="row"
+                data-team-row={movable ? row.id : undefined}
+              >
+                <div className="rota-grid-who" role="rowheader">
                   {movable && (
-                    <span className="rota-grid-move">
-                      <button
-                        type="button"
-                        onClick={() => moveRow(row.id, place - 1)}
-                        disabled={place === 0}
-                        aria-label={`Move ${row.name} up`}
-                        title="Move up"
-                      >
-                        ▲
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => moveRow(row.id, place + 1)}
-                        disabled={place === teamIds.length - 1}
-                        aria-label={`Move ${row.name} down`}
-                        title="Move down"
-                      >
-                        ▼
-                      </button>
-                    </span>
+                    <button
+                      type="button"
+                      className="rota-grid-grip"
+                      aria-label={`Move ${row.name}: drag up or down, or use the arrow keys`}
+                      title={`Drag ${firstName(row.name)} up or down the rota`}
+                      onPointerDown={(e) => startRowDrag(e, row.id)}
+                      onPointerMove={moveRowDrag}
+                      onPointerUp={endRowDrag}
+                      onPointerCancel={() => setRowDrag(null)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'ArrowUp' && place > 0) { e.preventDefault(); moveRow(row.id, place - 1); }
+                        if (e.key === 'ArrowDown' && place < teamIds.length - 1) { e.preventDefault(); moveRow(row.id, place + 1); }
+                      }}
+                    >
+                      <svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true">
+                        {[3, 8, 13].map((y) => (
+                          <g key={y}><circle cx="2.5" cy={y} r="1.4" /><circle cx="7.5" cy={y} r="1.4" /></g>
+                        ))}
+                      </svg>
+                    </button>
                   )}
                   <span
                     className={`rota-grid-avatar ${isUnassigned ? 'unassigned' : ''}`}
