@@ -61,9 +61,12 @@ const VIEWS = ['cleaners', 'calendar'];
 const RANGE_STORAGE_KEY = 'admin-rota-range';
 const RANGES = ['week', 'day'];
 // The order the team comes down the by-cleaner sheet - A to Z, most hours
-// first, or the office's own arrangement - and that arrangement itself.
+// first, or the office's own arrangement. Which of the three is a choice
+// per browser; the arrangement itself is shared, on company_settings.
 const ROW_ORDER_STORAGE_KEY = 'admin-rota-row-order';
-const CUSTOM_ORDER_STORAGE_KEY = 'admin-rota-custom-order';
+// Only ids, so a stray value from storage or the database can't break the
+// sort.
+const idList = (value) => (Array.isArray(value) ? value.filter((id) => typeof id === 'string') : []);
 
 // Monday is 0. Used to open the day view on today rather than on Monday.
 function dayIndexOf(date) {
@@ -170,9 +173,13 @@ export default function AdminRota() {
   const [range, setRange] = useState('week');
   const [dayIndex, setDayIndex] = useState(() => dayIndexOf(new Date()));
   // How the by-cleaner rows are ordered, and the office's own order (a list
-  // of staff ids) for when they have arranged it themselves.
+  // of staff ids, shared by everyone) for when it has been arranged.
   const [rowOrder, setRowOrder] = useState('name');
   const [customOrder, setCustomOrder] = useState([]);
+  const [settingsId, setSettingsId] = useState(null);
+  // Whether this browser has picked an order before. If not, and the office
+  // has arranged the team, the rota opens in that arrangement.
+  const rowOrderChosen = useRef(false);
   const [jobs, setJobs] = useState([]);
   // Approved holiday and unavailability touching the week on screen, so the
   // by-cleaner sheet can show who is away before anyone tries to book them.
@@ -324,9 +331,10 @@ export default function AdminRota() {
       const savedRange = window.localStorage.getItem(RANGE_STORAGE_KEY);
       if (RANGES.includes(savedRange)) setRange(savedRange);
       const savedOrder = window.localStorage.getItem(ROW_ORDER_STORAGE_KEY);
-      if (ROW_ORDERS.includes(savedOrder)) setRowOrder(savedOrder);
-      const savedCustom = JSON.parse(window.localStorage.getItem(CUSTOM_ORDER_STORAGE_KEY) || '[]');
-      if (Array.isArray(savedCustom)) setCustomOrder(savedCustom.filter((id) => typeof id === 'string'));
+      if (ROW_ORDERS.includes(savedOrder)) {
+        setRowOrder(savedOrder);
+        rowOrderChosen.current = true;
+      }
     } catch {
       // Private browsing or blocked storage: the calendar is a fine default.
     }
@@ -344,16 +352,26 @@ export default function AdminRota() {
 
   const chooseRowOrder = (next) => {
     setRowOrder(next);
+    rowOrderChosen.current = true;
     try { window.localStorage.setItem(ROW_ORDER_STORAGE_KEY, next); } catch { /* see above */ }
   };
 
   // A row moved on the sheet. The list kept is the whole team in its new
   // order, plus anyone remembered from before who isn't on this list (off
-  // the bookable roles for now), so their place isn't forgotten.
-  const reorderRows = (ids) => {
-    const next = [...ids, ...customOrder.filter((id) => !ids.includes(id))];
+  // the bookable roles for now), so their place isn't forgotten. It is
+  // saved for everyone; if the save fails the sheet goes back to what is
+  // stored, so nobody arranges a rota only they can see.
+  const reorderRows = async (ids) => {
+    const before = customOrder;
+    const next = [...ids, ...before.filter((id) => !ids.includes(id))];
     setCustomOrder(next);
-    try { window.localStorage.setItem(CUSTOM_ORDER_STORAGE_KEY, JSON.stringify(next)); } catch { /* see above */ }
+    const { error } = settingsId
+      ? await supabase.from('company_settings').update({ rota_staff_order: next }).eq('id', settingsId)
+      : { error: new Error('no company_settings row') };
+    if (error) {
+      setCustomOrder(before);
+      toast.error('Could not save the new order. Please try again.');
+    }
   };
 
   // Day mode moves a day at a time and rolls over into the next or previous
@@ -697,6 +715,16 @@ export default function AdminRota() {
       .from('properties').select('id, client_id, address, lat, lng');
     const { data: templatesData } = await supabase
       .from('job_templates').select('id, name, job_template_items(id, description, sort_order)').order('name');
+    // The office's arrangement of the team. Fetched on its own so that, if
+    // the column isn't there yet, only the arranging is lost, not the rota.
+    const { data: settingsData } = await supabase
+      .from('company_settings').select('id, rota_staff_order').limit(1).maybeSingle();
+    if (settingsData) {
+      const shared = idList(settingsData.rota_staff_order);
+      setSettingsId(settingsData.id);
+      setCustomOrder(shared);
+      if (shared.length > 0 && !rowOrderChosen.current) setRowOrder('custom');
+    }
 
     setCleaners(withoutTestAccounts(cleanersData));
     setClients(clientsData || []);
@@ -2126,7 +2154,7 @@ export default function AdminRota() {
               {[
                 ['name', 'A–Z', 'Staff in name order'],
                 ['hours', 'Most hours', 'Whoever is working the most at the top'],
-                ['custom', 'Arrange', 'Your own order - drag a name, or use the arrows, to move someone up or down'],
+                ['custom', 'Arrange', 'The office order, shared with everyone - drag a name, or use the arrows, to move someone up or down'],
               ].map(([key, label, hint]) => (
                 <button
                   key={key}
@@ -2329,7 +2357,8 @@ export default function AdminRota() {
               time stays the same, and the usual clash and time-off checks still run. Tight travel
               counts the gaps between one cleaner&apos;s jobs that are shorter than the drive.
               Most hours puts whoever is working the most at the top; Arrange lets you drag a
-              name, or use its arrows, to put the team in your own order.
+              name, or use its arrows, to put the team in order - everyone in the office sees
+              the same arrangement.
             </>
           ) : (
             <>
