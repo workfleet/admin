@@ -39,6 +39,11 @@ const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const QUICK_DURATIONS = [30, 60, 90, 120, 180, 240];
 
+// A completed or missed visit keeps the staff it had and can't be deleted
+// (0128): pay follows the assignment, and a delete takes the check-ins with
+// it. Hours are still corrected with the Hours button.
+const isFinished = (job) => job.status === 'completed' || job.status === 'missed';
+
 // Past three, a grouped clash block would grow taller than the run it
 // covers and start overlapping the jobs after it. The rest are counted,
 // and the count opens the block out so they can still be reached.
@@ -1116,7 +1121,8 @@ export default function AdminRota() {
   };
 
   // Deletes this occurrence and every future one sharing the same
-  // series_id - past occurrences (already happened) are left alone.
+  // series_id - past occurrences (already happened) are left alone, and so
+  // is any completed or missed one, which the database refuses to delete.
   const deleteFutureInSeries = async (job) => {
     if (!job.series_id) return;
 
@@ -1128,15 +1134,17 @@ export default function AdminRota() {
       .eq('series_id', job.series_id)
       .gte('scheduled_at', job.scheduled_at)
       .order('scheduled_at', { ascending: true });
-    const doomed = future || [];
-    if (doomed.length === 0) { toast.error('Nothing to delete.'); return; }
+    const doomed = (future || []).filter((j) => !isFinished(j));
+    const kept = (future || []).length - doomed.length;
+    if (doomed.length === 0) { toast.error('Nothing to delete - these visits are completed or missed.'); return; }
     const started = doomed.filter((j) => j.status !== 'scheduled').length;
 
     const first = await confirm(
       `Delete ${doomed.length} visit${doomed.length === 1 ? '' : 's'} at ${job.properties?.address}`
         + (doomed.length > 1 ? `, ${whenLabel(doomed[0])} to ${whenLabel(doomed[doomed.length - 1])}` : ` on ${whenLabel(doomed[0])}`)
         + '? Visits before this one are kept.'
-        + (started > 0 ? ` ${started} of these ${started === 1 ? 'has' : 'have'} already started or finished.` : ''),
+        + (kept > 0 ? ` ${kept} completed or missed ${kept === 1 ? 'visit is' : 'visits are'} kept too.` : '')
+        + (started > 0 ? ` ${started} of these ${started === 1 ? 'has' : 'have'} already started.` : ''),
       { title: 'Delete series', danger: true, confirmLabel: 'Delete' }
     );
     if (!first) return;
@@ -1149,8 +1157,7 @@ export default function AdminRota() {
     const { data: deleted, error } = await supabase
       .from('jobs')
       .delete()
-      .eq('series_id', job.series_id)
-      .gte('scheduled_at', job.scheduled_at)
+      .in('id', doomed.map((j) => j.id))
       .select('id');
 
     if (error) { toast.error('Could not delete the series.'); return; }
@@ -2608,11 +2615,18 @@ export default function AdminRota() {
                   >
                     Hours
                   </button>
-                  <button className="btn-secondary" onClick={() => removeCleanerFromJob(selectedJob.id, a.cleaner_id)} title="Take this person off the job - they are told it has been unassigned">Remove</button>
+                  {!isFinished(selectedJob) && (
+                    <button className="btn-secondary" onClick={() => removeCleanerFromJob(selectedJob.id, a.cleaner_id)} title="Take this person off the job - they are told it has been unassigned">Remove</button>
+                  )}
                 </div>
               );
             })}
-            {availableToAdd.length > 0 && (
+            {isFinished(selectedJob) && (
+              <p style={{ fontSize: 12, color: 'var(--muted)', margin: '4px 0 0' }}>
+                This visit is {selectedJob.status}, so the staff on it can&apos;t be changed. To correct what someone is paid for it, use Hours.
+              </p>
+            )}
+            {!isFinished(selectedJob) && availableToAdd.length > 0 && (
               <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                 <select
                   value={addCleanerSelection}
@@ -2766,22 +2780,40 @@ export default function AdminRota() {
           {/* Deleting lives at the foot of the panel in its own bounded area.
               Sat next to Close at the top, the two read as a matching pair of
               ways to dismiss the job. */}
-          <div className="job-modal-danger">
-            <div>
-              <p className="job-modal-danger-title">Delete this job</p>
-              <p className="job-modal-danger-note">This cannot be undone.</p>
-            </div>
-            <div className="job-modal-danger-actions">
+          {isFinished(selectedJob) ? (
+            <div className="job-modal-danger">
+              <div>
+                <p className="job-modal-danger-title">{selectedJob.series_id ? 'Delete future visits' : 'Delete this job'}</p>
+                <p className="job-modal-danger-note">
+                  This visit is {selectedJob.status}, so it stays on the record and can&apos;t be deleted.
+                </p>
+              </div>
               {selectedJob.series_id && (
-                <button className="btn-secondary" onClick={() => deleteFutureInSeries(selectedJob)} title="Delete this job and every future one in the recurring series - past ones are kept">
-                  Delete this + future
-                </button>
+                <div className="job-modal-danger-actions">
+                  <button className="btn-secondary" onClick={() => deleteFutureInSeries(selectedJob)} title="Delete every visit after this one in the recurring series - completed and missed ones are kept">
+                    Delete future visits
+                  </button>
+                </div>
               )}
-              <button className="btn-danger" onClick={() => deleteJob(selectedJob)} title="Delete just this one job - this cannot be undone">
-                Delete job
-              </button>
             </div>
-          </div>
+          ) : (
+            <div className="job-modal-danger">
+              <div>
+                <p className="job-modal-danger-title">Delete this job</p>
+                <p className="job-modal-danger-note">This cannot be undone.</p>
+              </div>
+              <div className="job-modal-danger-actions">
+                {selectedJob.series_id && (
+                  <button className="btn-secondary" onClick={() => deleteFutureInSeries(selectedJob)} title="Delete this job and every future one in the recurring series - past ones are kept">
+                    Delete this + future
+                  </button>
+                )}
+                <button className="btn-danger" onClick={() => deleteJob(selectedJob)} title="Delete just this one job - this cannot be undone">
+                  Delete job
+                </button>
+              </div>
+            </div>
+          )}
         </div>
         </div>
       )}
