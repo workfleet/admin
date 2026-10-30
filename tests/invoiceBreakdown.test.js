@@ -179,6 +179,7 @@ describe('Swansea Bus Station, priced per shift', () => {
     const rows = quickbooksRows(b, { invoiceNo: '1050', customer: 'Swansea Bus Station', invoiceDate: '2026-09-29', item: pricing.item, rate: 0 });
     expect(rows.map((r) => [r.quantity, r.rate, r.amount])).toEqual([['13', '97.08', '1262.04'], ['12', '105.00', '1260.00'], ['2', '194.16', '388.32'], ['2', '145.62', '291.24']]);
     expect(rows[0].item).toBe('Commercial Cleans');
+    expect(pricing.customer).toBe('Swansea Bus Station - Swansea Council');
   });
 
   it('counts a shift starting after midnight as a night, and flags odd ones', () => {

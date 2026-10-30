@@ -117,7 +117,7 @@ export default function InvoiceBreakdown() {
     if (!invoiceNo.trim()) { toast.error('Enter the invoice number first - the next one in QuickBooks.'); return; }
     if (!product.trim()) { toast.error('Enter the product or service name from QuickBooks.'); return; }
     const rows = quickbooksRows(breakdown, {
-      invoiceNo: invoiceNo.trim(), customer: client.name, invoiceDate, item: product.trim(), rate: rate || 0,
+      invoiceNo: invoiceNo.trim(), customer: pricing?.customer || client.name, invoiceDate, item: product.trim(), rate: rate || 0,
       memo: `${title} - ${monthLabel(month)}`,
     });
     downloadCSV(`${client.name} ${month} invoice ${invoiceNo.trim()}.csv`, toCSV(QUICKBOOKS_COLUMNS, rows));
