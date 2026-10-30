@@ -8,7 +8,7 @@ import { getSessionAndProfile } from '../../../lib/authGate';
 import { monthLabel, recentMonths } from '../../../lib/detailedReport';
 import {
   buildInvoiceBreakdown, breakdownText, formatHours, gbp, propertyLineText, refreshLineText,
-  quickbooksRows, QUICKBOOKS_COLUMNS, invoicePeriod,
+  quickbooksRows, QUICKBOOKS_COLUMNS, invoicePeriod, shiftPricingFor,
 } from '../../../lib/invoiceBreakdown';
 import { toCSV, downloadCSV } from '../../../lib/csv';
 import { localDateString } from '../../../lib/localDate';
@@ -43,6 +43,7 @@ export default function InvoiceBreakdown() {
     const client = clients.find((c) => c.id === clientId);
     setInvoiceNo(client ? `${client.name.split(/\s+/)[0].toUpperCase()}-${month}` : '');
     setInvoiceDate(period?.invoiceDay || localDateString(new Date()));
+    setProduct(shiftPricingFor(client?.name)?.item || 'Cleaning');
   }, [clientId, month, clients.length]);
 
   useEffect(() => {
@@ -63,6 +64,9 @@ export default function InvoiceBreakdown() {
 
   const client = clients.find((c) => c.id === clientId);
   const rate = client?.hourly_rate != null ? Number(client.hourly_rate) : null;
+  // Swansea Bus Station pays a set price per shift (lib/invoiceBreakdown.js).
+  const pricing = shiftPricingFor(client?.name);
+  const title = pricing?.title || 'HMO Cleaning';
 
   useEffect(() => {
     setRateInput(rate != null ? String(rate) : '');
@@ -87,9 +91,9 @@ export default function InvoiceBreakdown() {
           .lt('scheduled_at', bounds.end);
       setLoadingMonth(false);
       if (propError || jobsError) { setError('Couldn\'t load that month\'s visits.'); setBreakdown(null); return; }
-      setBreakdown(buildInvoiceBreakdown({ properties, jobs, rate: rate || 0 }));
+      setBreakdown(buildInvoiceBreakdown({ properties, jobs, rate: rate || 0, pricing }));
     })();
-  }, [clientId, month, rate]);
+  }, [clientId, month, rate, pricing]);
 
   const saveRate = async () => {
     const value = rateInput.trim() === '' ? null : Number(rateInput);
@@ -114,7 +118,7 @@ export default function InvoiceBreakdown() {
     if (!product.trim()) { toast.error('Enter the product or service name from QuickBooks.'); return; }
     const rows = quickbooksRows(breakdown, {
       invoiceNo: invoiceNo.trim(), customer: client.name, invoiceDate, item: product.trim(), rate: rate || 0,
-      memo: `HMO Cleaning - ${monthLabel(month)}`,
+      memo: `${title} - ${monthLabel(month)}`,
     });
     downloadCSV(`${client.name} ${month} invoice ${invoiceNo.trim()}.csv`, toCSV(QUICKBOOKS_COLUMNS, rows));
   };
@@ -170,7 +174,7 @@ export default function InvoiceBreakdown() {
 
       {!loadingMonth && breakdown && (
         <>
-          {rate == null && (
+          {rate == null && !pricing && (
             <div className="card" style={{ marginBottom: 16, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
               <AlertTriangle size={18} style={{ flexShrink: 0 }} />
               <span>{client?.name} has no hourly rate yet, so the charges show as £0. Enter it above and press Save.</span>
@@ -194,17 +198,26 @@ export default function InvoiceBreakdown() {
             <>
               <div className="card" style={{ marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <h2 style={{ margin: 0 }}>HMO Cleaning - {monthName}</h2>
-                  <button type="button" className="btn-primary" onClick={() => copy(breakdownText(breakdown, monthName, rate || 0), 'The whole breakdown')}>
+                  <h2 style={{ margin: 0 }}>{title} - {monthName}</h2>
+                  <button type="button" className="btn-primary" onClick={() => copy(breakdownText(breakdown, monthName, rate || 0, title), 'The whole breakdown')}>
                     <Copy size={16} /> Copy the whole breakdown
                   </button>
                 </div>
                 <p style={{ fontSize: 13, color: 'var(--muted)', margin: '6px 0 12px' }}>
-                  In QuickBooks, add one line per row: paste the description, then put the hours as the quantity and {rate != null ? gbp(rate) : 'the hourly rate'} as the rate.
+                  {pricing
+                    ? <>Charged per shift, whatever its length or how many cleaners were on it. In QuickBooks, add one line per row: paste the description, then put the number of shifts as the quantity and the shift price as the rate.</>
+                    : <>In QuickBooks, add one line per row: paste the description, then put the hours as the quantity and {rate != null ? gbp(rate) : 'the hourly rate'} as the rate.</>}
                 </p>
 
                 <InvoiceTable
-                  rows={breakdown.lines.map((l) => ({ key: l.id, text: propertyLineText(l), minutes: l.minutes, amount: l.amount }))}
+                  qtyLabel={pricing ? 'Shifts' : 'Hours'}
+                  rows={breakdown.lines.map((l) => ({
+                    key: l.id,
+                    text: propertyLineText(l),
+                    detail: l.unitPrice != null ? `${gbp(l.unitPrice)} each - ${l.visits.map((v) => v.date.replace(/ \d{4}$/, '')).join(', ')}` : null,
+                    qty: l.unitPrice != null ? String(l.quantity) : formatHours(l.minutes),
+                    amount: l.amount,
+                  }))}
                   onCopy={(text) => copy(text, 'Line')}
                 />
                 <TotalRow label="Cleaning" amount={breakdown.cleaningTotal} />
@@ -214,7 +227,7 @@ export default function InvoiceBreakdown() {
                 <div className="card" style={{ marginBottom: 16 }}>
                   <h2 style={{ margin: '0 0 12px' }}>Room Refreshes</h2>
                   <InvoiceTable
-                    rows={breakdown.refreshes.map((r, i) => ({ key: `${r.jobId}-${i}`, text: refreshLineText(r), minutes: r.minutes, amount: r.amount }))}
+                    rows={breakdown.refreshes.map((r, i) => ({ key: `${r.jobId}-${i}`, text: refreshLineText(r), qty: formatHours(r.minutes), amount: r.amount }))}
                     onCopy={(text) => copy(text, 'Line')}
                   />
                   <TotalRow label="Room refreshes" amount={breakdown.refreshTotal} />
@@ -265,14 +278,14 @@ const th = { textAlign: 'left', padding: '10px 12px', borderBottom: '2px solid v
 const td = { padding: '9px 12px', borderBottom: '1px solid var(--hairline)', verticalAlign: 'top' };
 const num = { ...td, textAlign: 'right', whiteSpace: 'nowrap', fontFamily: 'var(--wf-data)', fontWeight: 600 };
 
-function InvoiceTable({ rows, onCopy }) {
+function InvoiceTable({ rows, onCopy, qtyLabel = 'Hours' }) {
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
         <thead>
           <tr>
             <th style={th}>Description</th>
-            <th style={{ ...th, textAlign: 'right' }}>Hours</th>
+            <th style={{ ...th, textAlign: 'right' }}>{qtyLabel}</th>
             <th style={{ ...th, textAlign: 'right' }}>Amount</th>
             <th style={th} aria-label="Copy" />
           </tr>
@@ -280,8 +293,11 @@ function InvoiceTable({ rows, onCopy }) {
         <tbody>
           {rows.map((r) => (
             <tr key={r.key}>
-              <td style={td}>{r.text}</td>
-              <td style={num}>{formatHours(r.minutes)}</td>
+              <td style={td}>
+                {r.text}
+                {r.detail && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{r.detail}</div>}
+              </td>
+              <td style={num}>{r.qty}</td>
               <td style={num}>{gbp(r.amount)}</td>
               <td style={{ ...td, textAlign: 'right' }}>
                 <button type="button" className="btn-secondary" onClick={() => onCopy(r.text)} title="Copy this description for QuickBooks" aria-label="Copy description">

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildInvoiceBreakdown, refreshesOf, propertyLineText, refreshLineText, breakdownText, formatHours, quickbooksRows, QUICKBOOKS_COLUMNS, invoicingDay, invoicePeriod } from '../lib/invoiceBreakdown';
+import { buildInvoiceBreakdown, refreshesOf, propertyLineText, refreshLineText, breakdownText, formatHours, quickbooksRows, QUICKBOOKS_COLUMNS, invoicingDay, invoicePeriod, shiftPricingFor } from '../lib/invoiceBreakdown';
 import { toCSV } from '../lib/csv';
 
 const properties = [
@@ -149,5 +149,55 @@ describe('text', () => {
     expect(text).toContain('  * 2 July 2026');
     expect(text).toContain('Room Refreshes');
     expect(text).toContain('Total: £48.00');
+  });
+});
+
+describe('Swansea Bus Station, priced per shift', () => {
+  const pricing = shiftPricingFor('Swansea Bus Station');
+  const bus = [{ id: 'bus', address: 'Swansea City Bus Station, Plymouth Street' }];
+  const at = (iso, over) => job({ property_id: 'bus', scheduled_at: iso, ...over });
+
+  it('rebuilds the September invoice from its shifts', () => {
+    const jobs = [];
+    // 13 weekday 2pm shifts (BST, so 13:00Z) from Mon 7 Sept.
+    const weekdays = [7, 8, 9, 10, 11, 14, 15, 16, 17, 18, 21, 22, 23];
+    for (const d of weekdays) jobs.push(at(`2026-09-${String(d).padStart(2, '0')}T13:00:00Z`, { duration_minutes: 240 }));
+    // 12 nights, lengths and crew sizes varying - each is still one shift.
+    for (let i = 0; i < 12; i += 1) jobs.push(at(`2026-09-${String(7 + i).padStart(2, '0')}T22:00:00Z`, { duration_minutes: i % 2 ? 720 : 180, job_assignments: [{}, {}, {}] }));
+    jobs.push(at('2026-09-12T09:00:00Z', { duration_minutes: 480 }), at('2026-09-19T09:00:00Z', { duration_minutes: 480 }));
+    jobs.push(at('2026-09-13T09:00:00Z', { duration_minutes: 360 }), at('2026-09-20T09:15:00Z', { duration_minutes: 360 }));
+    const b = buildInvoiceBreakdown({ properties: bus, jobs, rate: 0, pricing });
+    expect(b.lines.map((l) => [propertyLineText(l), l.quantity, l.unitPrice, l.amount])).toEqual([
+      ['Day shift cleaning - 2pm - 6pm', 13, 97.08, 1262.04],
+      ['Early hours shift cleaning - 11pm - 5am', 12, 105, 1260],
+      ['Saturday shift cleaning - 10am - 6pm', 2, 194.16, 388.32],
+      ['Sunday shift cleaning - 10am - 4pm', 2, 145.62, 291.24],
+    ]);
+    expect(b.total).toBe(3201.6);
+    expect(b.warnings).toEqual([]);
+
+    const rows = quickbooksRows(b, { invoiceNo: '1050', customer: 'Swansea Bus Station', invoiceDate: '2026-09-29', item: pricing.item, rate: 0 });
+    expect(rows.map((r) => [r.quantity, r.rate, r.amount])).toEqual([['13', '97.08', '1262.04'], ['12', '105.00', '1260.00'], ['2', '194.16', '388.32'], ['2', '145.62', '291.24']]);
+    expect(rows[0].item).toBe('Commercial Cleans');
+  });
+
+  it('counts a shift starting after midnight as a night, and flags odd ones', () => {
+    const b = buildInvoiceBreakdown({
+      properties: bus,
+      pricing,
+      jobs: [
+        at('2026-10-16T01:00:00Z'), // Fri 2am
+        at('2026-10-23T13:00:00Z'), // Fri 2pm
+        at('2026-10-23T13:00:00Z'), // the same again
+        at('2026-09-22T07:00:00Z'), // Tue 8am
+      ],
+    });
+    expect(b.lines.map((l) => [l.key, l.quantity])).toEqual([['day', 3], ['night', 1]]);
+    expect(b.warnings.join(' ')).toMatch(/22 September 2026: a visit starting at 8:00 is charged as a day shift/);
+    expect(b.warnings.join(' ')).toMatch(/23 October 2026: two day shifts that day/);
+  });
+
+  it('leaves hourly clients alone', () => {
+    expect(shiftPricingFor('TKR Management')).toBeNull();
   });
 });
