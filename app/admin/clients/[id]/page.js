@@ -835,6 +835,12 @@ export default function ClientDetail() {
                 </div>
               </div>
 
+              {!p.access_details && !p.client_access_notes && accessEditId !== p.id && (
+                <p style={{ fontSize: 12, color: 'var(--wf-overdue)', margin: '4px 0 0' }}>
+                  No access details - cleaners see no codes for this site. Press Access to add them.
+                </p>
+              )}
+
               {p.lat == null && locationEditId !== p.id && (
                 <p style={{ fontSize: 12, color: 'var(--wf-overdue)', margin: '4px 0 0' }}>
                   No map pin - check-in is not location-checked here.
