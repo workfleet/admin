@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { ChevronLeft, Camera, Lock, Check, ChevronDown } from 'lucide-react';
+import { ChevronLeft, Camera, Lock, Check, ChevronDown, KeyRound } from 'lucide-react';
 import { supabase } from '../../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../../lib/authGate';
 import { notify } from '../../../../lib/notify';
@@ -1119,15 +1119,15 @@ export default function JobDetailPage() {
   // check-in: staff clock in at the door, and until 2026-10-31 this card
   // vanished at that moment - just when they needed the alarm code.
   const accessCard = (job.properties?.access_details || job.properties?.client_access_notes) && (
-    <div className="visit-card visit-access">
-      <div className="visit-card-label">How to get in</div>
+    <div className="visit-card visit-codes">
+      <div className="visit-codes-label"><KeyRound size={18} strokeWidth={2.4} aria-hidden /> How to get in</div>
       {job.properties.access_details && (
-        <p className="visit-access-body" style={{ whiteSpace: 'pre-wrap' }}>{job.properties.access_details}</p>
+        <p className="visit-codes-body">{job.properties.access_details}</p>
       )}
       {job.properties.client_access_notes && (
-        <div style={{ marginTop: job.properties.access_details ? 8 : 0 }}>
-          {job.properties.access_details && <div className="visit-card-label">From the client</div>}
-          <p className="visit-access-body" style={{ whiteSpace: 'pre-wrap' }}>{job.properties.client_access_notes}</p>
+        <div style={{ marginTop: job.properties.access_details ? 10 : 0 }}>
+          {job.properties.access_details && <div className="visit-codes-label">From the client</div>}
+          <p className="visit-codes-body">{job.properties.client_access_notes}</p>
         </div>
       )}
     </div>
