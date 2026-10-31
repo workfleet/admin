@@ -167,6 +167,8 @@ export default function AdminDashboard() {
   const [checkinByJob, setCheckinByJob] = useState({});
   const [tomorrow, setTomorrow] = useState(null);
   const [teamTints, setTeamTints] = useState(new Map());
+  const [noAccessSites, setNoAccessSites] = useState([]);
+  const [showNoAccess, setShowNoAccess] = useState(false);
 
   const [payrollPeriod, setPayrollPeriod] = useState('this_week');
   const [payrollLoading, setPayrollLoading] = useState(true);
@@ -300,6 +302,7 @@ export default function AdminDashboard() {
       { data: allProducts },
       { data: tomorrowsJobs },
       { data: tomorrowsTimeOff },
+      { data: weeksJobs },
     ] = await Promise.all([
       // In name order, so avatar colours are handed out the same way the
       // rota hands them out and a person is one colour on both pages.
@@ -353,7 +356,22 @@ export default function AdminDashboard() {
         .eq('status', 'approved')
         .lte('start_date', localDateString(endOfDay))
         .gte('end_date', localDateString(endOfDay)),
+      // The week's jobs, only to find sites staff will reach with no codes.
+      supabase.from('jobs')
+        .select('property_id, properties(client_id, address, access_details, client_access_notes, clients(name))')
+        .gte('scheduled_at', startOfDay.toISOString()).lt('scheduled_at', sevenDaysOut.toISOString())
+        .neq('status', 'completed').neq('status', 'missed'),
     ]);
+
+    // One line per site, not per job - the fix is one Access box per site.
+    const noCodes = {};
+    (weeksJobs || []).forEach((j) => {
+      const p = j.properties;
+      if (!p || p.access_details || p.client_access_notes) return;
+      if (!noCodes[j.property_id]) noCodes[j.property_id] = { id: j.property_id, clientId: p.client_id, name: p.clients?.name || 'Unknown client', address: p.address, jobs: 0 };
+      noCodes[j.property_id].jobs += 1;
+    });
+    setNoAccessSites(Object.values(noCodes).sort((a, b) => b.jobs - a.jobs));
 
     const todaysCompleted = (todaysJobsData || []).filter((j) => j.status === 'completed').length;
     const todaysUnassigned = (todaysJobsData || []).filter((j) => (j.job_assignments || []).length === 0).length;
@@ -685,6 +703,31 @@ export default function AdminDashboard() {
           </span>
         )}
       </div>
+
+      {noAccessSites.length > 0 && (
+        <div role="alert" className="dash-access-banner">
+          <button type="button" className="dash-access-banner-head" onClick={() => setShowNoAccess((v) => !v)} aria-expanded={showNoAccess}>
+            <CircleAlert size={18} aria-hidden />
+            <span>
+              <b>No access codes for {noAccessSites.length} site{noAccessSites.length === 1 ? '' : 's'}</b> with jobs in the next 7 days
+              {' '}({noAccessSites.reduce((n, s) => n + s.jobs, 0)} jobs). Staff will see no codes there.
+            </span>
+            {showNoAccess ? <ChevronDown size={18} aria-hidden /> : <ChevronRight size={18} aria-hidden />}
+          </button>
+          {showNoAccess && (
+            <ul className="dash-access-banner-list">
+              {noAccessSites.map((s) => (
+                <li key={s.id}>
+                  <Link href={`/admin/clients/${s.clientId}`} title="Open the client, then press Access on this site">
+                    {s.name}
+                  </Link>
+                  {' '}<span>{shortAddress(s.address)} · {s.jobs} job{s.jobs === 1 ? '' : 's'}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className="dash-layout">
         <div className="dash-col">

@@ -1105,6 +1105,34 @@ export default function JobDetailPage() {
   const onSiteMinutes = now && checkin ? (now - new Date(checkin.checked_in_at)) / 60000 : null;
   const remainingMinutes = onSiteMinutes === null ? null : duration + approvedExtra - onSiteMinutes;
 
+  // What the office wrote on this one visit from the rota - often a door
+  // code or 'oven clean only'. It was saved but never shown here until
+  // 2026-10-12, so it goes first.
+  const visitNotesCard = job.notes && (
+    <div className="visit-card visit-access">
+      <div className="visit-card-label">Notes for this visit</div>
+      <p className="visit-access-body" style={{ whiteSpace: 'pre-wrap' }}>{job.notes}</p>
+    </div>
+  );
+
+  // Codes for the key safe, alarm and doors. Shown before AND after
+  // check-in: staff clock in at the door, and until 2026-10-31 this card
+  // vanished at that moment - just when they needed the alarm code.
+  const accessCard = (job.properties?.access_details || job.properties?.client_access_notes) && (
+    <div className="visit-card visit-access">
+      <div className="visit-card-label">How to get in</div>
+      {job.properties.access_details && (
+        <p className="visit-access-body" style={{ whiteSpace: 'pre-wrap' }}>{job.properties.access_details}</p>
+      )}
+      {job.properties.client_access_notes && (
+        <div style={{ marginTop: job.properties.access_details ? 8 : 0 }}>
+          {job.properties.access_details && <div className="visit-card-label">From the client</div>}
+          <p className="visit-access-body" style={{ whiteSpace: 'pre-wrap' }}>{job.properties.client_access_notes}</p>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="visit-screen">
       <div className="visit-appbar">
@@ -1168,15 +1196,7 @@ export default function JobDetailPage() {
               </div>
             )}
 
-            {/* What the office wrote on this one visit from the rota - often a
-                door code or 'oven clean only'. It was saved but never shown
-                here until 2026-10-12, so it goes first. */}
-            {job.notes && (
-              <div className="visit-card visit-access">
-                <div className="visit-card-label">Notes for this visit</div>
-                <p className="visit-access-body" style={{ whiteSpace: 'pre-wrap' }}>{job.notes}</p>
-              </div>
-            )}
+            {visitNotesCard}
 
             {refreshesOf(job).length > 0 && (
               <div className="visit-card visit-access">
@@ -1189,20 +1209,7 @@ export default function JobDetailPage() {
 
             {/* On a doorstep this is the most-needed thing on the screen, so
                 it sits above the task list rather than below the map. */}
-            {(job.properties?.access_details || job.properties?.client_access_notes) && (
-              <div className="visit-card visit-access">
-                <div className="visit-card-label">How to get in</div>
-                {job.properties.access_details && (
-                  <p className="visit-access-body" style={{ whiteSpace: 'pre-wrap' }}>{job.properties.access_details}</p>
-                )}
-                {job.properties.client_access_notes && (
-                  <div style={{ marginTop: job.properties.access_details ? 8 : 0 }}>
-                    {job.properties.access_details && <div className="visit-card-label">From the client</div>}
-                    <p className="visit-access-body" style={{ whiteSpace: 'pre-wrap' }}>{job.properties.client_access_notes}</p>
-                  </div>
-                )}
-              </div>
-            )}
+            {accessCard}
 
             {job.properties?.notes && (
               <div className="visit-card">
@@ -1343,6 +1350,10 @@ export default function JobDetailPage() {
                 {checkInError && <p className="visit-action-error">{checkInError}</p>}
               </div>
             )}
+
+            {accessCard}
+            {visitNotesCard}
+
             <div className="visit-progress">
               <div className="visit-progress-head">
                 <span className="visit-progress-count">{doneTasks} of {tasks.length} done</span>

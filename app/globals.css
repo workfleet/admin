@@ -4491,3 +4491,37 @@ a.btn-compact {
   border-color: var(--wf-coral);
   color: var(--wf-on-coral);
 }
+
+/* ---- Dashboard: sites with jobs this week and no access codes ---- */
+.dash-access-banner {
+  background: var(--wf-overdue-bg);
+  border: 1px solid var(--wf-overdue);
+  border-radius: var(--wf-radius);
+  margin: 0 0 16px;
+  color: var(--wf-graphite);
+}
+.dash-access-banner-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: inherit;
+  text-align: left;
+  font-size: 14px;
+  line-height: 1.4;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+.dash-access-banner-head span { flex: 1; }
+.dash-access-banner-head svg:first-child { color: var(--wf-overdue); flex-shrink: 0; }
+.dash-access-banner-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 14px 12px 42px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.dash-access-banner-list a { font-weight: 600; color: inherit; }
+.dash-access-banner-list span { color: var(--muted); }
