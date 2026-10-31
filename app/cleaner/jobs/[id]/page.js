@@ -1175,6 +1175,11 @@ export default function JobDetailPage() {
         {/* ---- State 1: not checked in yet ---- */}
         {beforeCheckIn && (
           <>
+            {/* On a doorstep this is the most-needed thing on the screen, so
+                it comes first - below the map it was scrolled past, and the
+                Emergency button floated over it on a phone. */}
+            {accessCard}
+
             <div className="visit-title-block">
               <div className="visit-when">
                 {clock(scheduled)} – {clock(new Date(scheduled.getTime() + duration * 60000))} · {formatSpan(duration)}
@@ -1206,10 +1211,6 @@ export default function JobDetailPage() {
                 ))}
               </div>
             )}
-
-            {/* On a doorstep this is the most-needed thing on the screen, so
-                it sits above the task list rather than below the map. */}
-            {accessCard}
 
             {job.properties?.notes && (
               <div className="visit-card">
