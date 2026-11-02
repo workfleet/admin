@@ -3,6 +3,7 @@ import { resend, EMAIL_FROM } from '../../../lib/resend';
 import { supabaseAdmin } from '../../../lib/supabaseAdmin';
 import { sendPushToSubscriptions } from '../../../lib/webPush';
 import { rankCandidates, isGoodMatch, topReason } from '../../../lib/coverRanking';
+import { smsConfigured, normaliseUkMobile, composeShiftText, sendSms } from '../../../lib/sms';
 
 // A valid session is the first gate; what that session may send is
 // decided per type in POST below (0106), so this is not an open relay.
@@ -302,6 +303,87 @@ function formatShiftTime(value) {
   });
 }
 
+// How long someone's rota has to be left alone before their waiting changes
+// go out as one text. The open app sweeps once a minute (PresenceIndicator),
+// so a text arrives one and a half to two and a half minutes after the last
+// change to that person's shifts.
+const SMS_QUIET_MS = 90 * 1000;
+// A change nobody swept for this long - the office closed the laptop and no
+// one opened the app all night - is dropped rather than texted late, when
+// the app already shows something newer.
+const SMS_STALE_MS = 12 * 3600 * 1000;
+
+// A line for this person's next text (0129). Nothing is queued while Twilio
+// is not set up, so switching it on later does not send a backlog, and a
+// shift already in the past - the office tidying up last week - is not news.
+async function queueShiftText(cleanerId, scheduledAt, line) {
+  if (!smsConfigured() || !cleanerId) return;
+  if (scheduledAt && new Date(scheduledAt).getTime() < Date.now()) return;
+  await supabaseAdmin.from('sms_outbox').insert({ profile_id: cleanerId, line });
+}
+
+// Sends everyone whose rota has gone quiet their waiting lines as one text.
+// Claimed with one update before sending, like flushPendingPushes, so two
+// sweeps at once cannot text the same change twice. A database without 0129
+// errors on the first select and nothing happens.
+async function flushShiftTexts() {
+  if (!smsConfigured()) return;
+  const now = Date.now();
+  const { data: waiting, error } = await supabaseAdmin
+    .from('sms_outbox')
+    .select('id, profile_id, line, created_at')
+    .is('sent_at', null)
+    .gt('created_at', new Date(now - SMS_STALE_MS).toISOString())
+    .order('created_at', { ascending: true })
+    .limit(200);
+  if (error || !waiting || waiting.length === 0) return;
+
+  const byPerson = new Map();
+  for (const row of waiting) {
+    if (!byPerson.has(row.profile_id)) byPerson.set(row.profile_id, []);
+    byPerson.get(row.profile_id).push(row);
+  }
+  const ready = [...byPerson.values()]
+    .filter((rows) => now - new Date(rows[rows.length - 1].created_at).getTime() >= SMS_QUIET_MS)
+    .flat();
+  if (ready.length === 0) return;
+
+  const { data: claimed } = await supabaseAdmin
+    .from('sms_outbox')
+    .update({ sent_at: new Date().toISOString() })
+    .in('id', ready.map((r) => r.id))
+    .is('sent_at', null)
+    .select('id');
+  const claimedIds = new Set((claimed || []).map((r) => r.id));
+  const people = [...new Set(ready.filter((r) => claimedIds.has(r.id)).map((r) => r.profile_id))];
+  if (people.length === 0) return;
+
+  const [{ data: profiles }, { data: details }] = await Promise.all([
+    supabaseAdmin.from('profiles').select('id, full_name, active').in('id', people),
+    supabaseAdmin.from('staff_details').select('profile_id, phone').in('profile_id', people),
+  ]);
+  const profileById = new Map((profiles || []).map((p) => [p.id, p]));
+  const phoneById = new Map((details || []).map((d) => [d.profile_id, d.phone]));
+
+  for (const personId of people) {
+    const rows = byPerson.get(personId).filter((r) => claimedIds.has(r.id));
+    const ids = rows.map((r) => r.id);
+    const profile = profileById.get(personId);
+    const to = normaliseUkMobile(phoneById.get(personId));
+    let result;
+    if (profile && profile.active === false) {
+      result = { status: 'inactive', detail: null };
+    } else if (!to) {
+      result = { status: 'no_number', detail: phoneById.get(personId) || null };
+    } else {
+      const firstName = (profile?.full_name || '').trim().split(/\s+/)[0] || null;
+      const sent = await sendSms(to, composeShiftText(rows.map((r) => r.line), firstName));
+      result = sent.ok ? { status: 'sent', detail: sent.id } : { status: 'failed', detail: sent.error };
+    }
+    await supabaseAdmin.from('sms_outbox').update(result).in('id', ids);
+  }
+}
+
 export async function POST(request) {
   const user = await requireUser(request);
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
@@ -366,12 +448,24 @@ export async function POST(request) {
   // phones without waiting for the next event.
   if (payload.type === 'flush') {
     const sent = await flushPendingPushes();
+    await flushShiftTexts();
     return NextResponse.json({ ok: true, sent });
   }
 
   if (payload.type === 'shift_cover_requested') {
     await pushCoverRequest(payload, user.id);
     return NextResponse.json({ pushed: true });
+  }
+
+  if (payload.type === 'shift_assigned') {
+    const count = Number(payload.count) || 1;
+    await queueShiftText(payload.cleanerId, payload.scheduledAt, count > 1
+      ? `${count} new shifts at ${payload.address || 'a site'}, starting ${formatShiftTime(payload.scheduledAt)}`
+      : `New shift: ${payload.address || 'a site'}, ${formatShiftTime(payload.scheduledAt)}`);
+  } else if (payload.type === 'shift_rescheduled') {
+    await queueShiftText(payload.cleanerId, payload.scheduledAt,
+      `Shift moved: ${payload.address || 'a site'}, now ${formatShiftTime(payload.scheduledAt)}`
+      + (payload.previousAt ? ` (was ${formatShiftTime(payload.previousAt)})` : ''));
   }
 
   if (payload.type === 'shift_cover_needed') {
@@ -459,6 +553,7 @@ export async function POST(request) {
   // anything older still waiting - goes out now, before the email step,
   // which returns early when email is not configured.
   await flushPendingPushes();
+  await flushShiftTexts();
 
   if (!process.env.RESEND_API_KEY) return NextResponse.json({ skipped: 'no_api_key' });
 

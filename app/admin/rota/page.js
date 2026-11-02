@@ -1100,7 +1100,7 @@ export default function AdminRota() {
             .from('job_assignments')
             .insert(inserted.flatMap((j) => cleanerIds.map((cid) => ({ job_id: j.id, cleaner_id: cid }))));
           cleanerIds.forEach((cid) => {
-            notify({ type: 'shift_assigned', cleanerId: cid, address: jobHeadline(job), scheduledAt: inserted[0].scheduled_at });
+            notify({ type: 'shift_assigned', cleanerId: cid, address: jobHeadline(job), scheduledAt: inserted[0].scheduled_at, count: inserted.length });
           });
         }
         if (jobTasks.length > 0) {
@@ -1416,7 +1416,7 @@ export default function AdminRota() {
     if (!assignmentsFailed) {
       const firstJob = insertedJobs[0];
       formCleanerIds.forEach((cid) => {
-        notify({ type: 'shift_assigned', cleanerId: cid, address: jobHeadline(firstJob), scheduledAt: firstJob.scheduled_at });
+        notify({ type: 'shift_assigned', cleanerId: cid, address: jobHeadline(firstJob), scheduledAt: firstJob.scheduled_at, count: insertedJobs.length });
       });
     }
 

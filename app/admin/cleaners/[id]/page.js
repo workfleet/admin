@@ -9,6 +9,7 @@ import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 import { claimFor, describeClockRecord, indexClaims, lateMinutes } from '../../../../lib/clockIn';
 import { STAFF_DETAIL_FIELDS, detailsToForm, formToDetails, formatDateOnly, missingEssentials } from '../../../../lib/staffDetails';
+import { normaliseUkMobile } from '../../../../lib/sms';
 import { BANK_DETAIL_FIELDS, emptyBankForm, formToBankDetails, formatSortCode } from '../../../../lib/bankDetails';
 import { countsAgainstCleaner, outcomeLabel } from '../../../../lib/missedShiftOutcomes';
 import { formatHours } from '../../../../lib/hoursWorked';
@@ -875,6 +876,11 @@ export default function CleanerProfile() {
             {details && (
               <div style={{ fontSize: 14, color: 'var(--muted)', lineHeight: 1.9 }}>
                 {details.phone && <div>Phone: <a href={`tel:${details.phone.replace(/\s+/g, '')}`} style={{ color: 'var(--ink)' }}>{details.phone}</a></div>}
+                {details.phone && !normaliseUkMobile(details.phone) && (
+                  <div style={{ fontSize: 12.5, color: 'var(--wf-graphite)', lineHeight: 1.5, marginBottom: 4 }}>
+                    Not a UK mobile number, so rota changes can&apos;t be texted to it.
+                  </div>
+                )}
                 {details.address && <div>Address: <span style={{ color: 'var(--ink)' }}>{details.address}</span></div>}
                 {details.date_of_birth && <div>Date of birth: <span style={{ color: 'var(--ink)' }}>{formatDateOnly(details.date_of_birth)}</span></div>}
                 {details.ni_number && <div>NI number: <span style={{ color: 'var(--ink)' }}>{details.ni_number}</span></div>}
