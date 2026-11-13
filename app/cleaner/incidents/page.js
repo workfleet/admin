@@ -9,6 +9,8 @@ import { TRAINING_JOB_COLUMNS } from '../../../lib/training';
 import { KIND_LABELS, KIND_BUTTONS, STATUS_LABELS, STATUS_BADGE_CLASS, incidentSummary } from '../../../lib/incidents';
 import IncidentDetails, { formatWhen } from '../../components/IncidentDetails';
 import IncidentForm from '../../components/IncidentForm';
+import SafetyGuidance from '../../components/SafetyGuidance';
+import { companyFromSettings } from '../../../lib/companyBranding';
 import BackButton from '../../components/BackButton';
 
 const REPORT_COLUMNS = 'id, kind, incident_type, occurred_at, location, description, injured_party, injured_name, injured_address, injured_occupation, injury_details, treatment, damage_details, immediate_action, witnesses, photo_paths, status, corrective_action, closed_at, created_at, jobs(scheduled_at, properties(address))';
@@ -31,6 +33,7 @@ export default function CleanerIncidents() {
   const [ownAddress, setOwnAddress] = useState('');
   // { kind, jobId, n } while the form is open; n remounts it fresh.
   const [formStart, setFormStart] = useState(null);
+  const [officePhone, setOfficePhone] = useState(() => companyFromSettings(null).phone);
 
   useEffect(() => {
     load();
@@ -42,7 +45,7 @@ export default function CleanerIncidents() {
     setUserId(session.user.id);
 
     const since = new Date(Date.now() - JOB_LOOKBACK_DAYS * 24 * 3600000).toISOString();
-    const [{ data: assignmentRows }, { data: reportRows }, { data: details }] = await Promise.all([
+    const [{ data: assignmentRows }, { data: reportRows }, { data: details }, { data: settings }] = await Promise.all([
       supabase
         .from('job_assignments')
         .select(`jobs(id, scheduled_at, status, ${TRAINING_JOB_COLUMNS}, properties(address))`)
@@ -53,7 +56,9 @@ export default function CleanerIncidents() {
         .eq('reported_by', session.user.id)
         .order('occurred_at', { ascending: false }),
       supabase.from('staff_details').select('address').eq('profile_id', session.user.id).maybeSingle(),
+      supabase.from('company_settings').select('phone').limit(1).maybeSingle(),
     ]);
+    setOfficePhone(companyFromSettings(settings).phone);
     setOwnAddress(details?.address || '');
 
     const now = Date.now();
@@ -96,15 +101,11 @@ export default function CleanerIncidents() {
         Near misses matter - they are how we stop the next accident.
       </p>
 
-      <div className="card" style={{ borderLeft: '4px solid var(--wf-overdue)' }}>
-        <p style={{ margin: 0, fontSize: 14 }}>
-          <strong>If someone is badly hurt, call 999 first.</strong> Use the emergency button if you need the office right now.
-          Fill this in once everyone is safe.
-        </p>
-      </div>
+      {!formStart && <SafetyGuidance officePhone={officePhone} />}
 
       {!formStart && (
         <div className="card">
+          <h2 style={{ margin: '0 0 8px', fontSize: 17 }}>Report it</h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
             {Object.keys(KIND_LABELS).map((k, i) => (
               <button key={k} type="button" className={i === 0 ? '' : 'btn-secondary'} onClick={() => startForm(k)}>
@@ -113,6 +114,12 @@ export default function CleanerIncidents() {
             ))}
           </div>
         </div>
+      )}
+
+      {formStart && (
+        <p style={{ fontSize: 14, margin: '12px 0 0' }}>
+          <strong>Badly hurt? <a href="tel:999" style={{ color: 'var(--wf-overdue)' }}>Call 999</a> first.</strong> Fill this in once everyone is safe.
+        </p>
       )}
 
       {formStart && (

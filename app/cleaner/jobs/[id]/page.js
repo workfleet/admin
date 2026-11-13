@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { ChevronLeft, Camera, Lock, Check, ChevronDown, KeyRound } from 'lucide-react';
+import { ChevronLeft, Camera, Lock, Check, ChevronDown, KeyRound, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../../../lib/supabaseClient';
 import { compressImage } from '../../../../lib/compressImage';
 import { getSessionWithRetry } from '../../../../lib/authGate';
@@ -251,6 +251,19 @@ export default function JobDetailPage() {
           .eq('property_id', jobData.property_id)
           .order('sort_order', { ascending: true })
       : { data: [] };
+
+    // Warnings the office put on this site after an accident (0135). Carried
+    // on the job so the copy kept for no signal has them too. An error
+    // (before 0135 is run) just means no warnings.
+    const { data: hazardData } = jobData?.property_id
+      ? await supabase
+          .from('site_hazards')
+          .select('id, hazard, created_at')
+          .eq('property_id', jobData.property_id)
+          .is('resolved_at', null)
+          .order('created_at', { ascending: false })
+      : { data: [] };
+    if (jobData) jobData.site_hazards = hazardData || [];
 
     const { data: extensionData } = await supabase
       .from('time_extension_requests')
@@ -1084,6 +1097,20 @@ export default function JobDetailPage() {
     </div>
   );
 
+  // Dangers the office knows about at this site, from accident reports.
+  // Above the access codes, before and after check-in: it is the one thing
+  // on this page that could stop someone getting hurt.
+  const hazardsCard = (job.site_hazards || []).length > 0 && (
+    <div className="visit-card" role="alert" style={{ background: 'var(--wf-overdue-tint)', borderLeft: '4px solid var(--wf-overdue)' }}>
+      <div className="visit-card-label" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--wf-overdue)' }}>
+        <AlertTriangle size={18} strokeWidth={2.4} aria-hidden /> Take care at this site
+      </div>
+      {job.site_hazards.map((h) => (
+        <p key={h.id} style={{ margin: '6px 0 0', fontSize: 14.5, whiteSpace: 'pre-wrap' }}>{h.hazard}</p>
+      ))}
+    </div>
+  );
+
   // Codes for the key safe, alarm and doors. Shown before AND after
   // check-in: staff clock in at the door, and until 2026-10-31 this card
   // vanished at that moment - just when they needed the alarm code.
@@ -1147,6 +1174,7 @@ export default function JobDetailPage() {
             {/* On a doorstep this is the most-needed thing on the screen, so
                 it comes first - below the map it was scrolled past, and the
                 Emergency button floated over it on a phone. */}
+            {hazardsCard}
             {accessCard}
 
             <div className="visit-title-block">
@@ -1321,6 +1349,7 @@ export default function JobDetailPage() {
               </div>
             )}
 
+            {hazardsCard}
             {accessCard}
             {visitNotesCard}
 

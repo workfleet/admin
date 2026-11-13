@@ -275,6 +275,13 @@ export default function AdminDashboard() {
       headers: { Authorization: `Bearer ${session.access_token}` },
     }).catch(() => {}); // best-effort: never hold up the dashboard for it
 
+    // Accident-book reminders (HSE deadlines, reports left open). Also on
+    // the daily cron; sent once each, so both firing costs nothing.
+    fetch('/api/admin/incident-reminders', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    }).catch(() => {});
+
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(startOfDay);

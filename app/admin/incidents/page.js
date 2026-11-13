@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CheckCircle2, Circle, Copy, Download, Plus } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Circle, Copy, Download, Plus } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionAndProfile } from '../../../lib/authGate';
 import { toCSV, downloadCSV } from '../../../lib/csv';
@@ -22,7 +22,9 @@ import { useToast } from '../../components/ToastProvider';
 // The embed is hinted even though reported_by is the table's only FK to
 // profiles today - a second one added later would otherwise take this page
 // down with PGRST201 (0094/0095).
-const COLUMNS = 'id, kind, incident_type, told_by, occurred_at, job_id, location, description, injured_party, injured_name, injured_address, injured_occupation, injury_details, treatment, damage_details, immediate_action, witnesses, photo_paths, recorded_by_address, recorded_by_occupation, status, severity, injured_status, accident_kind, body_part, off_work, back_at_work_on, riddor_category, riddor_reported_on, riddor_reference, insurer_notified_on, client_notified_on, risk_assessment_reviewed_on, root_cause, corrective_action, reviewed_by, reviewed_at, closed_at, created_at, reported_by, reporter:profiles!incident_reports_reported_by_fkey(full_name), jobs(scheduled_at, properties(address))';
+const COLUMNS = 'id, kind, incident_type, told_by, occurred_at, job_id, location, description, injured_party, injured_name, injured_address, injured_occupation, injury_details, treatment, damage_details, immediate_action, witnesses, photo_paths, recorded_by_address, recorded_by_occupation, status, severity, injured_status, accident_kind, body_part, off_work, back_at_work_on, riddor_category, riddor_reported_on, riddor_reference, insurer_notified_on, client_notified_on, risk_assessment_reviewed_on, root_cause, corrective_action, reviewed_by, reviewed_at, closed_at, created_at, reported_by, reporter:profiles!incident_reports_reported_by_fkey(full_name), jobs(scheduled_at, property_id, properties(address))';
+
+const HAZARD_COLUMNS = 'id, property_id, hazard, incident_id, created_at, properties(address, clients(name))';
 
 const FILTERS = [
   { key: 'active', label: 'Still open' },
@@ -140,7 +142,66 @@ function Checklist({ items }) {
   );
 }
 
-function FollowUp({ report, staffNames, company, onSaved }) {
+function placeLabel(p) {
+  if (!p) return '';
+  const client = p.clients?.name;
+  return client && !p.address?.includes(client) ? `${p.address} (${client})` : p.address;
+}
+
+// "Warn the next cleaner": turns what was found into a warning on the
+// site's job page (0135). Saved straight away, apart from the follow-up,
+// because it is about the building rather than this report.
+function SiteWarning({ report, properties, warnings, onAdded, onFixed }) {
+  const toast = useToast();
+  const [propertyId, setPropertyId] = useState(report.jobs?.property_id || '');
+  const [text, setText] = useState('');
+  const [saving, setSaving] = useState(false);
+  const mine = warnings.filter((w) => w.incident_id === report.id);
+
+  const add = async () => {
+    if (!propertyId) { toast.error('Choose the site to warn.'); return; }
+    if (!text.trim()) { toast.error('Write the warning the cleaner will see.'); return; }
+    setSaving(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data, error } = await supabase.from('site_hazards')
+      .insert({ property_id: propertyId, hazard: text.trim(), incident_id: report.id, created_by: session?.user?.id || null })
+      .select(HAZARD_COLUMNS).single();
+    setSaving(false);
+    if (error || !data) { toast.error("Couldn't add the warning. If this is the first time, the 0135 database update may not have been run yet."); return; }
+    setText('');
+    toast.success('Warning added. Staff will see it on every job at that site until you mark it fixed.');
+    onAdded(data);
+  };
+
+  return (
+    <div style={sectionStyle}>
+      <h3 style={{ margin: '0 0 4px', fontSize: 15 }}>Warn the next cleaner</h3>
+      <p style={helpStyle}>
+        If the danger is still there, add a warning to the site. Everyone sent to a job there sees it on the job page until
+        you mark it fixed. Describe the danger, not the person: staff can read this.
+      </p>
+      {mine.map((w) => (
+        <div key={w.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', justifyContent: 'space-between', background: 'var(--wf-overdue-tint)', borderRadius: 8, padding: '8px 10px', marginBottom: 8, fontSize: 13.5 }}>
+          <span><strong>{placeLabel(w.properties)}:</strong> {w.hazard}</span>
+          <button type="button" className="btn-secondary" onClick={() => onFixed(w)} title="The danger has gone - stop showing this warning">Fixed</button>
+        </div>
+      ))}
+      <div style={gridStyle}>
+        <Field label="Site">
+          <select value={propertyId} onChange={(e) => setPropertyId(e.target.value)}>
+            <option value="">Choose a site...</option>
+            {properties.map((p) => <option key={p.id} value={p.id}>{placeLabel(p)}</option>)}
+          </select>
+        </Field>
+      </div>
+      <label>The warning</label>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} placeholder="e.g. Loose stair rod on the top landing - use the back stairs until it is fixed" style={textareaStyle} />
+      <button type="button" className="btn-secondary" disabled={saving} onClick={add}>{saving ? 'Adding...' : 'Add the warning'}</button>
+    </div>
+  );
+}
+
+function FollowUp({ report, staffNames, company, siteWarningCount, onSaved, children }) {
   const toast = useToast();
   const [f, setF] = useState(() => followUpFrom(report));
   const [saving, setSaving] = useState(false);
@@ -154,7 +215,7 @@ function FollowUp({ report, staffNames, company, onSaved }) {
   const draft = draftOf(report, f, today);
   const injured = wasInjured(report);
   const accident = report.kind === 'accident';
-  const items = todoList(draft, today);
+  const items = todoList({ ...draft, site_warning_count: siteWarningCount }, today);
   const questions = hseQuestions(draft);
   const outcome = hseOutcome(draft, today);
   const notes = hseNotes(draft);
@@ -368,6 +429,8 @@ function FollowUp({ report, staffNames, company, onSaved }) {
         </div>
       </div>
 
+      {children}
+
       {report.reviewed_at && (
         <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '12px 0 10px' }}>
           Last updated {formatWhen(report.reviewed_at)}{staffNames[report.reviewed_by] ? ` by ${staffNames[report.reviewed_by]}` : ''}
@@ -401,6 +464,7 @@ function HseBadge({ report, today }) {
 
 export default function AdminIncidents() {
   const router = useRouter();
+  const toast = useToast();
   const [userId, setUserId] = useState(null);
   const [reports, setReports] = useState([]);
   const [staffNames, setStaffNames] = useState({});
@@ -412,6 +476,8 @@ export default function AdminIncidents() {
   const [openId, setOpenId] = useState(null);
   const [photoUrls, setPhotoUrls] = useState({});
   const [adding, setAdding] = useState(0); // >0 while the add form is open; remounts it fresh
+  const [properties, setProperties] = useState([]);
+  const [warnings, setWarnings] = useState([]);
 
   useEffect(() => {
     load();
@@ -425,12 +491,17 @@ export default function AdminIncidents() {
     if (profile?.role !== 'admin') { router.push('/admin'); return; }
     setUserId(session.user.id);
 
-    const [{ data, error }, { data: office }, { data: settings }] = await Promise.all([
+    const [{ data, error }, { data: office }, { data: settings }, { data: places }, { data: hazards }] = await Promise.all([
       supabase.from('incident_reports').select(COLUMNS).order('occurred_at', { ascending: false }),
       supabase.from('profiles').select('id, full_name').in('role', ['admin', 'supervisor']),
       supabase.from('company_settings').select('*').limit(1).maybeSingle(),
+      supabase.from('properties').select('id, address, clients(name)').order('address'),
+      // Fails quietly until 0135 is run: the reports still load.
+      supabase.from('site_hazards').select(HAZARD_COLUMNS).is('resolved_at', null).order('created_at', { ascending: false }),
     ]);
     setCompany(companyFromSettings(settings));
+    setProperties(places || []);
+    setWarnings(hazards || []);
     if (error) { setLoadError(true); setLoading(false); return; }
     setReports(data || []);
     setStaffNames(Object.fromEntries((office || []).map((p) => [p.id, p.full_name])));
@@ -472,6 +543,16 @@ export default function AdminIncidents() {
       nearMisses: lastYear.filter((r) => r.kind === 'near_miss').length,
     };
   }, [reports, today]);
+
+  const markFixed = async (warning) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { error } = await supabase.from('site_hazards')
+      .update({ resolved_at: new Date().toISOString(), resolved_by: session?.user?.id || null })
+      .eq('id', warning.id);
+    if (error) { toast.error("Couldn't update the warning."); return; }
+    setWarnings((prev) => prev.filter((w) => w.id !== warning.id));
+    toast.success('Marked fixed. Staff no longer see it.');
+  };
 
   const exportCsv = () => {
     downloadCSV(`accidents-incidents-near-misses-${localDateString(new Date())}.csv`, toCSV(CSV_COLUMNS, shown.map((r) => csvRow(r, today))));
@@ -539,6 +620,24 @@ export default function AdminIncidents() {
         ))}
       </div>
 
+      {warnings.length > 0 && (
+        <div className="card">
+          <h2 style={{ margin: '0 0 4px', fontSize: 16, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <AlertTriangle size={16} /> Site warnings staff can see
+          </h2>
+          <p style={{ ...helpStyle, marginBottom: 8 }}>Shown on every job at these sites. Mark one fixed once the danger has gone.</p>
+          {warnings.map((w) => (
+            <div key={w.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', justifyContent: 'space-between', borderTop: '1px solid var(--hairline)', padding: '8px 0', fontSize: 13.5 }}>
+              <span>
+                <strong>{placeLabel(w.properties)}:</strong> {w.hazard}
+                <span style={{ color: 'var(--muted)' }}> · added {new Date(w.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+              </span>
+              <button type="button" className="btn-secondary" onClick={() => markFixed(w)} title="The danger has gone - stop showing this warning">Fixed</button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
         {FILTERS.map((f) => (
           <button key={f.key} type="button" className={filter === f.key ? '' : 'btn-secondary'} onClick={() => setFilter(f.key)}>
@@ -591,8 +690,17 @@ export default function AdminIncidents() {
                   report={r}
                   staffNames={staffNames}
                   company={company}
+                  siteWarningCount={warnings.filter((w) => w.incident_id === r.id).length}
                   onSaved={(updated) => setReports((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))}
-                />
+                >
+                  <SiteWarning
+                    report={r}
+                    properties={properties}
+                    warnings={warnings}
+                    onAdded={(w) => setWarnings((prev) => [w, ...prev])}
+                    onFixed={markFixed}
+                  />
+                </FollowUp>
               </div>
             )}
           </div>

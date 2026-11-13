@@ -11,6 +11,7 @@ import {
   periodLabel,
   todayInZone,
 } from '../../../../lib/payroll';
+import { sendIncidentReminders } from '../../../../lib/incidentRemindersServer';
 
 export const runtime = 'nodejs';
 
@@ -113,10 +114,22 @@ async function runReminder(request) {
   return NextResponse.json({ sent, notified: recipients.length, period });
 }
 
+// The daily cron also sweeps the accident-book reminders (0135). They ride
+// on this cron instead of having their own so vercel.json stays at two,
+// inside the plan's cron allowance. Only after the auth check passed, and a
+// failure there never changes this route's answer.
+async function withIncidentReminders(request) {
+  const response = await runReminder(request);
+  if (response.status !== 401) {
+    try { await sendIncidentReminders(); } catch { /* reported by its own route */ }
+  }
+  return response;
+}
+
 export async function GET(request) {
-  return runReminder(request);
+  return withIncidentReminders(request);
 }
 
 export async function POST(request) {
-  return runReminder(request);
+  return withIncidentReminders(request);
 }
