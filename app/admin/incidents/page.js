@@ -2,14 +2,17 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, Download } from 'lucide-react';
+import { AlertTriangle, Copy, Download } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { toCSV, downloadCSV } from '../../../lib/csv';
 import { localDateString } from '../../../lib/localDate';
+import { companyFromSettings } from '../../../lib/companyBranding';
 import {
-  KIND_LABELS, STATUS_LABELS, STATUS_BADGE_CLASS, SEVERITY_LABELS,
-  riddorPrompts, needsRiddorDecision, incidentSummary, CSV_COLUMNS, csvRow,
+  KIND_LABELS, STATUS_LABELS, STATUS_BADGE_CLASS, SEVERITY_LABELS, INJURED_STATUS_LABELS,
+  ACCIDENT_KIND_LABELS, RIDDOR_CATEGORY_LABELS, isReportableCategory, wasInjured,
+  riddorPrompts, riddorState, riddorDeadline, daysOffWork, accidentBookGaps, closeProblems,
+  hseSummary, londonDate, addDays, formatDay, incidentSummary, CSV_COLUMNS, csvRow,
 } from '../../../lib/incidents';
 import IncidentDetails, { formatWhen } from '../../components/IncidentDetails';
 import BackButton from '../../components/BackButton';
@@ -18,7 +21,7 @@ import { useToast } from '../../components/ToastProvider';
 // The embed is hinted even though reported_by is the table's only FK to
 // profiles today - a second one added later would otherwise take this page
 // down with PGRST201 (0094/0095).
-const COLUMNS = 'id, kind, occurred_at, location, description, injured_party, injured_name, injury_details, treatment, damage_details, immediate_action, witnesses, photo_paths, status, severity, riddor_reportable, riddor_reference, days_off_work, root_cause, corrective_action, reviewed_by, reviewed_at, closed_at, created_at, reported_by, reporter:profiles!incident_reports_reported_by_fkey(full_name), jobs(scheduled_at, properties(address))';
+const COLUMNS = 'id, kind, occurred_at, job_id, location, description, injured_party, injured_name, injured_address, injured_occupation, injury_details, treatment, damage_details, immediate_action, witnesses, photo_paths, recorded_by_address, recorded_by_occupation, status, severity, injured_status, accident_kind, body_part, off_work, back_at_work_on, riddor_category, riddor_reported_on, riddor_reference, insurer_notified_on, client_notified_on, risk_assessment_reviewed_on, root_cause, corrective_action, reviewed_by, reviewed_at, closed_at, created_at, reported_by, reporter:profiles!incident_reports_reported_by_fkey(full_name), jobs(scheduled_at, properties(address))';
 
 const FILTERS = [
   { key: 'active', label: 'Open' },
@@ -35,47 +38,136 @@ function followUpFrom(report) {
   return {
     status: report.status,
     severity: report.severity || '',
-    days_off_work: report.days_off_work ?? '',
-    riddor: report.riddor_reportable === null ? '' : report.riddor_reportable ? 'yes' : 'no',
+    injured_status: report.injured_status || '',
+    accident_kind: report.accident_kind || '',
+    body_part: report.body_part || '',
+    injured_address: report.injured_address || '',
+    injured_occupation: report.injured_occupation || '',
+    off_work: !!report.off_work,
+    back_at_work_on: report.back_at_work_on || '',
+    riddor_category: report.riddor_category || '',
+    riddor_reported_on: report.riddor_reported_on || '',
     riddor_reference: report.riddor_reference || '',
+    insurer_notified_on: report.insurer_notified_on || '',
+    client_notified_on: report.client_notified_on || '',
+    risk_assessment_reviewed_on: report.risk_assessment_reviewed_on || '',
     root_cause: report.root_cause || '',
     corrective_action: report.corrective_action || '',
   };
 }
 
-function FollowUp({ report, staffNames, onSaved }) {
+const blank = (v) => (typeof v === 'string' ? v.trim() || null : v);
+
+// The form as the row it would save, so prompts, deadlines and the close
+// check read what is typed rather than what was last saved.
+function draftOf(report, f) {
+  return {
+    ...report,
+    status: f.status,
+    severity: f.severity || null,
+    injured_status: f.injured_status || null,
+    accident_kind: f.accident_kind || null,
+    body_part: blank(f.body_part),
+    // Once filled these are frozen by the database (0130), so only a blank
+    // one takes what is typed.
+    injured_address: report.injured_address || blank(f.injured_address),
+    injured_occupation: report.injured_occupation || blank(f.injured_occupation),
+    off_work: f.off_work,
+    back_at_work_on: f.off_work ? f.back_at_work_on || null : null,
+    riddor_category: f.riddor_category || null,
+    riddor_reported_on: isReportableCategory(f.riddor_category) ? f.riddor_reported_on || null : null,
+    riddor_reference: isReportableCategory(f.riddor_category) ? blank(f.riddor_reference) : null,
+    insurer_notified_on: f.insurer_notified_on || null,
+    client_notified_on: f.client_notified_on || null,
+    risk_assessment_reviewed_on: f.risk_assessment_reviewed_on || null,
+    root_cause: blank(f.root_cause),
+    corrective_action: blank(f.corrective_action),
+  };
+}
+
+function Field({ label, children }) {
+  return (
+    <div>
+      <label>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+const gridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '0 12px' };
+const subheadStyle = { margin: '8px 0 6px', fontSize: 14 };
+
+function FollowUp({ report, staffNames, company, onSaved }) {
   const toast = useToast();
   const [f, setF] = useState(() => followUpFrom(report));
   const [saving, setSaving] = useState(false);
-  const set = (field) => (e) => setF((prev) => ({ ...prev, [field]: e.target.value }));
+  const set = (field) => (e) => {
+    const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+    setF((prev) => ({ ...prev, [field]: value }));
+  };
 
-  // Prompts read the days off as typed, so the over-7-day deadline appears
-  // the moment someone enters 8 - before they save.
-  const days = f.days_off_work === '' ? null : Number(f.days_off_work);
-  const prompts = riddorPrompts({ ...report, days_off_work: days });
+  const today = londonDate(new Date());
+  const draft = draftOf(report, f);
+  const injured = wasInjured(report);
+  const prompts = riddorPrompts(draft, today);
+  const riddor = riddorState(draft, today);
+  const deadline = riddorDeadline(draft);
+  const reportable = isReportableCategory(f.riddor_category);
+  const days = daysOffWork(draft, today);
+  const gaps = accidentBookGaps(report);
+
+  const copySummary = async () => {
+    try {
+      await navigator.clipboard.writeText(hseSummary(draft, company, today));
+      toast.success('Copied. Paste it beside the HSE form and copy each answer across.');
+    } catch {
+      toast.error("Couldn't copy - your browser blocked it.");
+    }
+  };
 
   const save = async (e) => {
     e.preventDefault();
-    if (days !== null && (!Number.isInteger(days) || days < 0)) { toast.error('Days off work must be a whole number.'); return; }
-    if (f.status === 'closed' && !f.corrective_action.trim()) {
-      toast.error('Say what was done about it before closing the report.');
+    if (f.status === 'closed') {
+      const problems = closeProblems(draft);
+      if (problems.length > 0) { toast.error(`Can't close it yet. ${problems.join(' ')}`); return; }
+    }
+    if (draft.back_at_work_on && draft.back_at_work_on <= londonDate(report.occurred_at)) {
+      toast.error('The day they went back must be after the day of the accident.');
       return;
     }
     setSaving(true);
     const { data: { session } } = await supabase.auth.getSession();
     const now = new Date().toISOString();
     const update = {
-      status: f.status,
-      severity: f.severity || null,
-      days_off_work: days,
-      riddor_reportable: f.riddor === '' ? null : f.riddor === 'yes',
-      riddor_reference: f.riddor === 'yes' ? f.riddor_reference.trim() || null : null,
-      root_cause: f.root_cause.trim() || null,
-      corrective_action: f.corrective_action.trim() || null,
+      status: draft.status,
+      severity: draft.severity,
+      root_cause: draft.root_cause,
+      corrective_action: draft.corrective_action,
+      risk_assessment_reviewed_on: draft.risk_assessment_reviewed_on,
+      insurer_notified_on: draft.insurer_notified_on,
+      client_notified_on: draft.client_notified_on,
       reviewed_by: session?.user?.id || null,
       reviewed_at: now,
-      closed_at: f.status === 'closed' ? report.closed_at || now : null,
+      closed_at: draft.status === 'closed' ? report.closed_at || now : null,
     };
+    if (report.kind === 'accident') {
+      Object.assign(update, {
+        accident_kind: draft.accident_kind,
+        riddor_category: draft.riddor_category,
+        riddor_reported_on: draft.riddor_reported_on,
+        riddor_reference: draft.riddor_reference,
+      });
+    }
+    if (injured) {
+      Object.assign(update, {
+        injured_status: draft.injured_status,
+        body_part: draft.body_part,
+        off_work: draft.off_work,
+        back_at_work_on: draft.back_at_work_on,
+      });
+      if (!report.injured_address && draft.injured_address) update.injured_address = draft.injured_address;
+      if (!report.injured_occupation && draft.injured_occupation) update.injured_occupation = draft.injured_occupation;
+    }
     const { data, error } = await supabase.from('incident_reports').update(update).eq('id', report.id).select(COLUMNS).single();
     setSaving(false);
     if (error || !data) { toast.error("Couldn't save the follow-up."); return; }
@@ -86,6 +178,17 @@ function FollowUp({ report, staffNames, onSaved }) {
   return (
     <form onSubmit={save} style={{ borderTop: '1px solid var(--hairline)', paddingTop: 12, marginTop: 4 }}>
       <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>Office follow-up</h3>
+
+      {(riddor.state === 'due' || riddor.state === 'overdue') && (
+        <div role="alert" style={{ background: 'var(--wf-overdue-tint)', borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 13.5, fontWeight: 600 }}>
+          {riddor.state === 'overdue' ? 'Overdue: ' : ''}
+          {riddor.immediate ? 'Report to HSE now' : 'Report to HSE'}
+          {riddor.due ? `, by ${formatDay(riddor.due)} at the latest` : ''}.
+          {draft.riddor_category === 'death' || draft.riddor_category === 'specified_injury'
+            ? " For a death or specified injury, ring HSE's incident contact centre (0345 300 9923) or report online straight away."
+            : ''}
+        </div>
+      )}
 
       {prompts.length > 0 && (
         <div style={{ background: 'var(--wf-overdue-tint)', borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 13.5 }}>
@@ -101,41 +204,126 @@ function FollowUp({ report, staffNames, onSaved }) {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0 12px' }}>
-        <div>
-          <label>Status</label>
+      <div style={gridStyle}>
+        <Field label="Status">
           <select value={f.status} onChange={set('status')}>
             {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
-        </div>
-        <div>
-          <label>Severity</label>
+        </Field>
+        <Field label="Severity">
           <select value={f.severity} onChange={set('severity')}>
             <option value="">Not set</option>
             {Object.entries(SEVERITY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
-        </div>
+        </Field>
         {report.kind === 'accident' && (
-          <div>
-            <label>Days off work</label>
-            <input type="number" min="0" step="1" inputMode="numeric" value={f.days_off_work} onChange={set('days_off_work')} placeholder="Not known" />
-          </div>
+          <Field label="Kind of accident (HSE)">
+            <select value={f.accident_kind} onChange={set('accident_kind')}>
+              <option value="">Not set</option>
+              {Object.entries(ACCIDENT_KIND_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </Field>
         )}
-        <div>
-          <label>RIDDOR reportable?</label>
-          <select value={f.riddor} onChange={set('riddor')}>
-            <option value="">Not decided</option>
-            <option value="no">No</option>
-            <option value="yes">Yes - reported to HSE</option>
-          </select>
-        </div>
       </div>
-      {f.riddor === 'yes' && (
+
+      {injured && (
         <>
-          <label>HSE reference number</label>
-          <input value={f.riddor_reference} onChange={set('riddor_reference')} />
+          <h4 style={subheadStyle}>The injured person</h4>
+          {gaps.length > 0 && (
+            <p style={{ fontSize: 13, color: 'var(--wf-overdue)', margin: '0 0 8px' }}>
+              The accident book is missing {gaps.join(', ')}. Each can be filled in once, then it is fixed.
+            </p>
+          )}
+          <div style={gridStyle}>
+            <Field label="Employment status">
+              <select value={f.injured_status} onChange={set('injured_status')}>
+                <option value="">Not set</option>
+                {Object.entries(INJURED_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </Field>
+            <Field label="Part of the body">
+              <input value={f.body_part} onChange={set('body_part')} placeholder="e.g. Left wrist" />
+            </Field>
+            {!report.injured_address && (
+              <Field label="Their address">
+                <input value={f.injured_address} onChange={set('injured_address')} placeholder='or "Not given"' />
+              </Field>
+            )}
+            {!report.injured_occupation && (
+              <Field label="Their occupation">
+                <input value={f.injured_occupation} onChange={set('injured_occupation')} placeholder='or "Not given"' />
+              </Field>
+            )}
+          </div>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 400, fontSize: 14 }}>
+            <input type="checkbox" checked={f.off_work} onChange={set('off_work')} style={{ width: 'auto' }} />
+            Off work, or unable to do their normal job, after the accident
+          </label>
+          {f.off_work && (
+            <div style={gridStyle}>
+              <Field label="Back at normal work on">
+                <input type="date" value={f.back_at_work_on} min={addDays(londonDate(report.occurred_at), 1)} onChange={set('back_at_work_on')} />
+              </Field>
+              <div style={{ alignSelf: 'center', fontSize: 13.5, paddingTop: 12 }}>
+                {days} day{days === 1 ? '' : 's'} off{f.back_at_work_on ? '' : ' so far'} (the day of the accident does not count; weekends do)
+              </div>
+            </div>
+          )}
         </>
       )}
+
+      {report.kind === 'accident' && (
+        <>
+          <h4 style={subheadStyle}>RIDDOR</h4>
+          <div style={gridStyle}>
+            <Field label="Category">
+              <select value={f.riddor_category} onChange={set('riddor_category')}>
+                <option value="">Not decided</option>
+                {Object.entries(RIDDOR_CATEGORY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </Field>
+            {reportable && (
+              <>
+                <Field label="Reported to HSE on">
+                  <input type="date" value={f.riddor_reported_on} max={today} onChange={set('riddor_reported_on')} />
+                </Field>
+                <Field label="HSE reference">
+                  <input value={f.riddor_reference} onChange={set('riddor_reference')} />
+                </Field>
+              </>
+            )}
+          </div>
+          {reportable && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, fontSize: 13, margin: '0 0 10px' }}>
+              <span>{deadline?.due ? `Deadline ${formatDay(deadline.due)}.` : 'Report as soon as the diagnosis is in writing.'}</span>
+              <a href="https://www.hse.gov.uk/riddor/report.htm" target="_blank" rel="noreferrer" style={{ color: 'var(--brand-link)', fontWeight: 600 }}>
+                Make the report on hse.gov.uk
+              </a>
+              <button type="button" className="btn-secondary" onClick={copySummary} title="Copy the details in the order HSE's form asks for them">
+                <Copy size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />Copy details for HSE
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      <h4 style={subheadStyle}>Who has been told</h4>
+      <div style={gridStyle}>
+        {report.kind === 'accident' && (
+          <Field label="Insurer told on">
+            <input type="date" value={f.insurer_notified_on} max={today} onChange={set('insurer_notified_on')} />
+          </Field>
+        )}
+        {report.job_id && (
+          <Field label="Client told on">
+            <input type="date" value={f.client_notified_on} max={today} onChange={set('client_notified_on')} />
+          </Field>
+        )}
+        <Field label="Risk assessment reviewed on">
+          <input type="date" value={f.risk_assessment_reviewed_on} max={today} onChange={set('risk_assessment_reviewed_on')} />
+        </Field>
+      </div>
 
       <label>What caused it?</label>
       <textarea value={f.root_cause} onChange={set('root_cause')} rows={2} style={textareaStyle} />
@@ -162,10 +350,20 @@ function FollowUp({ report, staffNames, onSaved }) {
   );
 }
 
+function RiddorBadge({ report, today }) {
+  const r = riddorState(report, today);
+  if (r.state === 'overdue') return <span className="badge missed">RIDDOR overdue</span>;
+  if (r.state === 'due') return <span className="badge missed">{r.due ? `RIDDOR by ${formatDay(r.due).replace(/ \d{4}$/, '')}` : 'RIDDOR due'}</span>;
+  if (r.state === 'decide') return <span className="badge missed">RIDDOR?</span>;
+  if (r.state === 'reported') return <span className="badge in_progress">RIDDOR reported</span>;
+  return null;
+}
+
 export default function AdminIncidents() {
   const router = useRouter();
   const [reports, setReports] = useState([]);
   const [staffNames, setStaffNames] = useState({});
+  const [company, setCompany] = useState(() => companyFromSettings(null));
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [filter, setFilter] = useState('active');
@@ -181,10 +379,12 @@ export default function AdminIncidents() {
     const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
-    const [{ data, error }, { data: office }] = await Promise.all([
+    const [{ data, error }, { data: office }, { data: settings }] = await Promise.all([
       supabase.from('incident_reports').select(COLUMNS).order('occurred_at', { ascending: false }),
       supabase.from('profiles').select('id, full_name').in('role', ['admin', 'supervisor']),
+      supabase.from('company_settings').select('*').limit(1).maybeSingle(),
     ]);
+    setCompany(companyFromSettings(settings));
     if (error) { setLoadError(true); setLoading(false); return; }
     setReports(data || []);
     setStaffNames(Object.fromEntries((office || []).map((p) => [p.id, p.full_name])));
@@ -213,19 +413,20 @@ export default function AdminIncidents() {
     return true;
   }), [reports, filter, kind]);
 
+  const today = londonDate(new Date());
   const counts = useMemo(() => {
     const yearAgo = Date.now() - 365 * 24 * 3600000;
     const lastYear = reports.filter((r) => new Date(r.occurred_at).getTime() >= yearAgo);
     return {
       open: reports.filter((r) => r.status !== 'closed').length,
-      riddor: reports.filter(needsRiddorDecision).length,
+      riddor: reports.filter((r) => ['decide', 'due', 'overdue'].includes(riddorState(r, today).state)).length,
       accidents: lastYear.filter((r) => r.kind === 'accident').length,
       nearMisses: lastYear.filter((r) => r.kind === 'near_miss').length,
     };
-  }, [reports]);
+  }, [reports, today]);
 
   const exportCsv = () => {
-    downloadCSV(`accidents-and-near-misses-${localDateString(new Date())}.csv`, toCSV(CSV_COLUMNS, shown.map(csvRow)));
+    downloadCSV(`accidents-and-near-misses-${localDateString(new Date())}.csv`, toCSV(CSV_COLUMNS, shown.map((r) => csvRow(r, today))));
   };
 
   if (loading) return <div className="container">Loading...</div>;
@@ -237,7 +438,7 @@ export default function AdminIncidents() {
         <div>
           <h1 style={{ marginBottom: 4 }}>Accidents &amp; near misses</h1>
           <p style={{ color: 'var(--muted)', fontSize: 14, margin: 0 }}>
-            The accident book. Staff report from the app; follow each one up here. Reports cannot be deleted.
+            The accident book. Staff report from the app; follow each one up here. Reports are kept for at least three years and cannot be deleted from the app.
           </p>
         </div>
         <button type="button" className="btn-secondary" onClick={exportCsv} disabled={shown.length === 0} title="Download the reports shown below as a spreadsheet">
@@ -247,14 +448,14 @@ export default function AdminIncidents() {
 
       {loadError && (
         <div className="card" style={{ marginTop: 16 }}>
-          <p style={{ margin: 0 }}>Couldn't load the reports. If this is the first time, the 0117 database update may not have been run yet.</p>
+          <p style={{ margin: 0 }}>Couldn't load the reports. If this is the first time, the 0130 database update may not have been run yet.</p>
         </div>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, margin: '16px 0' }}>
         {[
           ['Open', counts.open],
-          ['RIDDOR to decide', counts.riddor],
+          ['RIDDOR to decide or send', counts.riddor],
           ['Accidents, last 12 months', counts.accidents],
           ['Near misses, last 12 months', counts.nearMisses],
         ].map(([label, value]) => (
@@ -295,8 +496,7 @@ export default function AdminIncidents() {
                 <span style={{ fontWeight: 700, fontSize: 15 }}>{KIND_LABELS[r.kind]}</span>
                 <span style={{ fontSize: 13, color: 'var(--muted)' }}>{formatWhen(r.occurred_at)}</span>
                 {r.treatment === 'hospital' && <span className="badge missed">Hospital</span>}
-                {needsRiddorDecision(r) && <span className="badge missed">RIDDOR?</span>}
-                {r.riddor_reportable && <span className="badge in_progress">RIDDOR reported</span>}
+                <RiddorBadge report={r} today={today} />
               </div>
               <div style={{ fontSize: 13.5, marginTop: 2 }}>{r.location}</div>
               <div style={{ fontSize: 13, color: 'var(--muted)' }}>
@@ -313,6 +513,7 @@ export default function AdminIncidents() {
                 key={r.reviewed_at || r.id}
                 report={r}
                 staffNames={staffNames}
+                company={company}
                 onSaved={(updated) => setReports((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))}
               />
             </div>

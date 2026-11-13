@@ -3,7 +3,7 @@ import {
 } from '../../lib/incidents';
 
 // What the person on site wrote, laid out the same for them and for the
-// office. Read-only: the staff half of a report is never edited (0117).
+// office. Read-only: the staff half of a report is never edited (0130).
 // photoUrls are signed URLs, in the same order as report.photo_paths.
 
 function Row({ label, children }) {
@@ -41,6 +41,8 @@ export default function IncidentDetails({ report, photoUrls = [] }) {
       {report.kind === 'accident' && (
         <>
           <Row label="Who was hurt">{report.injured_party === 'nobody' ? 'Nobody' : injuredWho}</Row>
+          {injured && <Row label="Their address">{report.injured_address}</Row>}
+          {injured && <Row label="Their occupation">{report.injured_occupation}</Row>}
           {injured && <Row label="Injury">{report.injury_details}</Row>}
           {injured && <Row label="Treatment">{TREATMENT_LABELS[report.treatment]}</Row>}
           <Row label="Damage">{report.damage_details}</Row>
@@ -60,6 +62,11 @@ export default function IncidentDetails({ report, photoUrls = [] }) {
       <Row label="Reported">
         {`${formatWhen(report.created_at)}${report.reporter?.full_name ? ` by ${report.reporter.full_name}` : ''}`}
       </Row>
+      {(report.recorded_by_address || report.recorded_by_occupation) && (
+        <Row label="Recorder (for the accident book)">
+          {[report.recorded_by_occupation, report.recorded_by_address].filter(Boolean).join(' - ')}
+        </Row>
+      )}
     </div>
   );
 }

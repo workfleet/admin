@@ -16,7 +16,7 @@ import IncidentDetails, { formatWhen } from '../../components/IncidentDetails';
 import BackButton from '../../components/BackButton';
 import { useToast } from '../../components/ToastProvider';
 
-const REPORT_COLUMNS = 'id, kind, occurred_at, location, description, injured_party, injured_name, injury_details, treatment, damage_details, immediate_action, witnesses, photo_paths, status, corrective_action, closed_at, created_at, jobs(scheduled_at, properties(address))';
+const REPORT_COLUMNS = 'id, kind, occurred_at, location, description, injured_party, injured_name, injured_address, injured_occupation, injury_details, treatment, damage_details, immediate_action, witnesses, photo_paths, status, corrective_action, closed_at, created_at, jobs(scheduled_at, properties(address))';
 
 // Jobs from the last fortnight to now, for "which job was this on". An
 // accident is usually reported the same day; a near miss someone has been
@@ -32,6 +32,8 @@ function emptyForm(kind = 'accident', jobId = '') {
     description: '',
     injuredParty: '',
     injuredName: '',
+    injuredAddress: '',
+    injuredOccupation: '',
     injuryDetails: '',
     treatment: '',
     damageDetails: '',
@@ -68,6 +70,9 @@ export default function CleanerIncidents() {
   const [reports, setReports] = useState([]);
   const [openId, setOpenId] = useState(null);
   const [photoUrls, setPhotoUrls] = useState({});
+  // From their staff record, offered when they were the one hurt so the
+  // accident book has it without them typing it at the scene.
+  const [ownAddress, setOwnAddress] = useState('');
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm());
@@ -85,7 +90,7 @@ export default function CleanerIncidents() {
     setUserId(session.user.id);
 
     const since = new Date(Date.now() - JOB_LOOKBACK_DAYS * 24 * 3600000).toISOString();
-    const [{ data: assignmentRows }, { data: reportRows }] = await Promise.all([
+    const [{ data: assignmentRows }, { data: reportRows }, { data: details }] = await Promise.all([
       supabase
         .from('job_assignments')
         .select(`jobs(id, scheduled_at, status, ${TRAINING_JOB_COLUMNS}, properties(address))`)
@@ -95,7 +100,9 @@ export default function CleanerIncidents() {
         .select(REPORT_COLUMNS)
         .eq('reported_by', session.user.id)
         .order('occurred_at', { ascending: false }),
+      supabase.from('staff_details').select('address').eq('profile_id', session.user.id).maybeSingle(),
     ]);
+    setOwnAddress(details?.address || '');
 
     const now = Date.now();
     const recentJobs = (assignmentRows || [])
@@ -118,6 +125,12 @@ export default function CleanerIncidents() {
   };
 
   const set = (field) => (value) => setForm((prev) => ({ ...prev, [field]: value }));
+  // Switching who was hurt swaps whose address the box holds.
+  const chooseInjured = (value) => setForm((prev) => ({
+    ...prev,
+    injuredParty: value,
+    injuredAddress: value === 'me' ? ownAddress : (prev.injuredParty === 'me' ? '' : prev.injuredAddress),
+  }));
   const setFromEvent = (field) => (e) => set(field)(e.target.value);
 
   const chooseJob = (jobId) => {
@@ -287,7 +300,7 @@ export default function CleanerIncidents() {
               <label>Who was hurt?</label>
               <div style={{ marginBottom: 8 }}>
                 {Object.entries(INJURED_PARTY_LABELS).map(([value, label]) => (
-                  <Choice key={value} name="injuredParty" value={value} current={form.injuredParty} onChange={set('injuredParty')}>{label}</Choice>
+                  <Choice key={value} name="injuredParty" value={value} current={form.injuredParty} onChange={chooseInjured}>{label}</Choice>
                 ))}
               </div>
 
@@ -295,6 +308,20 @@ export default function CleanerIncidents() {
                 <>
                   <label>Their name</label>
                   <input value={form.injuredName} onChange={setFromEvent('injuredName')} />
+                  <label>Their address (if you know it)</label>
+                  <input value={form.injuredAddress} onChange={setFromEvent('injuredAddress')} placeholder="The office can add it later" />
+                  <label>Their job (if you know it)</label>
+                  <input value={form.injuredOccupation} onChange={setFromEvent('injuredOccupation')} placeholder={form.injuredParty === 'colleague' ? 'e.g. Cleaning Operative' : 'e.g. Retired, Receptionist'} />
+                </>
+              )}
+
+              {injured && form.injuredParty === 'me' && (
+                <>
+                  <label>Your home address</label>
+                  <input value={form.injuredAddress} onChange={setFromEvent('injuredAddress')} placeholder="The office can add it from your record" />
+                  <p style={{ fontSize: 12, color: 'var(--muted)', margin: '-4px 0 10px' }}>
+                    The accident book needs it. {ownAddress ? 'Filled in from your profile - change it if it is out of date.' : ''}
+                  </p>
                 </>
               )}
 
