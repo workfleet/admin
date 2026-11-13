@@ -8,7 +8,7 @@ import { notify } from '../../../lib/notify';
 import { assignedJob, assignmentMinutes, bookedHoursBetween, fetchAssigneeCounts, fetchStaffHoursTotals, formatHours, HOLIDAY_ACCRUAL_RATE } from '../../../lib/hoursWorked';
 import { fetchEmploymentTypes, isSubcontractor } from '../../../lib/profilePrivate';
 import { BOOKABLE_ROLES } from '../../../lib/staffRoles';
-import { isClaimableMissedJob } from '../../../lib/missedClockin';
+import { isClaimableMissedJob, partlyMissedShifts } from '../../../lib/missedClockin';
 import { MISSED_SHIFT_OUTCOMES, isJobWideOutcome, outcomeLabel } from '../../../lib/missedShiftOutcomes';
 import { describeShortfall, shiftShortfall } from '../../../lib/shortShift';
 import { respondToEmergencyAlert } from '../../../lib/emergencyRespond';
@@ -115,6 +115,10 @@ export default function AdminRequests() {
   const [absenceRange, setAbsenceRange] = useState('90'); // 90 | all
   const [absenceCleaner, setAbsenceCleaner] = useState('all');
   const [confirmingShiftId, setConfirmingShiftId] = useState(null);
+  // Shared shifts a colleague clocked into and someone else on them did not
+  // (0132). The job completed, so it never went missed and nothing asked
+  // the office what happened to the one who stayed away.
+  const [partlyMissed, setPartlyMissed] = useState([]);
 
   // Amend Hours: one line per person per completed job since the last
   // payroll close (0094). Loaded when the tab is opened - it is the largest
@@ -326,6 +330,42 @@ export default function AdminRequests() {
       if (!outcomesByJob[o.job_id]) outcomesByJob[o.job_id] = {};
       outcomesByJob[o.job_id][o.cleaner_id] = o.outcome;
     });
+    // Shared shifts where only some of the team clocked in. Only since the
+    // last payroll close: anything older has been paid, and recording an
+    // absence now would claw it back through an adjustment - that is a
+    // decision for the Absence Record or the rota, not a queue.
+    const { data: lastClose } = await supabase
+      .from('payroll_periods')
+      .select('period_end')
+      .order('period_end', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const partlySince = lastClose?.period_end
+      ? new Date(`${lastClose.period_end}T00:00:00`)
+      : new Date(Date.now() - 42 * 86400000);
+    const { data: completedRows } = await supabase
+      .from('jobs')
+      .select('id, scheduled_at, duration_minutes, status, properties(address, clients(name)), job_assignments(cleaner_id, profiles(full_name)), checkins(cleaner_id, checked_in_at)')
+      .eq('status', 'completed')
+      .gte('scheduled_at', partlySince.toISOString())
+      .lt('scheduled_at', new Date().toISOString())
+      .order('scheduled_at', { ascending: false })
+      .limit(1000);
+    const partlyCandidates = partlyMissedShifts(completedRows || [], { claims: missedClockinData || [] });
+    const { data: partlyOutcomeRows } = partlyCandidates.length > 0
+      ? await supabase
+        .from('missed_shift_outcomes')
+        .select('job_id, cleaner_id, outcome')
+        .in('job_id', partlyCandidates.map((e) => e.job.id))
+      : { data: [] };
+    (partlyOutcomeRows || []).forEach((o) => {
+      if (!outcomesByJob[o.job_id]) outcomesByJob[o.job_id] = {};
+      outcomesByJob[o.job_id][o.cleaner_id] = o.outcome;
+    });
+    setPartlyMissed(partlyMissedShifts(
+      partlyCandidates.map((e) => e.job),
+      { claims: missedClockinData || [], outcomes: partlyOutcomeRows || [] }
+    ));
     setMissedOutcomes(outcomesByJob);
 
     // Two foreign keys to profiles on this table, so both embeds are named.
@@ -944,6 +984,35 @@ export default function AdminRequests() {
     await load();
   };
 
+  // On a shared shift a colleague clocked into: this person was there and
+  // forgot to clock in. Their pay already stands, so this only records the
+  // decision (0132).
+  const confirmColleagueWorked = async (job, assignment) => {
+    const name = assignment.profiles?.full_name || 'They';
+    const proceed = await confirm(
+      `${name} was at ${job.properties?.address || 'this shift'} on ${new Date(job.scheduled_at).toLocaleDateString()} and forgot to clock in? `
+      + 'Their hours for it stay as they are on the rota.',
+      { title: 'They worked it', confirmLabel: 'Yes, they worked it' }
+    );
+    if (!proceed) return;
+    const key = `${job.id}:${assignment.cleaner_id}`;
+    setDecidingKey(key);
+    const { data: outcome, error } = await supabase.rpc('admin_confirm_colleague_worked', {
+      target_job_id: job.id,
+      target_cleaner_id: assignment.cleaner_id,
+      note: null,
+    });
+    setDecidingKey(null);
+    if (error || outcome !== 'ok') {
+      toast.error(error?.message?.includes('admin_confirm_colleague_worked')
+        ? 'This needs migration 0132 running in Supabase first.'
+        : 'Could not record that. Please try again.');
+      return;
+    }
+    toast.success('Recorded as worked.');
+    await load();
+  };
+
   // Everything completed since the last payroll close, one row per person
   // per job, with everyone on the job present so the even split can be
   // worked out. Falls back to three weeks when nothing has been closed yet
@@ -1147,7 +1216,7 @@ export default function AdminRequests() {
         // Both halves of the same problem: shifts somebody has asked about,
         // and shifts nobody has. The second kind is the one that reaches pay
         // day unpaid, so it has to be in the count.
-        { key: 'missedClockins', label: 'Missed Clock-ins', count: pendingMissedClockinCount + undecidedMissedCount },
+        { key: 'missedClockins', label: 'Missed Clock-ins', count: pendingMissedClockinCount + undecidedMissedCount + partlyMissed.reduce((n, e) => n + e.absent.length, 0) },
         { key: 'hours', label: 'Amend Hours', title: 'Change what one person is paid for one job - arrived late, left early, one of two never came' },
         { key: 'absences', label: 'Absence Record', title: 'Every missed shift that has been accounted for, per person' },
       ],
@@ -1861,6 +1930,85 @@ export default function AdminRequests() {
           {/* Shifts nobody has asked about. Above the claims deliberately:
               these are the ones with no one chasing them, so they are the ones
               that quietly reach pay day unpaid. */}
+          {/* Shared shifts where a colleague clocked in and someone did not
+              (0132). The job completed, so it never reached the list below. */}
+          {partlyMissed.length > 0 && (
+            <>
+              <h2 style={{ fontSize: 15, margin: '0 0 4px' }}>
+                Only some of the team clocked in ({partlyMissed.reduce((n, e) => n + e.absent.length, 0)})
+              </h2>
+              <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
+                A colleague clocked in on these shared shifts, so they were never marked missed. Say what
+                happened to each person who did not. A reason takes them off the pay for that shift and puts
+                it on their absence record; &ldquo;They worked it&rdquo; means they were there and forgot to clock in.
+                Payroll will not close while anyone here is undecided.
+              </p>
+              <div className="job-list" style={{ marginBottom: 24 }}>
+                {partlyMissed.map(({ job, absent }) => {
+                  const clockedNames = (job.job_assignments || [])
+                    .filter((a) => (job.checkins || []).some((c) => c.cleaner_id === a.cleaner_id && c.checked_in_at))
+                    .map((a) => a.profiles?.full_name).filter(Boolean);
+                  return (
+                    <div key={job.id} className="card job-card" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                      <h2>{job.properties?.clients?.name || job.properties?.address || 'Job'}</h2>
+                      <p style={{ fontSize: 14, margin: '4px 0' }}>{job.properties?.address}</p>
+                      <p style={{ fontSize: 14, margin: '0 0 4px', fontWeight: 600 }}>
+                        {new Date(job.scheduled_at).toLocaleString()} · {job.duration_minutes || 120} min
+                      </p>
+                      {clockedNames.length > 0 && (
+                        <p style={{ fontSize: 13.5, color: 'var(--muted)', margin: '0 0 4px' }}>
+                          Clocked in: {clockedNames.join(', ')}
+                        </p>
+                      )}
+                      <div style={{ margin: '4px 0 2px' }}>
+                        {absent.map((a) => {
+                          const key = `${job.id}:${a.cleaner_id}`;
+                          return (
+                            <div key={a.cleaner_id} style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', fontSize: 13, padding: '2px 0' }}>
+                              <span style={{ minWidth: 110, fontWeight: 600 }}>{a.profiles?.full_name || 'Cleaner'}</span>
+                              <span style={{ color: 'var(--muted)' }}>did not clock in</span>
+                              <select
+                                value={outcomeDraft[key] || ''}
+                                onChange={(e) => setOutcomeDraft((prev) => ({ ...prev, [key]: e.target.value }))}
+                                style={{ width: 'auto', fontSize: 12.5, padding: '4px 8px', marginBottom: 0 }}
+                                title={MISSED_SHIFT_OUTCOMES.find((o) => o.key === outcomeDraft[key])?.hint || 'Why they were not there'}
+                              >
+                                <option value="">What happened?</option>
+                                {/* A colleague worked it, so the client did not cancel. */}
+                                {MISSED_SHIFT_OUTCOMES.filter((o) => !o.jobWide).map((o) => (
+                                  <option key={o.key} value={o.key}>{o.label}</option>
+                                ))}
+                              </select>
+                              <button
+                                className="btn-secondary"
+                                onClick={() => recordOutcome(job, a.cleaner_id)}
+                                disabled={decidingKey === key}
+                                style={{ padding: '4px 10px', fontSize: 12 }}
+                                title="Record this reason - they are not paid for this shift"
+                              >
+                                Record
+                              </button>
+                              <button
+                                className="btn-secondary"
+                                onClick={() => confirmColleagueWorked(job, a)}
+                                disabled={decidingKey === key}
+                                style={{ padding: '4px 10px', fontSize: 12 }}
+                                title="They were there and forgot to clock in - their hours stay as they are"
+                              >
+                                They worked it
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {openMissedShifts.length === 0 && <h2 style={{ fontSize: 15, margin: '0 0 12px' }}>Claims from staff</h2>}
+            </>
+          )}
+
           {openMissedShifts.length > 0 && (
             <>
               <h2 style={{ fontSize: 15, margin: '0 0 4px' }}>

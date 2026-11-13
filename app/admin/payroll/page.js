@@ -34,6 +34,9 @@ const REVIEW_KINDS = {
   // Since 0093 these hold the close until each person on the shift has an
   // outcome, decided on Requests with the other staff decisions.
   missed_shift: { title: 'Shifts nobody clocked into - what happened?', href: '/admin/requests', linkLabel: 'Open Requests' },
+  // 0132: someone on a shared shift who never clocked in while a colleague
+  // did. Decided in the same place.
+  colleague_clocked: { title: 'Did not clock in on a shift a colleague worked', href: '/admin/requests', linkLabel: 'Open Requests' },
 };
 
 // Missed shifts that have been accounted for (0093). Not a hold-up - listed
