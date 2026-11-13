@@ -46,7 +46,7 @@ export default function ClientContacts() {
             <div key={row.label} className="task-row" style={{ border: 'none' }}>
               <Icon size={18} color="var(--brand-primary)" style={{ flexShrink: 0 }} />
               <div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{row.label}</div>
+                <div style={{ fontSize: 13, color: 'var(--muted)' }}>{row.label}</div>
                 {row.href ? (
                   <a href={row.href} target={row.label === 'Website' ? '_blank' : undefined} rel="noopener noreferrer">{row.value}</a>
                 ) : (

@@ -24,7 +24,7 @@ function groupByDate(jobs) {
 function DayGroup({ date, jobs, router, dim, jobsMissingPhotos }) {
   return (
     <div style={{ marginBottom: 16 }}>
-      <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 8px' }}>
+      <p style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--muted)', margin: '0 0 8px' }}>
         {new Date(date).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
       </p>
       {jobs.map((job) => (

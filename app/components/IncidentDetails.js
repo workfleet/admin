@@ -10,7 +10,7 @@ function Row({ label, children }) {
   if (children === null || children === undefined || children === '') return null;
   return (
     <div style={{ marginBottom: 10 }}>
-      <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}>
         {label}
       </div>
       <div style={{ fontSize: 14, whiteSpace: 'pre-wrap' }}>{children}</div>

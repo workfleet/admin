@@ -772,23 +772,23 @@ export default function ClientDetail() {
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        <button className={tab === 'properties' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('properties')}>
+      <div className="page-tabs">
+        <button className={`page-tab${tab === 'properties' ? ' is-active' : ''}`} aria-pressed={tab === 'properties'} onClick={() => setTab('properties')}>
           Properties ({properties.length})
         </button>
-        <button className={tab === 'calls' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('calls')}>
-          Call Log{callLogs ? ` (${callLogs.length})` : ''}
+        <button className={`page-tab${tab === 'calls' ? ' is-active' : ''}`} aria-pressed={tab === 'calls'} onClick={() => setTab('calls')}>
+          Call log{callLogs ? ` (${callLogs.length})` : ''}
         </button>
-        <button className={tab === 'hours' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('hours')}>
-          Monthly Hours
+        <button className={`page-tab${tab === 'hours' ? ' is-active' : ''}`} aria-pressed={tab === 'hours'} onClick={() => setTab('hours')}>
+          Monthly hours
         </button>
-        <button className={tab === 'reviews' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('reviews')}>
+        <button className={`page-tab${tab === 'reviews' ? ' is-active' : ''}`} aria-pressed={tab === 'reviews'} onClick={() => setTab('reviews')}>
           Reviews{reminders ? ` (${reminders.length})` : ''}
         </button>
-        <button className={tab === 'clockins' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('clockins')}>
+        <button className={`page-tab${tab === 'clockins' ? ' is-active' : ''}`} aria-pressed={tab === 'clockins'} onClick={() => setTab('clockins')}>
           Clock-ins{clockIns ? ` (${clockIns.length})` : ''}
         </button>
-        <button className={tab === 'documents' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('documents')}>
+        <button className={`page-tab${tab === 'documents' ? ' is-active' : ''}`} aria-pressed={tab === 'documents'} onClick={() => setTab('documents')}>
           Documents{clientDocs ? ` (${clientDocs.length})` : ''}
         </button>
       </div>
@@ -951,7 +951,7 @@ export default function ClientDetail() {
                     }, {})
                   ).map(([room, items]) => (
                     <div key={room} style={{ marginBottom: 8 }}>
-                      <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{room}</div>
+                      <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--muted)' }}>{room}</div>
                       {items.map((item) => (
                         <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
                           <span style={{ fontSize: 14 }}>{item.task}</span>

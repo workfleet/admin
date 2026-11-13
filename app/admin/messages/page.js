@@ -202,9 +202,9 @@ export default function AdminMessages() {
           <h1>Messages</h1>
           <p className="page-subtitle">{totalUnread > 0 ? `${totalUnread} unread` : 'All caught up'}</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className={mode === 'clients' ? 'btn-primary' : 'btn-secondary'} onClick={() => setMode('clients')}>Clients</button>
-          <button className={mode === 'staff' ? 'btn-primary' : 'btn-secondary'} onClick={() => setMode('staff')}>Staff</button>
+        <div className="seg">
+          <button className={`seg-btn${mode === 'clients' ? ' is-active' : ''}`} aria-pressed={mode === 'clients'} onClick={() => setMode('clients')}>Clients</button>
+          <button className={`seg-btn${mode === 'staff' ? ' is-active' : ''}`} aria-pressed={mode === 'staff'} onClick={() => setMode('staff')}>Staff</button>
         </div>
       </div>
 

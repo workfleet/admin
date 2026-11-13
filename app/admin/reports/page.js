@@ -226,7 +226,7 @@ export default function AdminReports() {
 
               {isExpanded && jobPhotos.length > 0 && (
                 <div style={{ marginBottom: 14 }}>
-                  <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  <strong style={{ fontSize: 13.5, color: 'var(--muted)' }}>
                     Photos
                   </strong>
                   <JobPhotoGrid
@@ -243,7 +243,7 @@ export default function AdminReports() {
                       Template: {REPORT_TEMPLATES[report.template]?.label || REPORT_TEMPLATES[DEFAULT_TEMPLATE].label}
                     </p>
                     <div style={{ marginBottom: 10 }}>
-                      <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      <strong style={{ fontSize: 13.5, color: 'var(--muted)' }}>
                         {(REPORT_TEMPLATES[report.template] || REPORT_TEMPLATES[DEFAULT_TEMPLATE]).sectionLabels.summary}
                       </strong>
                       <p style={{ margin: '4px 0 0' }}>{report.summary}</p>
@@ -253,13 +253,13 @@ export default function AdminReports() {
                       photoUrls={Object.fromEntries(jobPhotos.map((p) => [p.id, p.signedUrl]))}
                     />
                     <div style={{ marginBottom: 10 }}>
-                      <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      <strong style={{ fontSize: 13.5, color: 'var(--muted)' }}>
                         {(REPORT_TEMPLATES[report.template] || REPORT_TEMPLATES[DEFAULT_TEMPLATE]).sectionLabels.issues}
                       </strong>
                       <p style={{ margin: '4px 0 0' }}>{report.issues}</p>
                     </div>
                     <div style={{ marginBottom: 10 }}>
-                      <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      <strong style={{ fontSize: 13.5, color: 'var(--muted)' }}>
                         {(REPORT_TEMPLATES[report.template] || REPORT_TEMPLATES[DEFAULT_TEMPLATE]).sectionLabels.suggestions}
                       </strong>
                       <p style={{ margin: '4px 0 0' }}>{report.suggestions}</p>

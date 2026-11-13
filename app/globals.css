@@ -3766,6 +3766,158 @@ a.btn-compact {
   align-items: center;
 }
 
+/* ---- Tabs and filters (2026-11-13) ----
+   Filters and tabs used to be coral btn-primary / btn-secondary pairs, so a
+   page like Requests showed a row of big orange blocks that looked like
+   actions rather than a choice. Two shapes now:
+
+   .seg / .seg-btn   - a grey track with the chosen option lifted in white.
+                       For filters (Pending / Decided / All) and pickers.
+   .page-tabs / .page-tab - underlined tabs for switching a whole page's
+                       content (a client's Properties / Call log / ...).
+
+   Selection is shown by .is-active plus aria-pressed, never by coral. */
+.seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px;
+  background: #ECEDEF;
+  border-radius: 10px;
+}
+
+.seg-btn {
+  background: transparent;
+  color: var(--ink-soft);
+  border: none;
+  box-shadow: none;
+  border-radius: 7px;
+  padding: 6px 12px;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.seg-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--ink);
+}
+
+.seg-btn.is-active,
+.seg-btn.is-active:hover:not(:disabled) {
+  background: var(--wf-white);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(32, 35, 39, 0.12), 0 0 0 1px rgba(32, 35, 39, 0.04);
+}
+
+.page-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--surface-line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.page-tabs::-webkit-scrollbar { display: none; }
+
+.page-tab {
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  box-shadow: none;
+  margin-bottom: -1px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.page-tab:hover:not(:disabled) {
+  background: transparent;
+  color: var(--ink);
+}
+
+.page-tab.is-active {
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom-color: var(--wf-coral);
+}
+
+/* ---- Data tables ----
+   One look for every table (payroll, invoices, data reports, audit, quote
+   and rota history), which each used to hand-roll their own: shouty
+   capital headers on a 2px rule. Now a quiet grey header band, hairline
+   rows and a hover tint. Wrap in .wf-table-wrap to scroll sideways on a
+   phone rather than squash. */
+.wf-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.wf-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13.5px;
+}
+
+/* brand.css ships a .wf-table too (10px spaced capitals); these rules sit
+   over it, so the overrides below are spelled out rather than inherited. */
+.wf-table th {
+  text-align: left;
+  font-family: var(--app-ui-font);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted);
+  background: #F7F8F9;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--surface-line);
+  white-space: nowrap;
+}
+
+.wf-table th:first-child { border-top-left-radius: 8px; }
+.wf-table th:last-child { border-top-right-radius: 8px; }
+
+.wf-table td {
+  font-size: 13.5px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #F0F1F3;
+  vertical-align: middle;
+}
+
+/* Short-celled tables (payroll) keep each row on one line and scroll
+   sideways on a phone; tables with descriptions leave this off. */
+.wf-table.nowrap td { white-space: nowrap; }
+
+.wf-table tbody tr:last-child td { border-bottom: none; }
+.wf-table tbody tr:hover td { background: #FAFAFB; }
+
+.wf-table .num {
+  text-align: right;
+  white-space: nowrap;
+  font-family: var(--wf-data);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+/* A totals row closes the table with a rule above it (and the row before
+   drops its own hairline so the two don't double up). */
+.wf-table tr:has(+ tr.wf-table-total) td { border-bottom: none; }
+.wf-table tr.wf-table-total td {
+  font-weight: 600;
+  border-top: 1px solid var(--surface-line);
+  background: transparent;
+}
+
 /* ---- Segmented control ---- */
 .segmented {
   display: inline-flex;

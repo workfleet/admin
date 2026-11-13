@@ -184,10 +184,10 @@ export default function AdminTasks() {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        <button className={filter === 'open' ? 'btn-primary' : 'btn-secondary'} onClick={() => setFilter('open')}>Open</button>
-        <button className={filter === 'done' ? 'btn-primary' : 'btn-secondary'} onClick={() => setFilter('done')}>Done</button>
-        <button className={filter === 'all' ? 'btn-primary' : 'btn-secondary'} onClick={() => setFilter('all')}>All</button>
+      <div className="seg" style={{ marginBottom: 16 }}>
+        <button className={`seg-btn${filter === 'open' ? ' is-active' : ''}`} aria-pressed={filter === 'open'} onClick={() => setFilter('open')}>Open</button>
+        <button className={`seg-btn${filter === 'done' ? ' is-active' : ''}`} aria-pressed={filter === 'done'} onClick={() => setFilter('done')}>Done</button>
+        <button className={`seg-btn${filter === 'all' ? ' is-active' : ''}`} aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>All</button>
       </div>
 
       {groupedTasks.map((group) => (

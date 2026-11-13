@@ -1254,13 +1254,13 @@ export default function AdminRequests() {
       </div>
 
       <div style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="page-tabs" style={{ marginBottom: 12 }}>
           {TAB_GROUPS.map((g) => {
             const total = g.tabs.reduce((n, t) => n + (t.count || 0), 0);
             return (
               <button
                 key={g.key}
-                className={activeGroup.key === g.key ? 'btn-primary' : 'btn-secondary'}
+                className={`page-tab${activeGroup.key === g.key ? ' is-active' : ''}`} aria-pressed={activeGroup.key === g.key}
                 onClick={() => openGroup(g)}
                 title={g.tabs.map((t) => t.label).join(' · ')}
               >
@@ -1269,13 +1269,12 @@ export default function AdminRequests() {
             );
           })}
         </div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+        <div className="seg">
           {activeGroup.tabs.map((t) => (
             <button
               key={t.key}
-              className={section === t.key ? 'btn-primary' : 'btn-secondary'}
+              className={`seg-btn${section === t.key ? ' is-active' : ''}`} aria-pressed={section === t.key}
               onClick={() => setSection(t.key)}
-              style={{ padding: '4px 12px', fontSize: 12.5 }}
               title={t.title}
             >
               {t.label}{t.count != null ? ` (${t.count})` : ''}
@@ -1290,10 +1289,10 @@ export default function AdminRequests() {
             A cleaner checked in from outside the geofence and says the pin is wrong, or checked in at a property with no pin.
             Accepting moves the property&apos;s pin to where they stood; every visit after uses it.
           </p>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-            <button className={pinFilter === 'pending' ? 'btn-primary' : 'btn-secondary'} onClick={() => setPinFilter('pending')}>Pending</button>
-            <button className={pinFilter === 'decided' ? 'btn-primary' : 'btn-secondary'} onClick={() => setPinFilter('decided')}>Decided</button>
-            <button className={pinFilter === 'all' ? 'btn-primary' : 'btn-secondary'} onClick={() => setPinFilter('all')}>All</button>
+          <div className="seg" style={{ marginBottom: 16 }}>
+            <button className={`seg-btn${pinFilter === 'pending' ? ' is-active' : ''}`} aria-pressed={pinFilter === 'pending'} onClick={() => setPinFilter('pending')}>Pending</button>
+            <button className={`seg-btn${pinFilter === 'decided' ? ' is-active' : ''}`} aria-pressed={pinFilter === 'decided'} onClick={() => setPinFilter('decided')}>Decided</button>
+            <button className={`seg-btn${pinFilter === 'all' ? ' is-active' : ''}`} aria-pressed={pinFilter === 'all'} onClick={() => setPinFilter('all')}>All</button>
           </div>
 
           {filteredPins.length === 0 && <p className="empty-state">Nothing here.</p>}
@@ -1346,10 +1345,10 @@ export default function AdminRequests() {
 
       {section === 'requests' && (
         <>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-            <button className={filter === 'open' ? 'btn-primary' : 'btn-secondary'} onClick={() => setFilter('open')}>Open</button>
-            <button className={filter === 'resolved' ? 'btn-primary' : 'btn-secondary'} onClick={() => setFilter('resolved')}>Resolved</button>
-            <button className={filter === 'all' ? 'btn-primary' : 'btn-secondary'} onClick={() => setFilter('all')}>All</button>
+          <div className="seg" style={{ marginBottom: 16 }}>
+            <button className={`seg-btn${filter === 'open' ? ' is-active' : ''}`} aria-pressed={filter === 'open'} onClick={() => setFilter('open')}>Open</button>
+            <button className={`seg-btn${filter === 'resolved' ? ' is-active' : ''}`} aria-pressed={filter === 'resolved'} onClick={() => setFilter('resolved')}>Resolved</button>
+            <button className={`seg-btn${filter === 'all' ? ' is-active' : ''}`} aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>All</button>
           </div>
 
           {filteredRequests.length === 0 && <p className="empty-state">Nothing here.</p>}
@@ -1409,10 +1408,12 @@ export default function AdminRequests() {
       {section === 'timeoff' && (
         <>
           <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-            <button className={timeOffFilter === 'pending' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTimeOffFilter('pending')}>Pending</button>
-            <button className={timeOffFilter === 'approved' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTimeOffFilter('approved')}>Approved</button>
-            <button className={timeOffFilter === 'declined' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTimeOffFilter('declined')}>Declined</button>
-            <button className={timeOffFilter === 'all' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTimeOffFilter('all')}>All</button>
+            <div className="seg">
+              <button className={`seg-btn${timeOffFilter === 'pending' ? ' is-active' : ''}`} aria-pressed={timeOffFilter === 'pending'} onClick={() => setTimeOffFilter('pending')}>Pending</button>
+              <button className={`seg-btn${timeOffFilter === 'approved' ? ' is-active' : ''}`} aria-pressed={timeOffFilter === 'approved'} onClick={() => setTimeOffFilter('approved')}>Approved</button>
+              <button className={`seg-btn${timeOffFilter === 'declined' ? ' is-active' : ''}`} aria-pressed={timeOffFilter === 'declined'} onClick={() => setTimeOffFilter('declined')}>Declined</button>
+              <button className={`seg-btn${timeOffFilter === 'all' ? ' is-active' : ''}`} aria-pressed={timeOffFilter === 'all'} onClick={() => setTimeOffFilter('all')}>All</button>
+            </div>
             <button
               className="btn-secondary"
               style={{ marginLeft: 'auto' }}
@@ -1579,10 +1580,10 @@ export default function AdminRequests() {
 
       {section === 'extensions' && (
         <>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-            <button className={extensionFilter === 'pending' ? 'btn-primary' : 'btn-secondary'} onClick={() => setExtensionFilter('pending')}>Pending</button>
-            <button className={extensionFilter === 'decided' ? 'btn-primary' : 'btn-secondary'} onClick={() => setExtensionFilter('decided')}>Decided</button>
-            <button className={extensionFilter === 'all' ? 'btn-primary' : 'btn-secondary'} onClick={() => setExtensionFilter('all')}>All</button>
+          <div className="seg" style={{ marginBottom: 16 }}>
+            <button className={`seg-btn${extensionFilter === 'pending' ? ' is-active' : ''}`} aria-pressed={extensionFilter === 'pending'} onClick={() => setExtensionFilter('pending')}>Pending</button>
+            <button className={`seg-btn${extensionFilter === 'decided' ? ' is-active' : ''}`} aria-pressed={extensionFilter === 'decided'} onClick={() => setExtensionFilter('decided')}>Decided</button>
+            <button className={`seg-btn${extensionFilter === 'all' ? ' is-active' : ''}`} aria-pressed={extensionFilter === 'all'} onClick={() => setExtensionFilter('all')}>All</button>
           </div>
 
           {filteredExtensions.length === 0 && <p className="empty-state">Nothing here.</p>}
@@ -1915,10 +1916,10 @@ export default function AdminRequests() {
 
       {section === 'missedClockins' && (
         <>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-            <button className={missedClockinFilter === 'pending' ? 'btn-primary' : 'btn-secondary'} onClick={() => setMissedClockinFilter('pending')}>Pending</button>
-            <button className={missedClockinFilter === 'decided' ? 'btn-primary' : 'btn-secondary'} onClick={() => setMissedClockinFilter('decided')}>Decided</button>
-            <button className={missedClockinFilter === 'all' ? 'btn-primary' : 'btn-secondary'} onClick={() => setMissedClockinFilter('all')}>All</button>
+          <div className="seg" style={{ marginBottom: 16 }}>
+            <button className={`seg-btn${missedClockinFilter === 'pending' ? ' is-active' : ''}`} aria-pressed={missedClockinFilter === 'pending'} onClick={() => setMissedClockinFilter('pending')}>Pending</button>
+            <button className={`seg-btn${missedClockinFilter === 'decided' ? ' is-active' : ''}`} aria-pressed={missedClockinFilter === 'decided'} onClick={() => setMissedClockinFilter('decided')}>Decided</button>
+            <button className={`seg-btn${missedClockinFilter === 'all' ? ' is-active' : ''}`} aria-pressed={missedClockinFilter === 'all'} onClick={() => setMissedClockinFilter('all')}>All</button>
           </div>
 
           <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 16px' }}>
@@ -2230,10 +2231,10 @@ export default function AdminRequests() {
 
       {section === 'reschedules' && (
         <>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-            <button className={rescheduleFilter === 'pending' ? 'btn-primary' : 'btn-secondary'} onClick={() => setRescheduleFilter('pending')}>Pending</button>
-            <button className={rescheduleFilter === 'decided' ? 'btn-primary' : 'btn-secondary'} onClick={() => setRescheduleFilter('decided')}>Decided</button>
-            <button className={rescheduleFilter === 'all' ? 'btn-primary' : 'btn-secondary'} onClick={() => setRescheduleFilter('all')}>All</button>
+          <div className="seg" style={{ marginBottom: 16 }}>
+            <button className={`seg-btn${rescheduleFilter === 'pending' ? ' is-active' : ''}`} aria-pressed={rescheduleFilter === 'pending'} onClick={() => setRescheduleFilter('pending')}>Pending</button>
+            <button className={`seg-btn${rescheduleFilter === 'decided' ? ' is-active' : ''}`} aria-pressed={rescheduleFilter === 'decided'} onClick={() => setRescheduleFilter('decided')}>Decided</button>
+            <button className={`seg-btn${rescheduleFilter === 'all' ? ' is-active' : ''}`} aria-pressed={rescheduleFilter === 'all'} onClick={() => setRescheduleFilter('all')}>All</button>
           </div>
 
           {filteredReschedules.length === 0 && <p className="empty-state">Nothing here.</p>}
@@ -2302,10 +2303,10 @@ export default function AdminRequests() {
 
       {section === 'clientRequests' && (
         <>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-            <button className={clientRequestFilter === 'open' ? 'btn-primary' : 'btn-secondary'} onClick={() => setClientRequestFilter('open')}>Open</button>
-            <button className={clientRequestFilter === 'resolved' ? 'btn-primary' : 'btn-secondary'} onClick={() => setClientRequestFilter('resolved')}>Resolved</button>
-            <button className={clientRequestFilter === 'all' ? 'btn-primary' : 'btn-secondary'} onClick={() => setClientRequestFilter('all')}>All</button>
+          <div className="seg" style={{ marginBottom: 16 }}>
+            <button className={`seg-btn${clientRequestFilter === 'open' ? ' is-active' : ''}`} aria-pressed={clientRequestFilter === 'open'} onClick={() => setClientRequestFilter('open')}>Open</button>
+            <button className={`seg-btn${clientRequestFilter === 'resolved' ? ' is-active' : ''}`} aria-pressed={clientRequestFilter === 'resolved'} onClick={() => setClientRequestFilter('resolved')}>Resolved</button>
+            <button className={`seg-btn${clientRequestFilter === 'all' ? ' is-active' : ''}`} aria-pressed={clientRequestFilter === 'all'} onClick={() => setClientRequestFilter('all')}>All</button>
           </div>
 
           {filteredClientRequests.length === 0 && <p className="empty-state">Nothing here.</p>}
@@ -2360,10 +2361,10 @@ export default function AdminRequests() {
 
       {section === 'pauses' && (
         <>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-            <button className={pauseFilter === 'pending' ? 'btn-primary' : 'btn-secondary'} onClick={() => setPauseFilter('pending')}>Pending</button>
-            <button className={pauseFilter === 'decided' ? 'btn-primary' : 'btn-secondary'} onClick={() => setPauseFilter('decided')}>Decided</button>
-            <button className={pauseFilter === 'all' ? 'btn-primary' : 'btn-secondary'} onClick={() => setPauseFilter('all')}>All</button>
+          <div className="seg" style={{ marginBottom: 16 }}>
+            <button className={`seg-btn${pauseFilter === 'pending' ? ' is-active' : ''}`} aria-pressed={pauseFilter === 'pending'} onClick={() => setPauseFilter('pending')}>Pending</button>
+            <button className={`seg-btn${pauseFilter === 'decided' ? ' is-active' : ''}`} aria-pressed={pauseFilter === 'decided'} onClick={() => setPauseFilter('decided')}>Decided</button>
+            <button className={`seg-btn${pauseFilter === 'all' ? ' is-active' : ''}`} aria-pressed={pauseFilter === 'all'} onClick={() => setPauseFilter('all')}>All</button>
           </div>
 
           {filteredPauses.length === 0 && <p className="empty-state">Nothing here.</p>}
@@ -2423,10 +2424,10 @@ export default function AdminRequests() {
 
       {section === 'emergencies' && (
         <>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-            <button className={emergencyFilter === 'open' ? 'btn-primary' : 'btn-secondary'} onClick={() => setEmergencyFilter('open')}>Open</button>
-            <button className={emergencyFilter === 'acknowledged' ? 'btn-primary' : 'btn-secondary'} onClick={() => setEmergencyFilter('acknowledged')}>Acknowledged</button>
-            <button className={emergencyFilter === 'all' ? 'btn-primary' : 'btn-secondary'} onClick={() => setEmergencyFilter('all')}>All</button>
+          <div className="seg" style={{ marginBottom: 16 }}>
+            <button className={`seg-btn${emergencyFilter === 'open' ? ' is-active' : ''}`} aria-pressed={emergencyFilter === 'open'} onClick={() => setEmergencyFilter('open')}>Open</button>
+            <button className={`seg-btn${emergencyFilter === 'acknowledged' ? ' is-active' : ''}`} aria-pressed={emergencyFilter === 'acknowledged'} onClick={() => setEmergencyFilter('acknowledged')}>Acknowledged</button>
+            <button className={`seg-btn${emergencyFilter === 'all' ? ' is-active' : ''}`} aria-pressed={emergencyFilter === 'all'} onClick={() => setEmergencyFilter('all')}>All</button>
           </div>
 
           {filteredEmergencies.length === 0 && <p className="empty-state">Nothing here.</p>}

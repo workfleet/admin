@@ -125,16 +125,15 @@ function ShiftPatternRow({ pattern, index, onChange, onRemove }) {
       ) : (
         <>
           <label className="field-label" style={{ display: 'block' }}>Days</label>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+          <div className="seg" style={{ marginBottom: 12 }}>
             {WEEKDAYS.map((d) => {
               const on = (pattern.days || []).includes(d.key);
               return (
                 <button
                   key={d.key}
                   type="button"
-                  className={on ? 'btn-primary' : 'btn-secondary'}
+                  className={`seg-btn${on ? ' is-active' : ''}`} aria-pressed={on}
                   onClick={() => toggleDay(d.key)}
-                  style={{ padding: '4px 10px', fontSize: 13 }}
                 >
                   {d.short}
                 </button>
@@ -1099,11 +1098,11 @@ export default function AdminQuotes() {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        <button className={filter === 'open' ? 'btn-primary' : 'btn-secondary'} onClick={() => setFilter('open')}>Open</button>
-        <button className={filter === 'decided' ? 'btn-primary' : 'btn-secondary'} onClick={() => setFilter('decided')}>Decided</button>
-        <button className={filter === 'all' ? 'btn-primary' : 'btn-secondary'} onClick={() => setFilter('all')}>All</button>
-        <button className={filter === 'archived' ? 'btn-primary' : 'btn-secondary'} onClick={() => setFilter('archived')}>Archived</button>
+      <div className="seg" style={{ marginBottom: 16 }}>
+        <button className={`seg-btn${filter === 'open' ? ' is-active' : ''}`} aria-pressed={filter === 'open'} onClick={() => setFilter('open')}>Open</button>
+        <button className={`seg-btn${filter === 'decided' ? ' is-active' : ''}`} aria-pressed={filter === 'decided'} onClick={() => setFilter('decided')}>Decided</button>
+        <button className={`seg-btn${filter === 'all' ? ' is-active' : ''}`} aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>All</button>
+        <button className={`seg-btn${filter === 'archived' ? ' is-active' : ''}`} aria-pressed={filter === 'archived'} onClick={() => setFilter('archived')}>Archived</button>
       </div>
 
       {filteredQuotes.length === 0 && (

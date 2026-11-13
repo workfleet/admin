@@ -147,7 +147,7 @@ export default function PresenceIndicator({ iconColor = 'var(--muted)' }) {
             boxShadow: '0 8px 20px rgba(0,0,0,0.12)', zIndex: 300, padding: 10,
           }}
         >
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em', padding: '4px 6px 8px' }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)', padding: '4px 6px 8px' }}>
             Online now ({sorted.length})
           </div>
           {sorted.length === 0 && (

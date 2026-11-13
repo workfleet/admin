@@ -273,33 +273,29 @@ export default function InvoiceBreakdown() {
   );
 }
 
-// Same table look as Payroll.
-const th = { textAlign: 'left', padding: '10px 12px', borderBottom: '2px solid var(--hairline)', whiteSpace: 'nowrap', color: 'var(--muted)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.03em' };
-const td = { padding: '9px 12px', borderBottom: '1px solid var(--hairline)', verticalAlign: 'top' };
-const num = { ...td, textAlign: 'right', whiteSpace: 'nowrap', fontFamily: 'var(--wf-data)', fontWeight: 600 };
 
 function InvoiceTable({ rows, onCopy, qtyLabel = 'Hours' }) {
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
+    <div className="wf-table-wrap">
+      <table className="wf-table">
         <thead>
           <tr>
-            <th style={th}>Description</th>
-            <th style={{ ...th, textAlign: 'right' }}>{qtyLabel}</th>
-            <th style={{ ...th, textAlign: 'right' }}>Amount</th>
-            <th style={th} aria-label="Copy" />
+            <th>Description</th>
+            <th className="num">{qtyLabel}</th>
+            <th className="num">Amount</th>
+            <th aria-label="Copy" />
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.key}>
-              <td style={td}>
+              <td>
                 {r.text}
                 {r.detail && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{r.detail}</div>}
               </td>
-              <td style={num}>{r.qty}</td>
-              <td style={num}>{gbp(r.amount)}</td>
-              <td style={{ ...td, textAlign: 'right' }}>
+              <td className="num">{r.qty}</td>
+              <td className="num">{gbp(r.amount)}</td>
+              <td style={{ textAlign: 'right' }}>
                 <button type="button" className="btn-secondary" onClick={() => onCopy(r.text)} title="Copy this description for QuickBooks" aria-label="Copy description">
                   <Copy size={14} />
                 </button>

@@ -281,9 +281,9 @@ export default function AdminDataReports() {
         </button>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+      <div className="seg" style={{ marginBottom: 12 }}>
         {REPORT_TYPES.map((r) => (
-          <button key={r.id} className={reportId === r.id ? 'btn-primary' : 'btn-secondary'} onClick={() => setReportId(r.id)}>
+          <button key={r.id} className={`seg-btn${reportId === r.id ? ' is-active' : ''}`} aria-pressed={reportId === r.id} onClick={() => setReportId(r.id)}>
             {r.label}
           </button>
         ))}
@@ -304,11 +304,11 @@ export default function AdminDataReports() {
 
       {!loading && rows.length > 0 && (
         <div className="card" style={{ overflowX: 'auto', padding: 0 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
+          <table className="wf-table">
             <thead>
               <tr>
                 {columns.map((c) => (
-                  <th key={c.key} style={{ textAlign: 'left', padding: '12px 14px', borderBottom: '2px solid var(--hairline)', whiteSpace: 'nowrap', color: 'var(--muted)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                  <th key={c.key}>
                     {c.label}
                   </th>
                 ))}
@@ -316,9 +316,9 @@ export default function AdminDataReports() {
             </thead>
             <tbody>
               {rows.map((row, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid var(--hairline)' }}>
+                <tr key={i}>
                   {columns.map((c) => (
-                    <td key={c.key} style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>{row[c.key]}</td>
+                    <td key={c.key} style={{ whiteSpace: 'nowrap' }}>{row[c.key]}</td>
                   ))}
                 </tr>
               ))}

@@ -298,7 +298,7 @@ export default function CleanerDashboard() {
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
         <div>
-          <p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 2px' }}>
+          <p style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--muted)', margin: '0 0 2px' }}>
             {now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
           <h1 style={{ margin: 0 }}>{greetingFor(now)}, {firstName}</h1>
@@ -349,7 +349,7 @@ export default function CleanerDashboard() {
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
             <div style={{ minWidth: 0 }}>
-              <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--wf-verified-text)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px' }}>
+              <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--wf-verified-text)', margin: '0 0 4px' }}>
                 Clocked in
               </p>
               <h2 style={{ margin: 0 }}>{jobHeadline(day.current)}</h2>

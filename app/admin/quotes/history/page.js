@@ -77,18 +77,18 @@ export default function QuoteHistory() {
 
       {filtered.length === 0 && <p className="empty-state">No quotes match.</p>}
 
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
+      <div className="wf-table-wrap">
+        <table className="wf-table">
           <thead>
-            <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--hairline)' }}>
-              <th style={{ padding: '8px 6px' }}>Ref</th>
-              <th style={{ padding: '8px 6px' }}>Date</th>
-              <th style={{ padding: '8px 6px' }}>For</th>
-              <th style={{ padding: '8px 6px' }}>Description</th>
-              <th style={{ padding: '8px 6px' }}>Hours</th>
-              <th style={{ padding: '8px 6px' }}>Margin</th>
-              <th style={{ padding: '8px 6px', textAlign: 'right' }}>Price</th>
-              <th style={{ padding: '8px 6px' }}>Status</th>
+            <tr>
+              <th>Ref</th>
+              <th>Date</th>
+              <th>For</th>
+              <th>Description</th>
+              <th>Hours</th>
+              <th>Margin</th>
+              <th style={{ textAlign: 'right' }}>Price</th>
+              <th>Status</th>
             </tr>
           </thead>
           <tbody>
@@ -98,12 +98,12 @@ export default function QuoteHistory() {
               return (
                 <tr
                   key={quote.id}
-                  style={{ borderBottom: '1px solid var(--hairline)', cursor: 'pointer' }}
+                  style={{ cursor: 'pointer' }}
                   onClick={() => setSelectedQuote(quote)}
                 >
-                  <td style={{ padding: '8px 6px', fontFamily: 'monospace', fontSize: 12, whiteSpace: 'nowrap' }}>{quoteReference(quote)}</td>
-                  <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{new Date(quote.created_at).toLocaleDateString()}</td>
-                  <td style={{ padding: '8px 6px' }}>
+                  <td style={{ fontFamily: 'monospace', fontSize: 12, whiteSpace: 'nowrap' }}>{quoteReference(quote)}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{new Date(quote.created_at).toLocaleDateString()}</td>
+                  <td>
                     {quote.client_id ? (
                       <Link href={`/admin/clients/${quote.client_id}`} style={{ color: 'inherit' }} onClick={(e) => e.stopPropagation()}>{recipient}</Link>
                     ) : recipient}
@@ -111,11 +111,11 @@ export default function QuoteHistory() {
                       <span className="badge missed" style={{ marginLeft: 6, verticalAlign: 'middle' }}>archived</span>
                     )}
                   </td>
-                  <td style={{ padding: '8px 6px', color: 'var(--muted)', maxWidth: 320 }}>{quote.description}</td>
-                  <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{b ? `${b.totalHours}h` : '—'}</td>
-                  <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{b ? `${(b.marginPct * 100).toFixed(1)}%` : '—'}</td>
-                  <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>{formatPriceGBP(quote.price)}{pricePeriodSuffix(quote.price_period)}</td>
-                  <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>
+                  <td style={{ color: 'var(--muted)', maxWidth: 320 }}>{quote.description}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{b ? `${b.totalHours}h` : '—'}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{b ? `${(b.marginPct * 100).toFixed(1)}%` : '—'}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>{formatPriceGBP(quote.price)}{pricePeriodSuffix(quote.price_period)}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
                     <span className={`badge ${STATUS_BADGE_CLASS[quote.status]}`}>{STATUS_LABELS[quote.status]}</span>
                   </td>
                 </tr>

@@ -168,20 +168,20 @@ export default function ClientJobDetail() {
           <h2>Clean Report</h2>
           {report.summary && (
             <div style={{ marginBottom: 10 }}>
-              <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{reportLabels.summary}</strong>
+              <strong style={{ fontSize: 13.5, color: 'var(--muted)' }}>{reportLabels.summary}</strong>
               <p style={{ margin: '4px 0 0', fontSize: 14 }}>{report.summary}</p>
             </div>
           )}
           <ReportRooms rooms={report.rooms} photoUrls={Object.fromEntries(photos.map((p) => [p.id, p.signedUrl]))} />
           {report.issues && (
             <div style={{ marginBottom: 10 }}>
-              <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{reportLabels.issues}</strong>
+              <strong style={{ fontSize: 13.5, color: 'var(--muted)' }}>{reportLabels.issues}</strong>
               <p style={{ margin: '4px 0 0', fontSize: 14 }}>{report.issues}</p>
             </div>
           )}
           {report.suggestions && (
             <div>
-              <strong style={{ fontSize: 12.5, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{reportLabels.suggestions}</strong>
+              <strong style={{ fontSize: 13.5, color: 'var(--muted)' }}>{reportLabels.suggestions}</strong>
               <p style={{ margin: '4px 0 0', fontSize: 14 }}>{report.suggestions}</p>
             </div>
           )}

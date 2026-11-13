@@ -106,24 +106,24 @@ export default function CleanerHelp() {
         How to use the app, and how we work at CrewConnect Cleaning.
       </p>
 
-      <div className="action-row" style={{ marginBottom: 16 }}>
+      <div className="page-tabs">
         <button
           type="button"
-          className={section === 'guide' ? 'btn-primary' : 'btn-secondary'}
+          className={`page-tab${section === 'guide' ? ' is-active' : ''}`} aria-pressed={section === 'guide'}
           onClick={() => setSection('guide')}
         >
-          Using the App
+          Using the app
         </button>
         <button
           type="button"
-          className={section === 'policies' ? 'btn-primary' : 'btn-secondary'}
+          className={`page-tab${section === 'policies' ? ' is-active' : ''}`} aria-pressed={section === 'policies'}
           onClick={() => setSection('policies')}
         >
-          Company Policies
+          Company policies
         </button>
         <button
           type="button"
-          className={section === 'documents' ? 'btn-primary' : 'btn-secondary'}
+          className={`page-tab${section === 'documents' ? ' is-active' : ''}`} aria-pressed={section === 'documents'}
           onClick={() => setSection('documents')}
         >
           Documents

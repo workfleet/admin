@@ -176,10 +176,10 @@ export default function AdminDocuments() {
 
         <div className="field" style={{ marginBottom: audience === 'specific' ? 10 : 14 }}>
           <label className="field-label">Share with</label>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div className="seg" style={{ width: '100%' }}>
             <button
               type="button"
-              className={audience === 'everyone' ? 'btn-primary' : 'btn-secondary'}
+              className={`seg-btn${audience === 'everyone' ? ' is-active' : ''}`} aria-pressed={audience === 'everyone'}
               onClick={() => setAudience('everyone')}
               style={{ flex: 1 }}
               title="Share whatever you upload next with every member of staff"
@@ -188,7 +188,7 @@ export default function AdminDocuments() {
             </button>
             <button
               type="button"
-              className={audience === 'specific' ? 'btn-primary' : 'btn-secondary'}
+              className={`seg-btn${audience === 'specific' ? ' is-active' : ''}`} aria-pressed={audience === 'specific'}
               onClick={() => setAudience('specific')}
               style={{ flex: 1 }}
               title="Pick which cleaners can see whatever you upload next"

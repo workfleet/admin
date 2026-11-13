@@ -115,50 +115,47 @@ function csvFor(period, rows) {
 }
 
 function SummaryTable({ rows, showAdjustments }) {
-  const th = { textAlign: 'left', padding: '10px 12px', borderBottom: '2px solid var(--hairline)', whiteSpace: 'nowrap', color: 'var(--muted)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.03em' };
-  const td = { padding: '9px 12px', whiteSpace: 'nowrap' };
-  const num = { ...td, textAlign: 'right', fontFamily: 'var(--wf-data)', fontWeight: 600 };
   const totals = rows.reduce((t, r) => ({
     jobs: t.jobs + r.jobs, minutes: t.minutes + r.minutes, holiday: t.holiday + r.holidayMinutes, adj: t.adj + r.adjustmentMinutes, total: t.total + r.totalMinutes,
   }), { jobs: 0, minutes: 0, holiday: 0, adj: 0, total: 0 });
 
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
+    <div className="wf-table-wrap">
+      <table className="wf-table nowrap">
         <thead>
           <tr>
-            <th style={th}>Cleaner</th>
-            <th style={{ ...th, textAlign: 'right' }}>Jobs</th>
-            <th style={{ ...th, textAlign: 'right' }}>Hours</th>
-            <th style={{ ...th, textAlign: 'right' }}>Holiday</th>
-            {showAdjustments && <th style={{ ...th, textAlign: 'right' }}>Adjustments</th>}
-            <th style={{ ...th, textAlign: 'right' }}>Total</th>
+            <th>Cleaner</th>
+            <th className="num">Jobs</th>
+            <th className="num">Hours</th>
+            <th className="num">Holiday</th>
+            {showAdjustments && <th className="num">Adjustments</th>}
+            <th className="num">Total</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id} style={{ borderBottom: '1px solid var(--hairline)' }}>
-              <td style={td}>{r.name}</td>
-              <td style={num}>{r.jobs}</td>
-              <td style={num}>{formatHours(r.minutes / 60)}</td>
-              <td style={{ ...num, color: r.holidayMinutes === 0 ? 'var(--muted)' : 'inherit' }}>
+            <tr key={r.id}>
+              <td>{r.name}</td>
+              <td className="num">{r.jobs}</td>
+              <td className="num">{formatHours(r.minutes / 60)}</td>
+              <td className="num" style={{ color: r.holidayMinutes === 0 ? 'var(--muted)' : 'inherit' }}>
                 {r.holidayMinutes === 0 ? '–' : formatHours(r.holidayMinutes / 60)}
               </td>
               {showAdjustments && (
-                <td style={{ ...num, color: r.adjustmentMinutes === 0 ? 'var(--muted)' : 'inherit' }}>
+                <td className="num" style={{ color: r.adjustmentMinutes === 0 ? 'var(--muted)' : 'inherit' }}>
                   {r.adjustmentMinutes === 0 ? '–' : signedHours(r.adjustmentMinutes)}
                 </td>
               )}
-              <td style={num}>{formatHours(r.totalMinutes / 60)}</td>
+              <td className="num">{formatHours(r.totalMinutes / 60)}</td>
             </tr>
           ))}
-          <tr>
-            <td style={{ ...td, fontWeight: 600 }}>Total</td>
-            <td style={num}>{totals.jobs}</td>
-            <td style={num}>{formatHours(totals.minutes / 60)}</td>
-            <td style={num}>{totals.holiday === 0 ? '–' : formatHours(totals.holiday / 60)}</td>
-            {showAdjustments && <td style={num}>{totals.adj === 0 ? '–' : signedHours(totals.adj)}</td>}
-            <td style={num}>{formatHours(totals.total / 60)}</td>
+          <tr className="wf-table-total">
+            <td>Total</td>
+            <td className="num">{totals.jobs}</td>
+            <td className="num">{formatHours(totals.minutes / 60)}</td>
+            <td className="num">{totals.holiday === 0 ? '–' : formatHours(totals.holiday / 60)}</td>
+            {showAdjustments && <td className="num">{totals.adj === 0 ? '–' : signedHours(totals.adj)}</td>}
+            <td className="num">{formatHours(totals.total / 60)}</td>
           </tr>
         </tbody>
       </table>
@@ -395,7 +392,7 @@ export default function AdminPayroll() {
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
             <div>
-              <div style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.03em', fontWeight: 600 }}>
+              <div style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 600 }}>
                 {periods.length === 0 ? 'First period to close' : 'Next period to close'}
               </div>
               <h2 style={{ margin: '4px 0 0' }}>{displayLabel(next)}</h2>

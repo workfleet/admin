@@ -110,34 +110,34 @@ export default function AuditLog() {
       {entries.length > 0 && filtered.length === 0 && <p className="empty-state">No changes match.</p>}
 
       {filtered.length > 0 && (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
+        <div className="wf-table-wrap">
+          <table className="wf-table">
             <thead>
-              <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--hairline)' }}>
-                <th style={{ padding: '8px 6px' }}>When</th>
-                <th style={{ padding: '8px 6px' }}>Who</th>
-                <th style={{ padding: '8px 6px' }}>What</th>
-                <th style={{ padding: '8px 6px' }}>Details</th>
-                <th style={{ padding: '8px 6px' }}>How</th>
+              <tr>
+                <th>When</th>
+                <th>Who</th>
+                <th>What</th>
+                <th>Details</th>
+                <th>How</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((e) => {
                 const who = e.actor_id ? (names[e.actor_id] || 'Unknown login') : (e.actor_role === 'service_role' ? 'System' : '—');
                 return (
-                  <tr key={e.id} style={{ borderBottom: '1px solid var(--hairline)' }}>
-                    <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>
+                  <tr key={e.id}>
+                    <td style={{ whiteSpace: 'nowrap' }}>
                       {new Date(e.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
                     </td>
-                    <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{who}</td>
-                    <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>
+                    <td style={{ whiteSpace: 'nowrap' }}>{who}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
                       <span className={`badge ${e.action === 'delete' ? 'missed' : e.action === 'update' ? 'in_progress' : 'completed'}`}>
                         {ACTION_LABELS[e.action]}
                       </span>
                       {' '}{TABLE_LABELS[e.table_name] || e.table_name}
                     </td>
-                    <td style={{ padding: '8px 6px', color: 'var(--muted)' }}>{e.summary}</td>
-                    <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{describeHow(e, batchSizes[e.tx])}</td>
+                    <td style={{ color: 'var(--muted)' }}>{e.summary}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{describeHow(e, batchSizes[e.tx])}</td>
                   </tr>
                 );
               })}

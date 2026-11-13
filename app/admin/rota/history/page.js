@@ -86,31 +86,31 @@ export default function JobHistory() {
 
       {filtered.length === 0 && <p className="empty-state">No jobs match.</p>}
 
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
+      <div className="wf-table-wrap">
+        <table className="wf-table">
           <thead>
-            <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--hairline)' }}>
-              <th style={{ padding: '8px 6px' }}>Date</th>
-              <th style={{ padding: '8px 6px' }}>Client</th>
-              <th style={{ padding: '8px 6px' }}>Address</th>
-              <th style={{ padding: '8px 6px' }}>Staff</th>
-              <th style={{ padding: '8px 6px' }}>Duration</th>
-              <th style={{ padding: '8px 6px' }}>Status</th>
+            <tr>
+              <th>Date</th>
+              <th>Client</th>
+              <th>Address</th>
+              <th>Staff</th>
+              <th>Duration</th>
+              <th>Status</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((job) => {
               const staffNames = (job.job_assignments || []).map((a) => a.profiles?.full_name || 'Unknown');
               return (
-                <tr key={job.id} style={{ borderBottom: '1px solid var(--hairline)' }}>
-                  <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>
+                <tr key={job.id}>
+                  <td style={{ whiteSpace: 'nowrap' }}>
                     {new Date(job.scheduled_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
                   </td>
-                  <td style={{ padding: '8px 6px' }}>{isTraining(job) ? 'Training' : job.properties?.clients?.name || '—'}</td>
-                  <td style={{ padding: '8px 6px', color: 'var(--muted)' }}>{isTraining(job) ? jobHeadline(job) : job.properties?.address}</td>
-                  <td style={{ padding: '8px 6px' }}>{staffNames.length > 0 ? staffNames.join(', ') : 'Unassigned'}</td>
-                  <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{formatDuration(job.duration_minutes || 120)}</td>
-                  <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>
+                  <td>{isTraining(job) ? 'Training' : job.properties?.clients?.name || '—'}</td>
+                  <td style={{ color: 'var(--muted)' }}>{isTraining(job) ? jobHeadline(job) : job.properties?.address}</td>
+                  <td>{staffNames.length > 0 ? staffNames.join(', ') : 'Unassigned'}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{formatDuration(job.duration_minutes || 120)}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
                     <span className={`badge ${job.status}`}>{STATUS_LABELS[job.status]}</span>
                   </td>
                 </tr>
