@@ -948,9 +948,142 @@ export default function AdminRota() {
     saveAssignmentHours(jobId, cleanerId, Math.round(hours * 60));
   };
 
+  // On a recurring job, Remove asks once whether it means this visit or
+  // this one and every later one - changing who does a shared series used
+  // to mean opening each visit in turn.
   const removeCleanerFromJob = async (jobId, cleanerId) => {
-    if (!(await confirm('Remove this cleaner from the job?', { danger: true, confirmLabel: 'Remove' }))) return;
+    const job = (selectedJob && selectedJob.id === jobId ? selectedJob : null) || jobs.find((j) => j.id === jobId);
+    const name = cleaners.find((c) => c.id === cleanerId)?.full_name || 'this cleaner';
+
+    if (job?.series_id) {
+      const upcoming = await upcomingInSeries(job);
+      if (!upcoming) return;
+      const theirs = upcoming.filter((j) => (j.job_assignments || []).some((a) => a.cleaner_id === cleanerId));
+      const later = theirs.filter((j) => j.id !== jobId);
+      if (later.length > 0) {
+        const choice = await confirm(
+          `This is a recurring job. ${name} is also on ${later.length} later visit${later.length === 1 ? '' : 's'}, up to ${whenLabel(later[later.length - 1])}.\n\nEarlier and finished visits are never changed, and nobody else is taken off.`,
+          {
+            title: `Remove ${name}?`,
+            choices: [
+              { label: 'Just this visit', value: 'one' },
+              { label: `This visit and all ${later.length} later ones`, value: 'series', danger: true },
+            ],
+          }
+        );
+        if (!choice) return;
+        if (choice === 'series') { await removeCleanerFromSeries(job, cleanerId, theirs); return; }
+        await dropCleanerFromJob(jobId, cleanerId);
+        toast.success(`${name} removed from this visit.`);
+        return;
+      }
+    }
+
+    if (!(await confirm(`Remove ${name} from this job?`, { danger: true, confirmLabel: 'Remove' }))) return;
     await dropCleanerFromJob(jobId, cleanerId);
+  };
+
+  // Add from the job panel: on a recurring job, the same one question.
+  // (Dragging onto the calendar still changes just the one visit.)
+  const addCleanerFromPanel = async (job, cleanerId) => {
+    if (!job || !cleanerId) return;
+    const name = cleaners.find((c) => c.id === cleanerId)?.full_name || 'this cleaner';
+    if (job.series_id) {
+      const upcoming = await upcomingInSeries(job);
+      if (!upcoming) return;
+      const missing = upcoming.filter((j) => !(j.job_assignments || []).some((a) => a.cleaner_id === cleanerId));
+      const later = missing.filter((j) => j.id !== job.id);
+      if (later.length > 0) {
+        const choice = await confirm(
+          `This is a recurring job with ${later.length} later visit${later.length === 1 ? '' : 's'} ${name} is not on yet, up to ${whenLabel(later[later.length - 1])}.\n\nEarlier and finished visits are never changed.`,
+          {
+            title: `Add ${name}?`,
+            choices: [
+              { label: 'Just this visit', value: 'one' },
+              { label: `This visit and all ${later.length} later ones`, value: 'series' },
+            ],
+          }
+        );
+        if (!choice) return;
+        if (choice === 'series') { await addCleanerToSeries(job, cleanerId, missing); return; }
+      }
+    }
+    await addCleanerToJob(job.id, cleanerId);
+  };
+
+  // Every visit in the series from this one on that has not started yet;
+  // visits already started or finished keep their staff (0128).
+  const upcomingInSeries = async (job) => {
+    const { data, error } = await supabase
+      .from('jobs')
+      .select('id, scheduled_at, duration_minutes, job_assignments(cleaner_id)')
+      .eq('series_id', job.series_id)
+      .eq('status', 'scheduled')
+      .gte('scheduled_at', job.scheduled_at)
+      .order('scheduled_at', { ascending: true });
+    if (error) { toast.error('Could not load the series.'); return null; }
+    return data || [];
+  };
+
+  // `theirs`: the upcoming visits this person is on, already shown to the
+  // office in the question that led here.
+  const removeCleanerFromSeries = async (job, cleanerId, theirs) => {
+    const name = cleaners.find((c) => c.id === cleanerId)?.full_name || 'This cleaner';
+    const { error } = await supabase
+      .from('job_assignments')
+      .delete()
+      .eq('cleaner_id', cleanerId)
+      .in('job_id', theirs.map((j) => j.id));
+    if (error) { toast.error('Could not remove them from the series.'); return; }
+
+    const withoutAssignment = (j) => ({ ...j, job_assignments: (j.job_assignments || []).filter((a) => a.cleaner_id !== cleanerId) });
+    setSelectedJob((sj) => (sj && sj.id === job.id ? withoutAssignment(sj) : sj));
+    await loadJobs();
+    toast.success(`${name} removed from ${theirs.length} visit${theirs.length === 1 ? '' : 's'}.`);
+  };
+
+  // `missing`: the upcoming visits this person is not on yet.
+  const addCleanerToSeries = async (job, cleanerId, missing) => {
+    const name = cleaners.find((c) => c.id === cleanerId)?.full_name || 'This cleaner';
+    const property = properties.find((p) => p.id === job.property_id) || job.properties;
+
+    // One combined warning, as creating or editing a series gives.
+    let clashes = 0;
+    let timeOff = 0;
+    let travel = 0;
+    for (const j of missing) {
+      const at = new Date(j.scheduled_at);
+      const mins = j.duration_minutes || 120;
+      if (await findConflict(cleanerId, at, mins, j.id)) clashes++;
+      if (await findTimeOffConflict(cleanerId, at)) timeOff++;
+      if (await findTravelConflict(cleanerId, at, mins, property, j.id)) travel++;
+    }
+    const warnings = [];
+    if (clashes > 0) warnings.push(`${clashes} double-booking${clashes === 1 ? '' : 's'}`);
+    if (timeOff > 0) warnings.push(`${timeOff} clash${timeOff === 1 ? '' : 'es'} with approved time off`);
+    if (travel > 0) warnings.push(`${travel} turnaround${travel === 1 ? '' : 's'} with no time to travel`);
+
+    // Only asks again when there is something to warn about.
+    if (warnings.length > 0) {
+      const proceed = await confirm(
+        `Across those ${missing.length} visits there ${clashes + timeOff + travel === 1 ? 'is' : 'are'} ${warnings.join(' and ')} for ${name}. Add them anyway?`,
+        { title: 'Check before adding', confirmLabel: 'Add anyway' }
+      );
+      if (!proceed) return;
+    }
+
+    const { error } = await supabase
+      .from('job_assignments')
+      .insert(missing.map((j) => ({ job_id: j.id, cleaner_id: cleanerId })));
+    if (error) { toast.error('Could not add them to the series.'); return; }
+
+    const newAssignment = { cleaner_id: cleanerId, profiles: { full_name: name } };
+    setSelectedJob((sj) => (sj && sj.id === job.id && missing.some((m) => m.id === sj.id)
+      ? { ...sj, job_assignments: [...(sj.job_assignments || []), newAssignment] }
+      : sj));
+    await loadJobs();
+    notify({ type: 'shift_assigned', cleanerId, address: jobHeadline(job), scheduledAt: missing[0].scheduled_at, count: missing.length });
+    toast.success(`${name} added to ${missing.length} visit${missing.length === 1 ? '' : 's'}.`);
   };
 
   // Deleting asks twice. The first box says what is about to go; the
@@ -2641,12 +2774,17 @@ export default function AdminRota() {
                 <button
                   className="btn-primary"
                   disabled={!addCleanerSelection}
-                  onClick={() => { addCleanerToJob(selectedJob.id, addCleanerSelection); setAddCleanerSelection(''); }}
+                  onClick={() => { addCleanerFromPanel(selectedJob, addCleanerSelection); setAddCleanerSelection(''); }}
                   title="Put this person on the job - they get a notification about the new shift"
                 >
                   Add
                 </button>
               </div>
+            )}
+            {selectedJob.series_id && (
+              <p style={{ fontSize: 12, color: 'var(--muted)', margin: '8px 0 0' }}>
+                Recurring job: Remove and Add ask whether you mean just this visit or every visit after it too.
+              </p>
             )}
           </div>
 
@@ -2756,7 +2894,7 @@ export default function AdminRota() {
                 <div>
                   <p style={{ fontWeight: 600, margin: 0 }}>Recurring series</p>
                   <p style={{ fontSize: 12, color: 'var(--muted)', margin: '2px 0 0' }}>
-                    Change the days, time, length or end date for this visit and every one after it.
+                    Change the days, time, length or end date for this visit and every one after it. To change who does it, use Remove or Add under Assigned staff.
                   </p>
                 </div>
                 {!seriesEdit && (

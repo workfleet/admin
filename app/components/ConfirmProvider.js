@@ -18,6 +18,10 @@ export function ConfirmProvider({ children }) {
         danger: !!opts.danger,
         confirmLabel: opts.confirmLabel || (opts.danger ? 'Delete' : 'Confirm'),
         cancelLabel: opts.cancelLabel || 'Cancel',
+        // Optional: [{ label, value, danger }] for a question with more than
+        // one way forward. The promise resolves to the chosen value, or
+        // false on Cancel, so plain confirms are unchanged.
+        choices: Array.isArray(opts.choices) && opts.choices.length > 0 ? opts.choices : null,
         resolve,
       });
     });
@@ -38,14 +42,27 @@ export function ConfirmProvider({ children }) {
             {/* pre-wrap so a message can list items on their own lines;
                 single-line messages are unaffected. */}
             <p style={{ whiteSpace: 'pre-wrap' }}>{state.message}</p>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button type="button" className="btn-secondary" onClick={() => settle(false)}>
-                {state.cancelLabel}
-              </button>
-              <button type="button" className={state.danger ? 'btn-danger' : ''} onClick={() => settle(true)}>
-                {state.confirmLabel}
-              </button>
-            </div>
+            {state.choices ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {state.choices.map((c) => (
+                  <button key={String(c.value)} type="button" className={c.danger ? 'btn-danger' : ''} onClick={() => settle(c.value)} style={{ width: '100%' }}>
+                    {c.label}
+                  </button>
+                ))}
+                <button type="button" className="btn-secondary" onClick={() => settle(false)} style={{ width: '100%' }}>
+                  {state.cancelLabel}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                <button type="button" className="btn-secondary" onClick={() => settle(false)}>
+                  {state.cancelLabel}
+                </button>
+                <button type="button" className={state.danger ? 'btn-danger' : ''} onClick={() => settle(true)}>
+                  {state.confirmLabel}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
