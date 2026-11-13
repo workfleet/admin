@@ -948,69 +948,68 @@ export default function AdminRota() {
     saveAssignmentHours(jobId, cleanerId, Math.round(hours * 60));
   };
 
-  // On a recurring job, Remove asks once whether it means this visit or
-  // this one and every later one - changing who does a shared series used
-  // to mean opening each visit in turn.
+  // Remove asks once whether it means this visit or every later one too -
+  // changing who does a regular job used to mean opening each visit.
   const removeCleanerFromJob = async (jobId, cleanerId) => {
     const job = (selectedJob && selectedJob.id === jobId ? selectedJob : null) || jobs.find((j) => j.id === jobId);
     const name = cleaners.find((c) => c.id === cleanerId)?.full_name || 'this cleaner';
 
-    if (job?.series_id) {
+    if (!job) return;
+
+    // Later visits in this job's own series, if it has one.
+    let theirs = [];
+    if (job.series_id) {
       const upcoming = await upcomingInSeries(job);
       if (!upcoming) return;
-      const theirs = upcoming.filter((j) => (j.job_assignments || []).some((a) => a.cleaner_id === cleanerId));
-      const later = theirs.filter((j) => j.id !== jobId);
+      theirs = upcoming.filter((j) => (j.job_assignments || []).some((a) => a.cleaner_id === cleanerId));
+    }
+    const later = theirs.filter((j) => j.id !== jobId);
 
-      // A site's regular work is often more than one series (a Monday one
-      // and a Wednesday one), so also offer every later visit at the site
-      // they are on, when that reaches further than this series does.
-      let atSite = [];
-      if (job.property_id) {
-        const { data } = await supabase
-          .from('jobs')
-          .select('id, scheduled_at, job_assignments!inner(cleaner_id)')
-          .eq('property_id', job.property_id)
-          .eq('status', 'scheduled')
-          .eq('job_assignments.cleaner_id', cleanerId)
-          .gte('scheduled_at', job.scheduled_at)
-          .order('scheduled_at', { ascending: true });
-        atSite = data || [];
-      }
-      const siteLater = atSite.filter((j) => j.id !== jobId);
+    // Every later visit at the site they are on, linked or not. A site's
+    // regular work is often several series (one per weekday) or visits
+    // booked one by one, and the office thinks of all of it as "the job".
+    let atSite = [];
+    if (job.property_id) {
+      const { data, error } = await supabase
+        .from('jobs')
+        .select('id, scheduled_at, job_assignments!inner(cleaner_id)')
+        .eq('property_id', job.property_id)
+        .eq('status', 'scheduled')
+        .eq('job_assignments.cleaner_id', cleanerId)
+        .gte('scheduled_at', job.scheduled_at)
+        .order('scheduled_at', { ascending: true });
+      if (error) { toast.error('Could not check their later visits.'); return; }
+      atSite = data || [];
+    }
+    const siteLater = atSite.filter((j) => j.id !== jobId);
 
-      if (later.length > 0 || siteLater.length > later.length) {
-        const choices = [{ label: 'Just this visit', value: 'one' }];
-        if (later.length > 0) {
-          choices.push({ label: `This visit and ${later.length} later in this series`, value: 'series', danger: true });
-        }
-        if (siteLater.length > later.length) {
-          choices.push({ label: `This visit and all ${siteLater.length} later at this site`, value: 'site', danger: true });
-        }
-        const lines = [];
-        lines.push(later.length > 0
-          ? `This is a recurring job. ${name} is on ${later.length} later visit${later.length === 1 ? '' : 's'} in this series, up to ${whenLabel(later[later.length - 1])}.`
-          : `This is the last visit in this series that ${name} is on.`);
-        if (siteLater.length > later.length) {
-          lines.push(`Counting this site's other repeating jobs too, they are on ${siteLater.length} later visit${siteLater.length === 1 ? '' : 's'} here, up to ${whenLabel(siteLater[siteLater.length - 1])}.`);
-        }
-        lines.push('Earlier and finished visits are never changed, and nobody else is taken off.');
-        const choice = await confirm(lines.join('\n\n'), { title: `Remove ${name}?`, choices });
-        if (!choice) return;
-        if (choice === 'series') { await removeCleanerFromSeries(job, cleanerId, theirs); return; }
-        if (choice === 'site') { await removeCleanerFromSeries(job, cleanerId, atSite); return; }
-        await dropCleanerFromJob(jobId, cleanerId);
-        toast.success(`${name} removed from this visit.`);
-        return;
-      }
-
-      // Nothing later to offer: say so, so it is clear why there is no choice.
-      if (!(await confirm(`${name} is not on any later visits in this recurring job, so this only changes this visit. Remove them from it?`, { title: `Remove ${name}?`, danger: true, confirmLabel: 'Remove' }))) return;
+    if (later.length === 0 && siteLater.length === 0) {
+      if (!(await confirm(`${name} is not on any later visits here, so this only changes this one.`, { title: `Remove ${name}?`, danger: true, confirmLabel: 'Remove' }))) return;
       await dropCleanerFromJob(jobId, cleanerId);
       return;
     }
 
-    if (!(await confirm(`Remove ${name} from this job?`, { danger: true, confirmLabel: 'Remove' }))) return;
+    const plural = (n) => `${n} later visit${n === 1 ? '' : 's'}`;
+    const choices = [{ label: 'Just this visit', value: 'one' }];
+    const lines = [];
+    // The site option covers the series too, so the series one is only
+    // worth showing when it is a smaller, different choice.
+    const showSeries = later.length > 0 && later.length < siteLater.length;
+    if (showSeries) {
+      choices.push({ label: `This visit and ${later.length} later in this series`, value: 'series', danger: true });
+      lines.push(`${name} is on ${plural(later.length)} in this repeating job, up to ${whenLabel(later[later.length - 1])}, and ${plural(siteLater.length)} at this site altogether, up to ${whenLabel(siteLater[siteLater.length - 1])}.`);
+    } else {
+      lines.push(`${name} is also on ${plural(siteLater.length)} at this site, up to ${whenLabel(siteLater[siteLater.length - 1])}.`);
+    }
+    choices.push({ label: `This visit and all ${siteLater.length} later at this site`, value: 'site', danger: true });
+    lines.push('Earlier and finished visits are never changed, and nobody else is taken off.');
+
+    const choice = await confirm(lines.join('\n\n'), { title: `Remove ${name}?`, choices });
+    if (!choice) return;
+    if (choice === 'series') { await removeCleanerFromSeries(job, cleanerId, theirs); return; }
+    if (choice === 'site') { await removeCleanerFromSeries(job, cleanerId, atSite); return; }
     await dropCleanerFromJob(jobId, cleanerId);
+    toast.success(`${name} removed from this visit.`);
   };
 
   // Add from the job panel: on a recurring job, the same one question.
@@ -2811,11 +2810,10 @@ export default function AdminRota() {
                 </button>
               </div>
             )}
-            {selectedJob.series_id && (
-              <p style={{ fontSize: 12, color: 'var(--muted)', margin: '8px 0 0' }}>
-                Recurring job: Remove and Add ask whether you mean just this visit or every visit after it too.
-              </p>
-            )}
+            <p style={{ fontSize: 12, color: 'var(--muted)', margin: '8px 0 0' }}>
+              Remove asks whether you mean just this visit or their later visits here too.
+              {selectedJob.series_id ? ' On a repeating job, Add asks the same.' : ''}
+            </p>
           </div>
 
           {jobCheckins.length > 0 && (
