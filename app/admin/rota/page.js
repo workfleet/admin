@@ -960,23 +960,53 @@ export default function AdminRota() {
       if (!upcoming) return;
       const theirs = upcoming.filter((j) => (j.job_assignments || []).some((a) => a.cleaner_id === cleanerId));
       const later = theirs.filter((j) => j.id !== jobId);
-      if (later.length > 0) {
-        const choice = await confirm(
-          `This is a recurring job. ${name} is also on ${later.length} later visit${later.length === 1 ? '' : 's'}, up to ${whenLabel(later[later.length - 1])}.\n\nEarlier and finished visits are never changed, and nobody else is taken off.`,
-          {
-            title: `Remove ${name}?`,
-            choices: [
-              { label: 'Just this visit', value: 'one' },
-              { label: `This visit and all ${later.length} later ones`, value: 'series', danger: true },
-            ],
-          }
-        );
+
+      // A site's regular work is often more than one series (a Monday one
+      // and a Wednesday one), so also offer every later visit at the site
+      // they are on, when that reaches further than this series does.
+      let atSite = [];
+      if (job.property_id) {
+        const { data } = await supabase
+          .from('jobs')
+          .select('id, scheduled_at, job_assignments!inner(cleaner_id)')
+          .eq('property_id', job.property_id)
+          .eq('status', 'scheduled')
+          .eq('job_assignments.cleaner_id', cleanerId)
+          .gte('scheduled_at', job.scheduled_at)
+          .order('scheduled_at', { ascending: true });
+        atSite = data || [];
+      }
+      const siteLater = atSite.filter((j) => j.id !== jobId);
+
+      if (later.length > 0 || siteLater.length > later.length) {
+        const choices = [{ label: 'Just this visit', value: 'one' }];
+        if (later.length > 0) {
+          choices.push({ label: `This visit and ${later.length} later in this series`, value: 'series', danger: true });
+        }
+        if (siteLater.length > later.length) {
+          choices.push({ label: `This visit and all ${siteLater.length} later at this site`, value: 'site', danger: true });
+        }
+        const lines = [];
+        lines.push(later.length > 0
+          ? `This is a recurring job. ${name} is on ${later.length} later visit${later.length === 1 ? '' : 's'} in this series, up to ${whenLabel(later[later.length - 1])}.`
+          : `This is the last visit in this series that ${name} is on.`);
+        if (siteLater.length > later.length) {
+          lines.push(`Counting this site's other repeating jobs too, they are on ${siteLater.length} later visit${siteLater.length === 1 ? '' : 's'} here, up to ${whenLabel(siteLater[siteLater.length - 1])}.`);
+        }
+        lines.push('Earlier and finished visits are never changed, and nobody else is taken off.');
+        const choice = await confirm(lines.join('\n\n'), { title: `Remove ${name}?`, choices });
         if (!choice) return;
         if (choice === 'series') { await removeCleanerFromSeries(job, cleanerId, theirs); return; }
+        if (choice === 'site') { await removeCleanerFromSeries(job, cleanerId, atSite); return; }
         await dropCleanerFromJob(jobId, cleanerId);
         toast.success(`${name} removed from this visit.`);
         return;
       }
+
+      // Nothing later to offer: say so, so it is clear why there is no choice.
+      if (!(await confirm(`${name} is not on any later visits in this recurring job, so this only changes this visit. Remove them from it?`, { title: `Remove ${name}?`, danger: true, confirmLabel: 'Remove' }))) return;
+      await dropCleanerFromJob(jobId, cleanerId);
+      return;
     }
 
     if (!(await confirm(`Remove ${name} from this job?`, { danger: true, confirmLabel: 'Remove' }))) return;
