@@ -29,32 +29,41 @@ import Logo from '../components/Logo';
 const INVENTORY_HOME = '/admin/inventory';
 const INVENTORY_JOBS_ITEM = { href: '/cleaner', label: 'My Jobs', icon: Calendar };
 
+// Grouped so the menu reads as four areas rather than one list of 23. Items
+// with no group sit at the top; Help sits on its own at the bottom.
+const NAV_GROUPS = [null, 'Work', 'Clients', 'People', 'Records', 'help'];
+
 const NAV_ITEMS = [
-  { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/admin/notifications', label: 'Notifications', icon: Bell },
-  { href: '/admin/rota', label: 'Rota', icon: Calendar },
-  { href: '/admin/cover', label: 'Shift Cover', icon: LifeBuoy },
-  { href: '/admin/clients', label: 'Clients', icon: Building2 },
-  { href: '/admin/quotes', label: 'Quotes', icon: PoundSterling },
-  { href: '/admin/cleaners', label: 'Cleaners', icon: Users, adminOnly: true },
-  { href: '/admin/onboarding', label: 'Onboarding', icon: ClipboardList, adminOnly: true },
+  { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, group: null },
+  { href: '/admin/notifications', label: 'Notifications', icon: Bell, group: null },
+  { href: '/admin/messages', label: 'Messages', icon: MessageCircle, group: null },
+
+  { href: '/admin/rota', label: 'Rota', icon: Calendar, group: 'Work' },
+  { href: '/admin/cover', label: 'Shift cover', icon: LifeBuoy, group: 'Work' },
+  { href: '/admin/tasks', label: 'Team tasks', icon: ListTodo, group: 'Work' },
+  { href: '/admin/requests', label: 'Requests', icon: MessageSquareWarning, group: 'Work' },
+
+  { href: '/admin/clients', label: 'Clients', icon: Building2, group: 'Clients' },
+  { href: '/admin/quotes', label: 'Quotes', icon: PoundSterling, group: 'Clients' },
+  { href: '/admin/invoices', label: 'Invoices', icon: Receipt, adminOnly: true, invoicesOnly: true, group: 'Clients' },
+
+  { href: '/admin/cleaners', label: 'Cleaners', icon: Users, adminOnly: true, group: 'People' },
+  { href: '/admin/onboarding', label: 'Onboarding', icon: ClipboardList, adminOnly: true, group: 'People' },
   // Payroll figures have been admin-only since supervisors arrived (0035);
   // the page checks the role again itself.
-  { href: '/admin/payroll', label: 'Payroll', icon: Banknote, adminOnly: true },
-  { href: '/admin/invoices', label: 'Invoices', icon: Receipt, adminOnly: true, invoicesOnly: true },
-  { href: '/admin/templates', label: 'Templates', icon: ListChecks },
-  { href: '/admin/documents', label: 'Documents', icon: Folder },
-  { href: '/admin/training', label: 'Training', icon: Video },
-  { href: '/admin/inventory', label: 'Inventory', icon: Package },
-  { href: '/admin/keys', label: 'Key Register', icon: KeyRound },
-  { href: '/admin/tasks', label: 'Team Tasks', icon: ListTodo },
-  { href: '/admin/reports', label: 'Reports', icon: FileText },
-  { href: '/admin/data-reports', label: 'Data Reports', icon: Download },
-  { href: '/admin/requests', label: 'Requests', icon: MessageSquareWarning },
+  { href: '/admin/payroll', label: 'Payroll', icon: Banknote, adminOnly: true, group: 'People' },
+  { href: '/admin/training', label: 'Training', icon: Video, group: 'People' },
+
+  { href: '/admin/templates', label: 'Templates', icon: ListChecks, group: 'Records' },
+  { href: '/admin/documents', label: 'Documents', icon: Folder, group: 'Records' },
+  { href: '/admin/inventory', label: 'Inventory', icon: Package, group: 'Records' },
+  { href: '/admin/keys', label: 'Key register', icon: KeyRound, group: 'Records' },
   // Injury details are health data: admins only since 0131.
-  { href: '/admin/incidents', label: 'Accidents & incidents', icon: HardHat, adminOnly: true },
-  { href: '/admin/messages', label: 'Messages', icon: MessageCircle },
-  { href: '/admin/help', label: 'Help', icon: HelpCircle },
+  { href: '/admin/incidents', label: 'Accidents and incidents', icon: HardHat, adminOnly: true, group: 'Records' },
+  { href: '/admin/reports', label: 'Reports', icon: FileText, group: 'Records' },
+  { href: '/admin/data-reports', label: 'Data reports', icon: Download, group: 'Records' },
+
+  { href: '/admin/help', label: 'Help', icon: HelpCircle, group: 'help' },
 ];
 
 export default function AdminLayout({ children }) {
@@ -157,18 +166,27 @@ export default function AdminLayout({ children }) {
         </div>
 
         <nav className="sidebar-nav">
-          {navItems.map((item) => {
-            const active = pathname === item.href;
-            const Icon = item.icon;
+          {NAV_GROUPS.map((group) => {
+            const items = navItems.filter((item) => (item.group ?? null) === group);
+            if (items.length === 0) return null;
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`sidebar-link ${active ? 'active' : ''}`}
-              >
-                <Icon className="sidebar-icon" size={18} strokeWidth={2} />
-                {item.label}
-              </Link>
+              <div key={group ?? 'top'} className="sidebar-group">
+                {group && group !== 'help' && <div className="sidebar-group-label">{group}</div>}
+                {items.map((item) => {
+                  const active = pathname === item.href;
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={`sidebar-link ${active ? 'active' : ''}`}
+                    >
+                      <Icon className="sidebar-icon" size={17} strokeWidth={1.9} />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
             );
           })}
         </nav>

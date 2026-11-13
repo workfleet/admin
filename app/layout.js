@@ -18,7 +18,9 @@ const poppins = Poppins({
 
 const inter = Inter({
   subsets: ['latin'],
-  weight: ['400', '500', '600'],
+  // 700 now that Inter carries the app's working text (--app-ui-font in
+  // globals.css) - older rules that ask for bold get the real cut.
+  weight: ['400', '500', '600', '700'],
   variable: '--font-inter',
   display: 'swap',
 });
