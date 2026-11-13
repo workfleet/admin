@@ -533,9 +533,9 @@ export default function CleanerDashboard() {
           <Link
             href="/cleaner/incidents"
             style={{ display: 'block', marginTop: 10, fontSize: 13.5, fontWeight: 600, color: 'var(--brand-link)', textDecoration: 'none' }}
-            title="Report an accident or a near miss to the office"
+            title="Report an accident, incident or near miss to the office"
           >
-            Accident or near miss? Report it
+            Accident, incident or near miss? Report it
           </Link>
         )}
 

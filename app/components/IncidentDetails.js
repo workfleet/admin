@@ -1,5 +1,5 @@
 import {
-  KIND_LABELS, INJURED_PARTY_LABELS, TREATMENT_LABELS, wasInjured,
+  KIND_LABELS, INCIDENT_TYPE_LABELS, INJURED_PARTY_LABELS, TREATMENT_LABELS, wasInjured,
 } from '../../lib/incidents';
 
 // What the person on site wrote, laid out the same for them and for the
@@ -34,6 +34,8 @@ export default function IncidentDetails({ report, photoUrls = [] }) {
   return (
     <div>
       <Row label="Type">{KIND_LABELS[report.kind]}</Row>
+      {report.kind === 'incident' && <Row label="What kind">{INCIDENT_TYPE_LABELS[report.incident_type]}</Row>}
+      <Row label="Told to the office by">{report.told_by}</Row>
       <Row label="When">{formatWhen(report.occurred_at)}</Row>
       <Row label="Where">{report.location}</Row>
       {jobAddress && jobAddress !== report.location && <Row label="On the job at">{jobAddress}</Row>}
@@ -45,9 +47,9 @@ export default function IncidentDetails({ report, photoUrls = [] }) {
           {injured && <Row label="Their occupation">{report.injured_occupation}</Row>}
           {injured && <Row label="Injury">{report.injury_details}</Row>}
           {injured && <Row label="Treatment">{TREATMENT_LABELS[report.treatment]}</Row>}
-          <Row label="Damage">{report.damage_details}</Row>
         </>
       )}
+      <Row label="Damage, loss or theft">{report.damage_details}</Row>
       <Row label="Done straight after">{report.immediate_action}</Row>
       <Row label="Witnesses">{report.witnesses}</Row>
       {photoUrls.length > 0 && (

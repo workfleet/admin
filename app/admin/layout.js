@@ -51,7 +51,8 @@ const NAV_ITEMS = [
   { href: '/admin/reports', label: 'Reports', icon: FileText },
   { href: '/admin/data-reports', label: 'Data Reports', icon: Download },
   { href: '/admin/requests', label: 'Requests', icon: MessageSquareWarning },
-  { href: '/admin/incidents', label: 'Accidents', icon: HardHat },
+  // Injury details are health data: admins only since 0131.
+  { href: '/admin/incidents', label: 'Accidents & incidents', icon: HardHat, adminOnly: true },
   { href: '/admin/messages', label: 'Messages', icon: MessageCircle },
   { href: '/admin/help', label: 'Help', icon: HelpCircle },
 ];

@@ -1575,10 +1575,10 @@ export default function JobDetailPage() {
         <button
           type="button"
           onClick={() => router.push(`/cleaner/incidents?job=${id}`)}
-          title="Report an accident or near miss on this job"
+          title="Report an accident, incident or near miss on this job"
           style={{ background: 'none', border: 0, padding: '4px 0', color: 'var(--brand-link)', fontWeight: 600, fontSize: 13.5, textAlign: 'left' }}
         >
-          Accident or near miss here? Report it
+          Something happened here? Report it
         </button>
       </div>
 
