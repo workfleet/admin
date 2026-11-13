@@ -1,5 +1,6 @@
 'use client';
 
+import { SkeletonLines } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { FileText, Download, PlayCircle, ChevronRight } from 'lucide-react';
@@ -173,7 +174,7 @@ export default function CleanerHelp() {
 
       {section === 'documents' && (
         <>
-          {documents === null && <p className="empty-state">Loading...</p>}
+          {documents === null && <SkeletonLines />}
           {documents?.length === 0 && <p className="empty-state">No documents have been shared yet.</p>}
           {CATEGORY_ORDER.map((cat) => {
             const docsInCategory = (documents || []).filter((d) => d.category === cat);

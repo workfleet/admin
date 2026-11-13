@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -81,7 +82,7 @@ export default function ClientHelp() {
     })();
   }, []);
 
-  if (!checked) return <div>Loading...</div>;
+  if (!checked) return <PageSkeleton className="" rows={3} />;
 
   return (
     <div>

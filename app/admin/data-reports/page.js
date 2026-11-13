@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton, SkeletonLines } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Download } from 'lucide-react';
@@ -266,7 +267,7 @@ export default function AdminDataReports() {
     downloadCSV(`${reportId}-report-${stamp}.csv`, csv);
   };
 
-  if (!ready) return <div className="page-inner">Loading...</div>;
+  if (!ready) return <PageSkeleton variant="table" />;
 
   return (
     <div className="page-inner">
@@ -299,7 +300,7 @@ export default function AdminDataReports() {
         </div>
       )}
 
-      {loading && <p className="empty-state">Loading...</p>}
+      {loading && <SkeletonLines />}
       {!loading && rows.length === 0 && <p className="empty-state">No data for this report.</p>}
 
       {!loading && rows.length > 0 && (

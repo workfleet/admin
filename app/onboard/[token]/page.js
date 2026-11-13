@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { POLICY_SECTIONS } from '../../../lib/companyPolicies';
@@ -127,7 +128,7 @@ export default function OnboardPage() {
   };
 
   if (status === 'loading') {
-    return <div className="container"><p>Loading...</p></div>;
+    return <PageSkeleton className="container" rows={3} />;
   }
 
   if (status === 'error') {

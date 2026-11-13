@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton, SkeletonLines } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
@@ -135,7 +136,7 @@ export default function CleanerMessages() {
     }
   };
 
-  if (loading) return <div className="container">Loading...</div>;
+  if (loading) return <PageSkeleton className="container" rows={3} />;
 
   const active = conversations.find((c) => c.id === activeId);
 
@@ -201,7 +202,7 @@ export default function CleanerMessages() {
       {showDirectory && (
         <div className="card" style={{ marginBottom: 12 }}>
           <h2>Start a chat with...</h2>
-          {directory === null && <p className="empty-state">Loading...</p>}
+          {directory === null && <SkeletonLines />}
           {directory?.length === 0 && <p className="empty-state">No one in the office to message yet.</p>}
           {directory?.map((p) => (
             <div key={p.id} className="task-row" onClick={() => startChat(p.id)} style={{ cursor: 'pointer' }}>

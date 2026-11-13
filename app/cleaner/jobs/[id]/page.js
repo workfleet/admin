@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../../components/Skeleton';
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -1028,7 +1029,7 @@ export default function JobDetailPage() {
     );
   }
 
-  if (!job) return <div className="container">Loading...</div>;
+  if (!job) return <PageSkeleton className="container" variant="detail" rows={3} />;
 
   // A completed job is history, not something to keep editing - no
   // re-checking-in, no toggling tasks, no adding photos weeks later.

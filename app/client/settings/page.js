@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
@@ -104,7 +105,7 @@ export default function ClientSettings() {
     }
   };
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) return <PageSkeleton className="" rows={3} />;
 
   return (
     <div>

@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
@@ -40,7 +41,7 @@ export default function NotificationHistory() {
     await supabase.from('notifications').update({ dismissed_at: new Date().toISOString() }).eq('id', id);
   };
 
-  if (loading) return <div className="container">Loading...</div>;
+  if (loading) return <PageSkeleton className="container" rows={3} />;
 
   return (
     <div className="container">

@@ -3918,6 +3918,140 @@ a.btn-compact {
   background: transparent;
 }
 
+/* ---- Loading placeholders (components/Skeleton.js) ----
+   Grey shapes with a slow sheen, standing in for the layout that is about
+   to load. Still for anyone who has asked for reduced motion. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.sk {
+  display: block;
+  height: 12px;
+  max-width: 100%;
+  border-radius: 6px;
+  /* Dark enough to read on the ash page as well as on white cards. */
+  background: linear-gradient(90deg, #DFE2E6 0%, #EAECEF 45%, #DFE2E6 90%);
+  background-size: 220% 100%;
+  animation: sk-sheen 1.5s ease-in-out infinite;
+}
+
+@keyframes sk-sheen {
+  from { background-position: 110% 0; }
+  to   { background-position: -110% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sk { animation: none; }
+}
+
+/* On the dark sidebar the same shapes are a faint white. */
+.sidebar .sk,
+.client-sidebar .sk {
+  background: linear-gradient(90deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.13) 45%, rgba(255,255,255,0.07) 90%);
+  background-size: 220% 100%;
+}
+
+.sk-head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.sk-title { width: 220px; max-width: 60%; height: 24px; border-radius: 8px; }
+.sk-sub { width: 340px; max-width: 85%; height: 13px; }
+.sk-circle { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; }
+
+.sk-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sk-stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.sk-stat .sk:first-child { border-radius: 8px; }
+
+.sk-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .sk-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+.sk-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #F0F1F3;
+}
+
+.sk-row:last-child { border-bottom: none; }
+
+.sk-table-head,
+.sk-table-row {
+  display: flex;
+  gap: 6%;
+  align-items: center;
+  padding: 12px 16px;
+}
+
+.sk-table-head {
+  background: #F7F8F9;
+  border-bottom: 1px solid var(--surface-line);
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+}
+
+.sk-table-row + .sk-table-row { border-top: 1px solid #F0F1F3; }
+
+.sk-tabs {
+  display: flex;
+  gap: 24px;
+  padding: 12px 4px 14px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--surface-line);
+}
+
+.sk-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 0;
+}
+
+.sk-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.sk-nav-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+}
+
 /* ---- Segmented control ---- */
 .segmented {
   display: inline-flex;

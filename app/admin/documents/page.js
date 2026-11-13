@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FileText, Download, Trash2 } from 'lucide-react';
@@ -148,7 +149,7 @@ export default function AdminDocuments() {
     toast.success('Document deleted.');
   };
 
-  if (loading) return <div className="page-inner">Loading...</div>;
+  if (loading) return <PageSkeleton />;
 
   return (
     <div className="page-inner">

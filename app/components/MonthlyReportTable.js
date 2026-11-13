@@ -1,5 +1,6 @@
 'use client';
 
+import { SkeletonLines } from './Skeleton';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { monthBounds, minutesOnSite, formatDuration } from '../../lib/detailedReport';
@@ -64,7 +65,7 @@ export default function MonthlyReportTable({ clientId, month, staffView = false 
     if (failure) setError(failure);
   };
 
-  if (!rows) return <p className="empty-state">Loading...</p>;
+  if (!rows) return <SkeletonLines />;
   if (rows.length === 0) return <p className="empty-state">No properties.</p>;
 
   const withVisits = rows.filter((r) => r.visits > 0 || r.missed > 0);

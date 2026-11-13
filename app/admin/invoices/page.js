@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton, SkeletonLines } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Copy, AlertTriangle, Download } from 'lucide-react';
@@ -123,7 +124,7 @@ export default function InvoiceBreakdown() {
     downloadCSV(`${client.name} ${month} invoice ${invoiceNo.trim()}.csv`, toCSV(QUICKBOOKS_COLUMNS, rows));
   };
 
-  if (loading) return <div className="page-inner">Loading...</div>;
+  if (loading) return <PageSkeleton variant="table" />;
 
   const monthName = monthLabel(month);
   const empty = breakdown && breakdown.lines.length === 0 && breakdown.refreshes.length === 0;
@@ -170,7 +171,7 @@ export default function InvoiceBreakdown() {
       </div>
 
       {error && <div className="card" style={{ color: 'var(--wf-overdue)' }}>{error}</div>}
-      {loadingMonth && <div className="card">Loading {monthName}...</div>}
+      {loadingMonth && <div className="card"><SkeletonLines rows={4} label={`Loading ${monthName}`} /></div>}
 
       {!loadingMonth && breakdown && (
         <>

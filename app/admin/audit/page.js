@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
@@ -75,7 +76,7 @@ export default function AuditLog() {
     });
   }, [entries, search, actionFilter, names]);
 
-  if (loading) return <div className="page-inner">Loading...</div>;
+  if (loading) return <PageSkeleton variant="table" />;
 
   return (
     <div className="page-inner">

@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
@@ -129,7 +130,7 @@ export default function AdminTasks() {
     return own ? [{ ...own, name: 'My Tasks' }, ...others] : others;
   }, [filteredTasks, staff, ownId]);
 
-  if (loading) return <div className="page-inner">Loading...</div>;
+  if (loading) return <PageSkeleton />;
 
   return (
     <div className="page-inner">

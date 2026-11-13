@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton, SkeletonLines } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
@@ -1191,7 +1192,7 @@ export default function AdminRequests() {
   const filteredEmergencies = emergencies.filter((e) => emergencyFilter === 'all' || e.status === emergencyFilter);
   const openEmergencyCount = emergencies.filter((e) => e.status === 'open').length;
 
-  if (loading) return <div className="page-inner">Loading...</div>;
+  if (loading) return <PageSkeleton />;
 
   // Eleven queues is too many for one row of buttons. They fall into four
   // kinds of decision, so the nav is two rows: the kind, then the queue.
@@ -1845,7 +1846,7 @@ export default function AdminRequests() {
             </div>
           )}
 
-          {hoursLoading && <p className="empty-state">Loading...</p>}
+          {hoursLoading && <SkeletonLines />}
           {!hoursLoading && hoursByJob.length === 0 && <p className="empty-state">No completed jobs in this period yet.</p>}
 
           <div className="job-list">

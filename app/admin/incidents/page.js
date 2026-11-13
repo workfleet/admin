@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, CheckCircle2, Circle, Copy, Download, Plus } from 'lucide-react';
@@ -558,7 +559,7 @@ export default function AdminIncidents() {
     downloadCSV(`accidents-incidents-near-misses-${localDateString(new Date())}.csv`, toCSV(CSV_COLUMNS, shown.map((r) => csvRow(r, today))));
   };
 
-  if (loading) return <div className="container">Loading...</div>;
+  if (loading) return <PageSkeleton className="container" rows={3} />;
 
   return (
     <div className="container">

@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -195,7 +196,7 @@ export default function CleanerRota() {
     }
   };
 
-  if (loading) return <div className="container">Loading...</div>;
+  if (loading) return <PageSkeleton className="container" rows={3} />;
 
   const emptyForm = () => ({ ...EMPTY_FORM, type: subcontractor ? 'unavailable' : 'holiday' });
 

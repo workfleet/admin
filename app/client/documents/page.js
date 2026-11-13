@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FileText, Download } from 'lucide-react';
@@ -44,7 +45,7 @@ export default function ClientDocuments() {
     if (data?.signedUrl) window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
   };
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) return <PageSkeleton className="" rows={3} />;
 
   return (
     <div>

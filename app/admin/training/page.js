@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Upload, Trash2, ChevronUp, ChevronDown, Play, Eye } from 'lucide-react';
@@ -283,7 +284,7 @@ export default function AdminTraining() {
     </form>
   );
 
-  if (loading) return <div className="page-inner">Loading...</div>;
+  if (loading) return <PageSkeleton />;
 
   const ordered = [...videos].sort((a, b) => a.position - b.position);
   const liveCount = ordered.filter((v) => v.storage_path).length;

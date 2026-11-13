@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -612,7 +613,7 @@ export default function AdminQuotes() {
     return live.filter((q) => q.status === 'draft' || q.status === 'sent');
   }, [quotes, filter]);
 
-  if (loading) return <div className="page-inner">Loading...</div>;
+  if (loading) return <PageSkeleton />;
 
   return (
     <div className="page-inner">

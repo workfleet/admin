@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -192,7 +193,7 @@ export default function CleanerHours() {
     setLoading(false);
   };
 
-  if (loading) return <div className="container">Loading...</div>;
+  if (loading) return <PageSkeleton className="container" rows={3} />;
 
   const now = new Date();
   const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);

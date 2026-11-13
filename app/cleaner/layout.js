@@ -14,6 +14,7 @@ import AutoCheckoutWatcher from '../components/AutoCheckoutWatcher';
 import ShiftLocationWatcher from '../components/ShiftLocationWatcher';
 import ClockQueueFlusher from '../components/ClockQueueFlusher';
 import PhotoQueueFlusher from '../components/PhotoQueueFlusher';
+import { PageSkeleton } from '../components/Skeleton';
 
 const NAV_ITEMS = [
   { href: '/cleaner', label: 'Home', icon: Home },
@@ -75,7 +76,15 @@ export default function CleanerLayout({ children }) {
     );
   }
 
-  if (!authorized) return null;
+  // Grey placeholders while the sign-in is checked, rather than a blank
+  // phone screen - on one bar of signal that check can take a while.
+  if (!authorized) {
+    return (
+      <div className="cleaner-shell">
+        <PageSkeleton className="container" variant={pathname.startsWith('/cleaner/jobs/') ? 'detail' : 'list'} rows={3} />
+      </div>
+    );
+  }
 
   const stockOnly = role === 'inventory';
   const navItems = [

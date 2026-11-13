@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -166,7 +167,7 @@ export default function AdminReports() {
   );
   const filteredJobs = searchedJobs.filter(segments[segment].match);
 
-  if (loading) return <div className="page-inner">Loading...</div>;
+  if (loading) return <PageSkeleton />;
 
   return (
     <div className="page-inner">

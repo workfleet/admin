@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Minus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
@@ -208,7 +209,7 @@ export default function AdminInventory() {
     URL.revokeObjectURL(url);
   };
 
-  if (loading) return <div className="page-inner">Loading...</div>;
+  if (loading) return <PageSkeleton />;
 
   const shoppingListItems = viewProducts.filter(needsReorder);
   const lowStockCount = shoppingListItems.length;

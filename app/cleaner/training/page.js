@@ -1,5 +1,6 @@
 'use client';
 
+import { SkeletonLines } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '../../../lib/supabaseClient';
@@ -70,7 +71,7 @@ export default function CleanerTraining() {
       <div style={{ maxWidth: 560, margin: '0 auto', padding: '24px 20px 48px' }}>
         <BackButton />
 
-        {videos === null && <p className="empty-state">Loading...</p>}
+        {videos === null && <SkeletonLines />}
         {videos?.length === 0 && (
           <p className="empty-state">
             No training videos have been added yet. The office will let you know when they're ready.

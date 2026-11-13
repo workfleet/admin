@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -36,7 +37,7 @@ export default function ClientHistory() {
     return jobs.filter((j) => (j.properties?.address || '').toLowerCase().includes(q));
   }, [jobs, search]);
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) return <PageSkeleton className="" rows={3} />;
 
   return (
     <div>

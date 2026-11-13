@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { siteStatusFor, visitsToShow } from '../../lib/siteStatus';
 import { useRouter } from 'next/navigation';
@@ -178,7 +179,7 @@ export default function ClientDashboard() {
     }
   };
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) return <PageSkeleton className="" variant="dashboard" rows={3} />;
 
   return (
     <div>

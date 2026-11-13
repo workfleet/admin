@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Mail, Phone, MapPin, Globe } from 'lucide-react';
@@ -20,7 +21,7 @@ export default function ClientContacts() {
     })();
   }, []);
 
-  if (!checked) return <div>Loading...</div>;
+  if (!checked) return <PageSkeleton className="" rows={3} />;
 
   const rows = [
     { icon: Phone, label: 'Phone', value: COMPANY.phone, href: `tel:${COMPANY.phone.replace(/\s+/g, '')}` },

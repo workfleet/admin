@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../../lib/supabaseClient';
@@ -29,7 +30,7 @@ export default function MonthlyReports() {
     })();
   }, []);
 
-  if (loading) return <div className="page-inner">Loading...</div>;
+  if (loading) return <PageSkeleton variant="table" />;
 
   const selected = clients.find((c) => c.id === clientId);
   const flagged = clients.filter((c) => c.detailed_reports);

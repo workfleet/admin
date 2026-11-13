@@ -1,5 +1,6 @@
 'use client';
 
+import { SkeletonLines } from '../../../components/Skeleton';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -98,7 +99,7 @@ export default function CleanerTrainingVideo() {
     );
   }
 
-  if (!video) return <p className="empty-state" style={{ padding: 24 }}>Loading...</p>;
+  if (!video) return <div style={{ padding: 24 }}><SkeletonLines rows={4} /></div>;
 
   return (
     <div>

@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton, SkeletonLines } from '../../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { FileText, Download, Trash2 } from 'lucide-react';
@@ -619,7 +620,7 @@ export default function ClientDetail() {
     toast.success('Call log entry deleted.');
   };
 
-  if (loading || !client) return <div className="page-inner">Loading...</div>;
+  if (loading || !client) return <PageSkeleton variant="detail" />;
 
   return (
     <div className="page-inner">
@@ -1041,7 +1042,7 @@ export default function ClientDetail() {
             <button type="submit" className="btn-primary" style={{ marginTop: 8 }}>Log Call</button>
           </form>
 
-          {callLogsLoading && <p className="empty-state">Loading...</p>}
+          {callLogsLoading && <SkeletonLines />}
           {!callLogsLoading && (callLogs?.length || 0) === 0 && <p className="empty-state">No calls logged yet.</p>}
 
           {(callLogs || []).map((log) => (
@@ -1064,7 +1065,7 @@ export default function ClientDetail() {
 
       {tab === 'hours' && (
         <div className="card">
-          {monthlyHoursLoading && <p className="empty-state">Loading...</p>}
+          {monthlyHoursLoading && <SkeletonLines />}
           {!monthlyHoursLoading && (monthlyHours?.length || 0) === 0 && (
             <p className="empty-state">No completed jobs yet.</p>
           )}
@@ -1085,7 +1086,7 @@ export default function ClientDetail() {
 
       {tab === 'reviews' && (
         <div className="card">
-          {remindersLoading && <p className="empty-state">Loading...</p>}
+          {remindersLoading && <SkeletonLines />}
           {!remindersLoading && (reminders?.length || 0) === 0 && !isAddingReminder && (
             <p className="empty-state">No review reminders set.</p>
           )}
@@ -1147,7 +1148,7 @@ export default function ClientDetail() {
 
       {tab === 'clockins' && (
         <div className="card">
-          {clockInsLoading && <p className="empty-state">Loading...</p>}
+          {clockInsLoading && <SkeletonLines />}
           {!clockInsLoading && (clockIns?.length || 0) === 0 && <p className="empty-state">No check-ins yet.</p>}
           {(clockIns || []).map((c) => {
             const late = lateMinutes(c.checked_in_at, c.job?.scheduled_at);
@@ -1204,7 +1205,7 @@ export default function ClientDetail() {
             {uploadingDoc && <p style={{ fontSize: 13, color: 'var(--muted)', margin: '8px 0 0' }}>Uploading...</p>}
           </div>
 
-          {docsLoading && <p className="empty-state">Loading...</p>}
+          {docsLoading && <SkeletonLines />}
           {!docsLoading && (clientDocs?.length || 0) === 0 && <p className="empty-state">No documents shared with this client yet.</p>}
 
           {(clientDocs?.length || 0) > 0 && (

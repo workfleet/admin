@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { X, Bell } from 'lucide-react';
@@ -52,7 +53,7 @@ export default function AdminNotifications() {
     await supabase.from('notifications').update({ dismissed_at: at }).in('id', open);
   };
 
-  if (loading) return <div className="page-inner">Loading...</div>;
+  if (loading) return <PageSkeleton />;
 
   const openCount = notifications.filter((n) => !n.dismissed_at).length;
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { KeyRound, Undo2, Archive, History } from 'lucide-react';
@@ -200,7 +201,7 @@ export default function AdminKeys() {
     toast.success('Key deleted.');
   };
 
-  if (loading) return <div className="page-inner">Loading...</div>;
+  if (loading) return <PageSkeleton />;
 
   const activeKeys = keys.filter((k) => k.active);
   const outNow = activeKeys

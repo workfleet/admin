@@ -1,5 +1,6 @@
 'use client';
 
+import { SkeletonLines } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -49,7 +50,7 @@ export default function EmergencyLocationPage() {
   };
 
   if (notFound) return <div style={{ padding: 20 }}>Alert not found.</div>;
-  if (!alert) return <div style={{ padding: 20 }}>Loading...</div>;
+  if (!alert) return <div style={{ padding: 20 }}><SkeletonLines rows={4} /></div>;
 
   const hasLocation = alert.lat != null && alert.lng != null;
 

@@ -12,6 +12,16 @@ import ZoomControl from '../components/ZoomControl';
 import EmergencyBanner from '../components/EmergencyBanner';
 import EnablePush from '../components/EnablePush';
 import Logo from '../components/Logo';
+import { PageSkeleton, SkeletonNav } from '../components/Skeleton';
+
+// Which placeholder shape the page is about to fill, so the shell's first
+// frame already looks like the page that follows.
+function skeletonFor(pathname) {
+  if (pathname === '/admin') return 'dashboard';
+  if (/^\/admin\/(clients|cleaners)\/[^/]+$/.test(pathname)) return 'detail';
+  if (/^\/admin\/(payroll|invoices|audit|data-reports|quotes\/history|rota\/history)$/.test(pathname)) return 'table';
+  return 'list';
+}
 
 // Cleaners/Onboarding manage staff accounts directly (adding, deactivating,
 // reviewing onboarding ID documents) - kept admin-only, hidden from
@@ -131,7 +141,31 @@ export default function AdminLayout({ children }) {
     );
   }
 
-  if (!authorized) return null;
+  // While the sign-in is checked: the shell with grey placeholders, instead
+  // of a blank screen. No menu items yet - they depend on the role.
+  if (!authorized) {
+    return (
+      <div className="admin-shell">
+        <div className="admin-topbar">
+          <div className="admin-topbar-brand">
+            <Logo size={28} tone="light" showWordmark />
+          </div>
+        </div>
+        <aside className="sidebar">
+          <div className="sidebar-brand">
+            <div className="sidebar-brand-lockup">
+              <Logo size={30} tone="light" showWordmark />
+              <div className="sidebar-brand-sub">Operations</div>
+            </div>
+          </div>
+          <SkeletonNav />
+        </aside>
+        <main className="admin-main">
+          <PageSkeleton variant={skeletonFor(pathname)} />
+        </main>
+      </div>
+    );
+  }
 
   return (
     <>

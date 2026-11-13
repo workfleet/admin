@@ -8,6 +8,7 @@ import EnablePush from '../components/EnablePush';
 import { getSessionAndProfile } from '../../lib/authGate';
 import { supabase } from '../../lib/supabaseClient';
 import { signOutAndClearPresence } from '../../lib/signOut';
+import { PageSkeleton, SkeletonNav } from '../components/Skeleton';
 
 const NAV_ITEMS = [
   { href: '/client', label: 'Dashboard', icon: LayoutDashboard },
@@ -78,7 +79,33 @@ export default function ClientLayout({ children }) {
     );
   }
 
-  if (!authorized) return null;
+  // The portal's frame with grey placeholders while the sign-in is checked,
+  // instead of a blank page.
+  if (!authorized) {
+    return (
+      <div className="client-shell-layout">
+        <div className="client-topbar">
+          <div className="client-topbar-brand">
+            <div className="sidebar-logo">CC</div>
+            <div className="sidebar-brand-name">CrewConnect</div>
+          </div>
+        </div>
+        <aside className="client-sidebar">
+          <div className="sidebar-brand">
+            <div className="sidebar-logo">CC</div>
+            <div>
+              <div className="sidebar-brand-name">CrewConnect</div>
+              <div className="sidebar-brand-sub">Client Portal</div>
+            </div>
+          </div>
+          <SkeletonNav rows={7} />
+        </aside>
+        <main className="client-main">
+          <PageSkeleton className="" variant={pathname === '/client' ? 'dashboard' : 'list'} rows={3} />
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="client-shell-layout">

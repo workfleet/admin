@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton, SkeletonLines } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
@@ -192,7 +193,7 @@ export default function AdminMessages() {
 
   const totalUnread = clientThreads.reduce((s, t) => s + t.unreadCount, 0) + conversations.reduce((s, t) => s + t.unreadCount, 0);
 
-  if (loading) return <div className="page-inner">Loading...</div>;
+  if (loading) return <PageSkeleton />;
 
   return (
     <div className="page-inner">
@@ -261,7 +262,7 @@ export default function AdminMessages() {
           {showDirectory && (
             <div className="card" style={{ marginBottom: 12 }}>
               <h2>Start a chat with...</h2>
-              {directory === null && <p className="empty-state">Loading...</p>}
+              {directory === null && <SkeletonLines />}
               {directory?.length === 0 && <p className="empty-state">No one else on the team yet.</p>}
               {directory?.map((p) => (
                 <div key={p.id} className="task-row" onClick={() => startChat(p.id)} style={{ cursor: 'pointer' }}>

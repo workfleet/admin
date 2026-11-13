@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -369,7 +370,7 @@ export default function AdminPayroll() {
     await load();
   };
 
-  if (loading) return <div className="page-inner">Loading...</div>;
+  if (loading) return <PageSkeleton variant="table" />;
 
   const groupedBlockers = Object.entries(REVIEW_KINDS)
     .map(([kind, def]) => ({ kind, ...def, items: blockers.filter((r) => r.kind === kind) }))

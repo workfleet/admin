@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LifeBuoy, Clock, Hand } from 'lucide-react';
@@ -244,7 +245,7 @@ export default function AdminCover() {
     toast.success(`${request.profiles?.full_name || 'They'} will be told it went to someone else.`);
   };
 
-  if (loading) return <div className="page-inner">Loading...</div>;
+  if (loading) return <PageSkeleton />;
 
   const isLive = (o) => o.status === 'open' && (!o.expires_at || new Date(o.expires_at) > new Date());
   const openOffers = offers.filter(isLive);

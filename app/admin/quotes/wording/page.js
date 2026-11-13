@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../../components/Skeleton';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../../lib/supabaseClient';
@@ -109,7 +110,7 @@ export default function QuoteWording() {
     off: sections.filter((s) => !s.enabled).length,
   }), [sections]);
 
-  if (loading) return <div className="page-inner">Loading...</div>;
+  if (loading) return <PageSkeleton />;
 
   if (role !== 'admin') {
     return (

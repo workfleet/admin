@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton, SkeletonLines } from '../../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '../../../../lib/supabaseClient';
@@ -654,7 +655,7 @@ export default function CleanerProfile() {
     setDocLoading(false);
   };
 
-  if (loading || !cleaner) return <div className="page-inner">Loading...</div>;
+  if (loading || !cleaner) return <PageSkeleton variant="detail" />;
 
   // History means what has already happened. A shift still ahead of them
   // belongs in Upcoming below, not in the record of what they have done - and
@@ -1252,7 +1253,7 @@ export default function CleanerProfile() {
         </div>
         {showClockIns && (
           <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 10 }}>
-            {checkins === null && <p className="empty-state">Loading...</p>}
+            {checkins === null && <SkeletonLines />}
             {checkins?.length === 0 && <p className="empty-state">No check-ins yet.</p>}
             {checkins?.map((c) => {
               const late = lateMinutes(c.checked_in_at, c.jobs?.scheduled_at);

@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../../components/Skeleton';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -48,7 +49,7 @@ export default function QuoteHistory() {
     });
   }, [quotes, search, statusFilter]);
 
-  if (loading) return <div className="page-inner">Loading...</div>;
+  if (loading) return <PageSkeleton variant="table" />;
 
   return (
     <div className="page-inner">

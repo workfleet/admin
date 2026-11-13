@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { siteStatusFor } from '../../../../lib/siteStatus';
 import { useParams, useRouter } from 'next/navigation';
@@ -130,7 +131,7 @@ export default function ClientJobDetail() {
     if (failure) setDownloadError(failure);
   };
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) return <PageSkeleton className="" variant="detail" rows={3} />;
   if (!job) return <div>Job not found.</div>;
 
   // The detailed report's headings say who each part is for ("For the

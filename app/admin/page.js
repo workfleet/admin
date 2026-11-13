@@ -1,5 +1,6 @@
 'use client';
 
+import { PageSkeleton } from '../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -574,7 +575,7 @@ export default function AdminDashboard() {
     }
   };
 
-  if (loading) return <div className="page-inner">Loading...</div>;
+  if (loading) return <PageSkeleton variant="dashboard" />;
 
   const hour = new Date().getHours();
   const timeGreeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
