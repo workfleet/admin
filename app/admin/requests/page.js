@@ -985,13 +985,13 @@ export default function AdminRequests() {
   };
 
   // On a shared shift a colleague clocked into: this person was there and
-  // forgot to clock in. Their pay already stands, so this only records the
-  // decision (0132).
+  // forgot to clock in. Recorded as an approved claim (0132), which puts
+  // their share of the shift back on their pay (0134).
   const confirmColleagueWorked = async (job, assignment) => {
     const name = assignment.profiles?.full_name || 'They';
     const proceed = await confirm(
       `${name} was at ${job.properties?.address || 'this shift'} on ${new Date(job.scheduled_at).toLocaleDateString()} and forgot to clock in? `
-      + 'Their hours for it stay as they are on the rota.',
+      + 'This pays them their share of the shift.',
       { title: 'They worked it', confirmLabel: 'Yes, they worked it' }
     );
     if (!proceed) return;
@@ -1938,10 +1938,10 @@ export default function AdminRequests() {
                 Only some of the team clocked in ({partlyMissed.reduce((n, e) => n + e.absent.length, 0)})
               </h2>
               <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
-                A colleague clocked in on these shared shifts, so they were never marked missed. Say what
-                happened to each person who did not. A reason takes them off the pay for that shift and puts
-                it on their absence record; &ldquo;They worked it&rdquo; means they were there and forgot to clock in.
-                Payroll will not close while anyone here is undecided.
+                A colleague clocked in on these shared shifts and these people did not, so they are not being
+                paid for them and the shift counts as missed for them. Say what happened: a reason goes on their
+                absence record, and &ldquo;They worked it&rdquo; means they were there and forgot to clock in, which pays
+                them their share. Payroll will not close while anyone here is undecided.
               </p>
               <div className="job-list" style={{ marginBottom: 24 }}>
                 {partlyMissed.map(({ job, absent }) => {
@@ -1993,7 +1993,7 @@ export default function AdminRequests() {
                                 onClick={() => confirmColleagueWorked(job, a)}
                                 disabled={decidingKey === key}
                                 style={{ padding: '4px 10px', fontSize: 12 }}
-                                title="They were there and forgot to clock in - their hours stay as they are"
+                                title="They were there and forgot to clock in - pays them their share"
                               >
                                 They worked it
                               </button>

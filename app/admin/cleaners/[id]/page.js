@@ -245,9 +245,14 @@ export default function CleanerProfile() {
     // being turned away. A no-show, or nothing recorded, still counts. A
     // reason recorded for this person makes the job missed for them even
     // when a colleague worked it and the job itself reads completed (0096).
-    const missedForThem = (j) => j.status === 'missed' || (j.status === 'completed' && outcomeByJob[j.id]);
+    // Likewise a shared shift they did not clock in on while a colleague
+    // did, which 0134 leaves unpaid with this reason until the office says
+    // otherwise.
+    const didNotClockIn = (j) => (j.paid_minutes_reason || '').startsWith('Did not clock in - ');
+    const missedForThem = (j) => j.status === 'missed'
+      || (j.status === 'completed' && (outcomeByJob[j.id] || didNotClockIn(j)));
     const pastJobs = jobsData
-      .filter((j) => (j.status === 'completed' && !outcomeByJob[j.id])
+      .filter((j) => (j.status === 'completed' && !missedForThem(j))
         || (missedForThem(j) && countsAgainstCleaner(outcomeByJob[j.id])))
       .map((j) => (missedForThem(j) ? { ...j, status: 'missed' } : j));
     const completedJobIds = jobsData.filter((j) => j.status === 'completed').map((j) => j.id);
