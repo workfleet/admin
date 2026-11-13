@@ -632,7 +632,7 @@ h3 { font-size: 15px; line-height: 1.35; letter-spacing: -0.01em; }
 }
 
 .sidebar {
-  width: 224px;
+  width: 236px;
   flex-shrink: 0;
   background: var(--sidebar-bg);
   color: var(--sidebar-text);
@@ -647,7 +647,7 @@ h3 { font-size: 15px; line-height: 1.35; letter-spacing: -0.01em; }
 .sidebar-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 2px;
   padding: 8px 6px 24px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
   margin-bottom: 16px;
@@ -686,12 +686,14 @@ h3 { font-size: 15px; line-height: 1.35; letter-spacing: -0.01em; }
   color: rgba(247, 248, 248, 0.5);
 }
 
-/* Stacks the wordmark over its portal label. */
+/* Stacks the wordmark over its portal label. Never squeezed: the alert and
+   who's-online icons sit to its right and used to overlap the wordmark. */
 .sidebar-brand-lockup {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-width: 0;
+  flex-shrink: 0;
+  margin-right: auto;
 }
 
 .sidebar-nav {
@@ -2154,6 +2156,13 @@ a.rota-figure:hover b { text-decoration: underline; text-underline-offset: 3px; 
   }
   .sidebar-brand {
     position: relative;
+    padding-right: 36px;
+  }
+  /* The drawer's close cross sat on top of the alerts and who's-online
+     icons. The top bar already carries both on a phone, so the drawer
+     drops its copies. !important because EnablePush sets display inline. */
+  .sidebar-brand > :not(.sidebar-brand-lockup):not(.sidebar-close) {
+    display: none !important;
   }
   .sidebar-close {
     display: flex;
