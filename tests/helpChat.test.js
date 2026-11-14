@@ -53,6 +53,20 @@ describe('action cards', () => {
     expect(actionDetails(site)).toEqual(['10 Wind Street, Swansea', 'Map pin found - check it is the right place.']);
   });
 
+  it('describes a change to this and every later visit', () => {
+    const a = { type: 'move_job', scope: 'later', site: 'X', fromStart: '2026-11-17T06:00:00Z', fromDuration: 120, start: '2026-11-17T07:00:00Z', duration_minutes: 120, count: 12, lastAt: '2027-02-02T07:00:00Z', inSeries: true };
+    expect(actionHeadline(a)).toBe('Change the time of the repeating visits at X');
+    expect(actionDetails(a)).toEqual([
+      'Time: 06:00-08:00 → 07:00-09:00, from Tue 17 Nov',
+      'This visit and every later one: 12 visits, up to Tue 2 Feb. Finished visits are not changed.',
+    ]);
+  });
+
+  it('offers this-visit or this-and-later for repeating visits', () => {
+    const props = ROTA_TOOLS.find((t) => t.name === 'propose_changes').input_schema.properties.changes.items.properties;
+    expect(props.scope.enum).toEqual(['this', 'later', null]);
+  });
+
   it('shows a client edit as before and after', () => {
     const a = { type: 'update_client', clientName: 'Acme', diff: [{ label: 'Phone', from: '07700 900123', to: '07700 900456' }, { label: 'Email', from: '', to: 'a@acme.co.uk' }] };
     expect(actionHeadline(a)).toBe("Change Acme's details");
