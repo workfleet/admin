@@ -455,6 +455,16 @@ export default function AdminRota() {
     loadLookups();
   }, []);
 
+  // A change confirmed in the Ask WorkFleet chat: reload the week so it
+  // shows here without a refresh.
+  const loadJobsRef = useRef(null);
+  loadJobsRef.current = () => loadJobs();
+  useEffect(() => {
+    const onChanged = () => loadJobsRef.current?.();
+    window.addEventListener('wf-rota-changed', onChanged);
+    return () => window.removeEventListener('wf-rota-changed', onChanged);
+  }, []);
+
   // The dashboard's "+ New job" links here with the form already open, and
   // its "Assign cleaner" button links to a single job's modal. Read on mount
   // rather than via useSearchParams, which would need the page wrapped in a

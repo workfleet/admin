@@ -15,6 +15,7 @@ import Logo from '../components/Logo';
 import { PageSkeleton, SkeletonNav } from '../components/Skeleton';
 import { useDocumentTitle, titleForPath } from '../components/useDocumentTitle';
 import SearchPalette, { openSearch } from '../components/SearchPalette';
+import HelpChat from '../components/HelpChat';
 
 // Which placeholder shape the page is about to fill, so the shell's first
 // frame already looks like the page that follows.
@@ -181,6 +182,7 @@ export default function AdminLayout({ children }) {
       <EmergencyBanner />
       {/* Staff pages are admin-only, so supervisors search clients and sites. */}
       {!stockOnly && <SearchPalette pages={navItems} canSeeStaff={role === 'admin'} />}
+      {!stockOnly && <HelpChat />}
       <div className="admin-shell">
       <div className="admin-topbar">
         <div className="admin-topbar-brand">

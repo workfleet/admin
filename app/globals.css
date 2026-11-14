@@ -5669,3 +5669,53 @@ a.btn-compact {
 .facts-field.is-strong textarea { border-color: #F2B8C0; }
 .facts-savebar { position: sticky; bottom: 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px; background: var(--wf-graphite); color: #fff; padding: 10px 14px; border-radius: var(--radius-md); box-shadow: var(--shadow-md); margin: 8px 0 16px; }
 .facts-savebar .btn-primary { width: auto; }
+
+/* Ask WorkFleet - the help and rota chat in the corner of office pages. */
+.help-fab { position: fixed; right: 20px; bottom: 20px; z-index: 450; width: auto; display: inline-flex; align-items: center; gap: 8px; padding: 11px 16px; border-radius: 999px; border: none; background: var(--wf-graphite); color: #fff; font-weight: 600; font-size: 14px; box-shadow: var(--shadow-md); cursor: pointer; }
+.help-fab:hover { background: #2E3238; }
+.help-panel { position: fixed; right: 20px; bottom: 20px; z-index: 450; width: 400px; max-width: calc(100vw - 32px); height: min(640px, calc(100vh - 40px)); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--hairline); border-radius: 14px; box-shadow: var(--shadow-lg); overflow: hidden; }
+@media (max-width: 700px) {
+  .help-fab { right: 16px; bottom: 16px; }
+  .help-panel { right: 0; left: 0; bottom: 0; width: 100%; max-width: 100%; height: 88vh; border-radius: 14px 14px 0 0; }
+}
+.help-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding: 12px 14px; background: var(--wf-graphite); color: #fff; }
+.help-title { margin: 0; font-weight: 700; font-size: 15px; }
+.help-sub { margin: 2px 0 0; font-size: 12px; opacity: 0.75; }
+.help-icon { width: auto; background: none; border: none; color: #fff; opacity: 0.8; padding: 4px; cursor: pointer; display: inline-flex; border-radius: 6px; }
+.help-icon:hover { opacity: 1; background: rgba(255,255,255,0.1); }
+.help-list { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: var(--bg); }
+.help-empty p { margin: 0 0 10px; font-size: 13.5px; color: var(--ink-soft); }
+.help-suggestions { display: flex; flex-direction: column; gap: 6px; }
+.help-suggestions button { width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--control-border); border-radius: 10px; padding: 8px 10px; font-size: 13px; color: var(--ink); cursor: pointer; }
+.help-suggestions button:hover { border-color: var(--control-border-hover); }
+.help-msg { max-width: 92%; font-size: 13.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.help-msg.is-user { align-self: flex-end; background: var(--wf-graphite); color: #fff; padding: 8px 11px; border-radius: 12px 12px 3px 12px; white-space: pre-wrap; }
+.help-msg.is-ai { align-self: flex-start; background: var(--surface); border: 1px solid var(--hairline); padding: 9px 12px; border-radius: 12px 12px 12px 3px; }
+.help-msg.is-ai p { margin: 0 0 6px; }
+.help-msg.is-ai p:last-child { margin-bottom: 0; }
+.help-msg.is-ai ol, .help-msg.is-ai ul { margin: 0 0 6px; padding-left: 20px; }
+.help-msg.is-ai a { color: var(--brand-link); font-weight: 600; }
+.help-typing { display: inline-flex; gap: 4px; padding: 12px 14px; }
+.help-typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: help-dot 1s infinite ease-in-out; }
+.help-typing span:nth-child(2) { animation-delay: 0.15s; }
+.help-typing span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes help-dot { 0%, 80%, 100% { opacity: 0.3; } 40% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .help-typing span { animation: none; } }
+.help-error { margin: 0; font-size: 13px; color: var(--wf-overdue); }
+.help-input { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--hairline); background: var(--surface); }
+.help-input textarea { flex: 1; margin: 0; resize: none; min-height: 40px; max-height: 120px; font-size: 14px; }
+.help-send { width: 40px; height: 40px; flex: none; border-radius: 10px; border: none; background: var(--wf-coral); color: var(--wf-on-coral); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+.help-send:disabled { opacity: 0.45; cursor: default; }
+.help-foot { margin: 0; padding: 0 12px 8px; font-size: 11px; color: var(--muted); background: var(--surface); }
+
+.help-card { margin-top: 8px; padding: 10px 11px; border: 1px solid var(--control-border); border-radius: 10px; background: var(--surface); }
+.help-card-title { margin: 0 0 4px !important; font-weight: 700; font-size: 13.5px; display: flex; align-items: center; gap: 6px; }
+.help-card-line { margin: 0 0 2px !important; font-size: 13px; color: var(--ink-soft); }
+.help-card-warnings { margin: 6px 0 0; padding: 6px 8px 6px 24px; background: #FFF3D6; border-radius: 6px; font-size: 12.5px; color: #7A5300; }
+.help-card-actions { display: flex; gap: 8px; margin-top: 8px; }
+.help-card-actions button { width: auto; padding: 7px 12px; font-size: 13px; }
+.help-card-result { margin: 6px 0 0 !important; font-size: 13px; color: var(--wf-verified-text); display: flex; align-items: center; gap: 5px; }
+.help-card-result.is-failed { color: var(--wf-overdue); }
+.help-card.is-done { border-color: var(--wf-verified); background: var(--wf-verified-bg); }
+.help-card.is-dismissed { opacity: 0.6; }
+.help-card.is-error { border-color: #F2B8C0; background: var(--wf-overdue-bg); }
