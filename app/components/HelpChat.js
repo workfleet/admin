@@ -69,7 +69,7 @@ function Answer({ text, onNavigate }) {
   return out.map((x) => (x.tag ? (x.tag === 'ul' ? <ul key={`l${x.key}`}>{x.items}</ul> : <ol key={`l${x.key}`}>{x.items}</ol>) : x));
 }
 
-function ActionCard({ card, onConfirm, onDismiss }) {
+function ActionCard({ card, waiting, onConfirm, onDismiss }) {
   const [busy, setBusy] = useState(false);
   if (card.error) {
     return (
@@ -92,9 +92,10 @@ function ActionCard({ card, onConfirm, onDismiss }) {
       {done && <p className="help-card-result"><Check size={14} aria-hidden /> {card.result}</p>}
       {failed && <p className="help-card-result is-failed">{card.result}</p>}
       {dismissed && <p className="help-card-line">Not done.</p>}
+      {!done && !dismissed && waiting && <p className="help-card-line"><em>{waiting}</em></p>}
       {!done && !dismissed && (
         <div className="help-card-actions">
-          <button type="button" className="btn-primary" disabled={busy} onClick={async () => { setBusy(true); await onConfirm(); setBusy(false); }}>
+          <button type="button" className="btn-primary" disabled={busy || Boolean(waiting)} onClick={async () => { setBusy(true); await onConfirm(); setBusy(false); }}>
             {busy ? 'Doing it...' : failed ? 'Try again' : 'Confirm'}
           </button>
           <button type="button" className="btn-secondary" disabled={busy} onClick={onDismiss}>No thanks</button>
@@ -153,10 +154,21 @@ export default function HelpChat() {
     setItems((cur) => cur.map((m, i) => (i !== msgIndex ? m : { ...m, cards: m.cards.map((c, j) => (j === cardIndex ? { ...c, ...patch } : c)) })));
   };
 
+  // A card that builds on an earlier one (a site for a client just added, a
+  // visit at that site) takes the id that card created.
+  const resolvedFor = (cards, card) => {
+    const parent = Number.isInteger(card.dependsOn) ? cards[card.dependsOn] : null;
+    if (!parent) return {};
+    if (parent.type === 'create_client') return { client_id: parent.createdId };
+    if (parent.type === 'create_site') return { property_id: parent.createdId };
+    return {};
+  };
+
   const confirmCard = async (msgIndex, cardIndex) => {
-    const card = items[msgIndex].cards[cardIndex];
-    const result = await runRotaAction(card);
-    updateCard(msgIndex, cardIndex, { state: result.ok ? 'done' : 'failed', result: result.message });
+    const cards = items[msgIndex].cards;
+    const card = cards[cardIndex];
+    const result = await runRotaAction(card, resolvedFor(cards, card));
+    updateCard(msgIndex, cardIndex, { state: result.ok ? 'done' : 'failed', result: result.message, createdId: result.createdId });
     // Tell the Rota page (if it's open) to reload so the change shows.
     if (result.ok) { try { window.dispatchEvent(new CustomEvent('wf-rota-changed')); } catch { /* old browsers */ } }
   };
@@ -198,9 +210,13 @@ export default function HelpChat() {
               : (
                 <div key={i} className="help-msg is-ai">
                   {m.text && <Answer text={m.text} onNavigate={() => { if (window.innerWidth < 700) setOpen(false); }} />}
-                  {(m.cards || []).map((c, j) => (
-                    <ActionCard key={j} card={c} onConfirm={() => confirmCard(i, j)} onDismiss={() => updateCard(i, j, { state: 'dismissed' })} />
-                  ))}
+                  {(m.cards || []).map((c, j) => {
+                    const parent = Number.isInteger(c.dependsOn) ? m.cards[c.dependsOn] : null;
+                    const waiting = parent && parent.state !== 'done'
+                      ? (parent.type === 'create_client' ? 'Confirm the new client first.' : 'Confirm the new site first.')
+                      : null;
+                    return <ActionCard key={j} card={c} waiting={waiting} onConfirm={() => confirmCard(i, j)} onDismiss={() => updateCard(i, j, { state: 'dismissed' })} />;
+                  })}
                 </div>
               )))}
             {busy && <div className="help-msg is-ai help-typing"><span /><span /><span /></div>}

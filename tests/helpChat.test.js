@@ -44,6 +44,20 @@ describe('action cards', () => {
     expect(actionDetails(a).at(-1)).toMatch(/This visit only/);
   });
 
+  it('describes a new client and a new site', () => {
+    const client = { type: 'create_client', name: 'Test Bakery Ltd', contact_name: 'Ann', phone: '07700 900123', email: null, billing_address: null, industry: 'Retail', notes: null };
+    expect(actionHeadline(client)).toBe('Add a new client: Test Bakery Ltd');
+    expect(actionDetails(client)).toEqual(['Contact: Ann', 'Phone: 07700 900123', 'Sector: Retail']);
+    const site = { type: 'create_site', clientName: 'Test Bakery Ltd', address: '10 Wind Street, Swansea', lat: 51.6, lng: -3.9 };
+    expect(actionHeadline(site)).toBe('Add a site for Test Bakery Ltd');
+    expect(actionDetails(site)).toEqual(['10 Wind Street, Swansea', 'Map pin found - check it is the right place.']);
+  });
+
+  it('only lets the AI pick a sector from the New client list', () => {
+    const props = ROTA_TOOLS.find((t) => t.name === 'propose_changes').input_schema.properties.changes.items.properties;
+    expect(props.industry.anyOf[0].enum).toContain('Office / Commercial');
+  });
+
   it('offers only the supported change types, and nothing that deletes', () => {
     const propose = ROTA_TOOLS.find((t) => t.name === 'propose_changes');
     expect(propose.input_schema.properties.changes.items.properties.type.enum).toEqual(ROTA_ACTION_TYPES);

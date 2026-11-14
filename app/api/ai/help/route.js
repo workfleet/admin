@@ -46,6 +46,9 @@ export async function POST(request) {
 
   const client = anthropicClient();
   const cards = [];
+  // Every address the map lookup returned in this request: a proposed site
+  // must use one of these pins (lib/rotaAssistantServer.js).
+  const lookups = new Map();
   let answer = '';
 
   try {
@@ -79,15 +82,21 @@ export async function POST(request) {
         let content;
         try {
           if (call.name === 'propose_changes') {
+            // Cards later in the list can build on earlier ones (a new site
+            // for a new client, a visit at that site), so each is checked
+            // knowing what came before it.
             const checked = [];
-            for (const change of (call.input?.changes || []).slice(0, 10)) checked.push(await checkChange(change));
+            const offset = cards.length;
+            for (const change of (call.input?.changes || []).slice(0, 10)) {
+              checked.push(await checkChange(change, { batch: checked, offset, lookups }));
+            }
             cards.push(...checked);
             content = JSON.stringify({
               shown_to_user: checked.map((c) => (c.error ? { error: c.error } : { change: c.headline, warnings: c.warnings })),
               note: 'Shown as cards. Nothing has changed - the person must press Confirm.',
             });
           } else {
-            content = JSON.stringify(await runRotaTool(call.name, call.input || {}));
+            content = JSON.stringify(await runRotaTool(call.name, call.input || {}, { lookups }));
           }
         } catch {
           content = JSON.stringify({ error: 'That lookup failed.' });
