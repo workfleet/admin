@@ -5719,3 +5719,8 @@ a.btn-compact {
 .help-card.is-done { border-color: var(--wf-verified); background: var(--wf-verified-bg); }
 .help-card.is-dismissed { opacity: 0.6; }
 .help-card.is-error { border-color: #F2B8C0; background: var(--wf-overdue-bg); }
+
+/* Ask WorkFleet: delete cards are red and ask twice. */
+.help-card.is-danger { border-color: #F2B8C0; background: #FFF7F8; }
+.help-card .help-delete { background: var(--wf-overdue); border-color: var(--wf-overdue); color: #fff; }
+.help-card .help-delete:hover:not(:disabled) { background: #B5172A; }

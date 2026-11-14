@@ -88,7 +88,7 @@ export async function POST(request) {
             const checked = [];
             const offset = cards.length;
             for (const change of (call.input?.changes || []).slice(0, 10)) {
-              checked.push(await checkChange(change, { batch: checked, offset, lookups }));
+              checked.push(await checkChange(change, { batch: checked, offset, lookups, earlier: cards }));
             }
             cards.push(...checked);
             content = JSON.stringify({

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { cleanHelpMessages, pageNote, parseAnswer, answerRuns, isAppLink, helpSystem } from '../lib/helpChat';
-import { londonToUtcIso, utcToLondonLocal, overlaps, describeWhen, actionHeadline, actionDetails, ROTA_TOOLS, ROTA_ACTION_TYPES } from '../lib/rotaAssistant';
+import { londonToUtcIso, utcToLondonLocal, overlaps, describeWhen, actionHeadline, actionDetails, ROTA_TOOLS, ROTA_ACTION_TYPES, MAX_DELETE } from '../lib/rotaAssistant';
 
 describe('London times', () => {
   it('converts winter times (GMT)', () => {
@@ -53,6 +53,21 @@ describe('action cards', () => {
     expect(actionDetails(site)).toEqual(['10 Wind Street, Swansea', 'Map pin found - check it is the right place.']);
   });
 
+  it('spells out a delete, who is booked, and that it cannot be undone', () => {
+    const one = { type: 'delete_job', scope: 'this', site: 'X', count: 1, firstAt: '2026-11-17T06:00:00Z', lastAt: '2026-11-17T06:00:00Z', jobDuration: 120, staffNames: ['Sam'], inSeries: true };
+    expect(actionHeadline(one)).toBe('Delete the visit at X');
+    expect(actionDetails(one)).toEqual(['Tue 17 Nov, 06:00-08:00', 'Booked: Sam', "This can't be undone - its tasks and check-ins are deleted too."]);
+    const many = { ...one, scope: 'later', count: 8, lastAt: '2026-12-04T06:00:00Z', staffNames: [] };
+    expect(actionHeadline(many)).toBe('Delete 8 visits at X');
+    expect(actionDetails(many)[0]).toBe('Tue 17 Nov to Fri 4 Dec');
+    expect(actionDetails(many)[1]).toBe('No one is booked on it.');
+  });
+
+  it('caps a delete at 30 visits', () => {
+    expect(MAX_DELETE).toBe(30);
+    expect(ROTA_ACTION_TYPES).toContain('delete_job');
+  });
+
   it('describes a change to this and every later visit', () => {
     const a = { type: 'move_job', scope: 'later', site: 'X', fromStart: '2026-11-17T06:00:00Z', fromDuration: 120, start: '2026-11-17T07:00:00Z', duration_minutes: 120, count: 12, lastAt: '2027-02-02T07:00:00Z', inSeries: true };
     expect(actionHeadline(a)).toBe('Change the time of the repeating visits at X');
@@ -84,10 +99,10 @@ describe('action cards', () => {
     expect(props.industry.anyOf[0].enum).toContain('Office / Commercial');
   });
 
-  it('offers only the supported change types, and nothing that deletes', () => {
+  it('offers only the supported change types, and the only delete is of visits', () => {
     const propose = ROTA_TOOLS.find((t) => t.name === 'propose_changes');
     expect(propose.input_schema.properties.changes.items.properties.type.enum).toEqual(ROTA_ACTION_TYPES);
-    expect(ROTA_ACTION_TYPES.some((t) => /delete/.test(t))).toBe(false);
+    expect(ROTA_ACTION_TYPES.filter((t) => /delete/.test(t))).toEqual(['delete_job']);
   });
 });
 

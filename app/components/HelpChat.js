@@ -7,6 +7,7 @@ import { MessageCircleQuestion, X, Send, Check, AlertTriangle, RotateCcw } from 
 import { supabase } from '../../lib/supabaseClient';
 import { parseAnswer } from '../../lib/helpChat';
 import { runRotaAction } from '../../lib/rotaActions';
+import { useConfirm } from './ConfirmProvider';
 
 // "Ask WorkFleet" - the chat in the corner of every office page. Ask how to
 // do something and it explains, with links. Ask it to change the rota and
@@ -71,6 +72,18 @@ function Answer({ text, onNavigate }) {
 
 function ActionCard({ card, waiting, onConfirm, onDismiss }) {
   const [busy, setBusy] = useState(false);
+  const confirm = useConfirm();
+  // Deleting asks a second time, as the Rota page does.
+  const go = async () => {
+    if (card.danger) {
+      const sure = await confirm(
+        `${card.headline}? ${card.count === 1 ? 'This visit, its tasks and any check-ins' : `These ${card.count} visits, their tasks and any check-ins`} will be deleted for good. This cannot be undone.`,
+        { title: 'Delete for good?', danger: true, confirmLabel: card.count === 1 ? 'Yes, delete it' : `Yes, delete ${card.count}` },
+      );
+      if (!sure) return;
+    }
+    setBusy(true); await onConfirm(); setBusy(false);
+  };
   if (card.error) {
     return (
       <div className="help-card is-error">
@@ -83,7 +96,7 @@ function ActionCard({ card, waiting, onConfirm, onDismiss }) {
   const failed = card.state === 'failed';
   const dismissed = card.state === 'dismissed';
   return (
-    <div className={`help-card${done ? ' is-done' : ''}${dismissed ? ' is-dismissed' : ''}`}>
+    <div className={`help-card${done ? ' is-done' : ''}${dismissed ? ' is-dismissed' : ''}${card.danger && !done ? ' is-danger' : ''}`}>
       <p className="help-card-title">{card.headline}</p>
       {card.details.map((d, i) => <p key={i} className="help-card-line">{d}</p>)}
       {card.warnings?.length > 0 && !done && (
@@ -95,8 +108,8 @@ function ActionCard({ card, waiting, onConfirm, onDismiss }) {
       {!done && !dismissed && waiting && <p className="help-card-line"><em>{waiting}</em></p>}
       {!done && !dismissed && (
         <div className="help-card-actions">
-          <button type="button" className="btn-primary" disabled={busy || Boolean(waiting)} onClick={async () => { setBusy(true); await onConfirm(); setBusy(false); }}>
-            {busy ? 'Doing it...' : failed ? 'Try again' : 'Confirm'}
+          <button type="button" className={card.danger ? 'btn-primary help-delete' : 'btn-primary'} disabled={busy || Boolean(waiting)} onClick={go}>
+            {busy ? 'Doing it...' : failed ? 'Try again' : card.danger ? 'Delete' : 'Confirm'}
           </button>
           <button type="button" className="btn-secondary" disabled={busy} onClick={onDismiss}>No thanks</button>
         </div>
