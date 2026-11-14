@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Download, Folder, Package, KeyRound, LifeBuoy, Banknote, Video, Bell, HardHat, Menu, X, Receipt, Megaphone, Search } from 'lucide-react';
+import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Download, Folder, Package, KeyRound, LifeBuoy, Banknote, Video, Bell, HardHat, Menu, X, Receipt, Megaphone, Search, BarChart3 } from 'lucide-react';
 import { signOutAndClearPresence } from '../../lib/signOut';
 import { getSessionAndProfile } from '../../lib/authGate';
 import { canSeeInvoices } from '../../lib/invoiceAccess';
@@ -19,7 +19,7 @@ import SearchPalette, { openSearch } from '../components/SearchPalette';
 // Which placeholder shape the page is about to fill, so the shell's first
 // frame already looks like the page that follows.
 function skeletonFor(pathname) {
-  if (pathname === '/admin') return 'dashboard';
+  if (pathname === '/admin' || pathname === '/admin/insights') return 'dashboard';
   if (/^\/admin\/(clients|cleaners)\/[^/]+$/.test(pathname)) return 'detail';
   if (/^\/admin\/(payroll|invoices|audit|data-reports|quotes\/history|rota\/history)$/.test(pathname)) return 'table';
   return 'list';
@@ -73,6 +73,8 @@ const NAV_ITEMS = [
   { href: '/admin/keys', label: 'Key register', icon: KeyRound, group: 'Records' },
   // Injury details are health data: admins only since 0131.
   { href: '/admin/incidents', label: 'Accidents and incidents', icon: HardHat, adminOnly: true, group: 'Records' },
+  // Built from everyone's hours, so admin-only like Payroll.
+  { href: '/admin/insights', label: 'Insights', icon: BarChart3, adminOnly: true, group: 'Records' },
   { href: '/admin/reports', label: 'Reports', icon: FileText, group: 'Records' },
   { href: '/admin/data-reports', label: 'Data reports', icon: Download, group: 'Records' },
 

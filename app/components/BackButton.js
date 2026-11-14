@@ -14,7 +14,7 @@ const MENU_PAGES = new Set([
   '/admin/tasks', '/admin/requests', '/admin/clients', '/admin/quotes', '/admin/invoices',
   '/admin/cleaners', '/admin/onboarding', '/admin/payroll', '/admin/training',
   '/admin/templates', '/admin/documents', '/admin/inventory', '/admin/keys',
-  '/admin/incidents', '/admin/reports', '/admin/data-reports', '/admin/help',
+  '/admin/incidents', '/admin/insights', '/admin/reports', '/admin/data-reports', '/admin/help',
   '/cleaner', '/cleaner/rota', '/cleaner/messages', '/cleaner/profile',
   '/cleaner/policies', '/cleaner/settings',
   '/client', '/client/history', '/client/reports', '/client/documents',
