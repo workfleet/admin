@@ -5724,3 +5724,15 @@ a.btn-compact {
 .help-card.is-danger { border-color: #F2B8C0; background: #FFF7F8; }
 .help-card .help-delete { background: var(--wf-overdue); border-color: var(--wf-overdue); color: #fff; }
 .help-card .help-delete:hover:not(:disabled) { background: #B5172A; }
+
+/* Project: package the files. */
+.pj-package { margin: 4px 0 12px; padding: 10px 12px; border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--bg); }
+.pj-package .pj-ai-subhead { display: inline-flex; align-items: center; gap: 6px; }
+.pj-package-check select { margin: 0; }
+.pj-package .btn-primary, .pj-package .btn-secondary { width: auto; }
+.pj-package-items { list-style: none; margin: 0; padding: 0; max-height: 280px; overflow-y: auto; }
+.pj-package-items li { display: flex; gap: 6px; align-items: flex-start; padding: 4px 0; font-size: 13px; border-bottom: 1px solid var(--hairline); }
+.pj-package-items li svg { flex: none; margin-top: 3px; }
+.pj-package-items li.is-present svg { color: var(--wf-verified-text); }
+.pj-package-items li.is-missing svg { color: var(--wf-overdue); }
+.pj-package-items li.is-unclear svg { color: #7A5300; }

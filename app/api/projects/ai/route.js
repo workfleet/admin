@@ -6,6 +6,9 @@ import {
   TASKS_SYSTEM,
   TASKS_SCHEMA,
   ASK_SYSTEM,
+  CHECK_SYSTEM,
+  CHECK_SCHEMA,
+  cleanCheck,
   DRAFT_TYPES,
   MAX_DRAFT_FILES,
   projectContext,
@@ -44,7 +47,7 @@ export async function POST(request) {
   let body;
   try { body = await request.json(); } catch { return fail('bad_request', 'Bad request.'); }
   const { project_id: projectId, tool } = body || {};
-  if (!projectId || !['tasks', 'draft', 'ask'].includes(tool)) return fail('bad_request', 'Bad request.');
+  if (!projectId || !['tasks', 'draft', 'ask', 'check'].includes(tool)) return fail('bad_request', 'Bad request.');
 
   const { data: project } = await supabaseAdmin
     .from('projects')
@@ -119,6 +122,42 @@ export async function POST(request) {
       const result = cleanTaskSuggestions(raw, (tasks || []).map((t) => t.title));
       await log(`AI read ${file.name} and suggested ${plural(result.tasks.length, 'task')} and ${plural(result.dates.length, 'date')}`);
       return NextResponse.json({ ok: true, file_name: file.name, ...result });
+    }
+
+    if (tool === 'check') {
+      const { data: fileRows } = await supabaseAdmin.from('project_files').select('id, file_name').eq('project_id', projectId).order('created_at');
+      const names = (fileRows || []).map((f) => f.file_name);
+      if (!names.length) return fail('bad_request', 'There are no files on this project yet.');
+      let reqBlock = null;
+      let reqName = null;
+      if (body.requirements_file_id) {
+        const file = await loadProjectFile(projectId, body.requirements_file_id);
+        if (file.error) return fail('unreadable', file.error);
+        reqBlock = file.block;
+        reqName = file.name;
+      }
+      const message = await client.beta.messages.create({
+        model: AI_MODEL,
+        max_tokens: 16000,
+        betas: [FALLBACK_BETA],
+        fallbacks: 'default',
+        output_config: { effort: 'low', format: { type: 'json_schema', schema: CHECK_SCHEMA } },
+        system: CHECK_SYSTEM,
+        messages: [{
+          role: 'user',
+          content: [
+            ...(reqBlock ? [reqBlock] : []),
+            { type: 'text', text: `Project details:\n${context}\n\nFiles uploaded to the project (names only):\n${names.map((n) => `- ${n}`).join('\n')}\n\n${reqName ? `Check them against the requirements document "${reqName}".` : 'There is no requirements document - check them against the project\'s tasks.'}` },
+          ],
+        }],
+      });
+      if (message.stop_reason === 'refusal') return fail('refused', 'The AI declined this check.', 422);
+      let raw;
+      try { raw = JSON.parse(textOf(message)); } catch { return fail('bad_output', 'The check couldn\'t be read. Please try again.', 502); }
+      const result = cleanCheck(raw, names);
+      const missing = result.items.filter((i) => i.status === 'missing').length;
+      await log(`AI checked the files before packaging${reqName ? ` against ${reqName}` : ''}: ${plural(missing, 'item')} missing`);
+      return NextResponse.json({ ok: true, ...result });
     }
 
     if (tool === 'ask') {

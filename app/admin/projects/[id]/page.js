@@ -29,6 +29,7 @@ import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 import BackButton from '../../../components/BackButton';
 import ProjectAiTools from '../../../components/ProjectAiTools';
+import ProjectPackage from '../../../components/ProjectPackage';
 
 const BUCKET = 'project-files';
 const PROJECT_SELECT = 'id, name, kind, status, outcome, description, client_id, property_id, owner_id, start_date, due_date, created_at, completed_at, clients(name), properties(address)';
@@ -96,6 +97,7 @@ export default function ProjectPage() {
   const [uploading, setUploading] = useState(false);
   // null = the AI switch column isn't there yet (0138 not run).
   const [aiEnabled, setAiEnabled] = useState(null);
+  const [packaging, setPackaging] = useState(false);
 
   const today = localDateString(new Date());
   useDocumentTitle(project?.name || 'Project');
@@ -747,11 +749,26 @@ export default function ProjectPage() {
           <div className="card" style={{ marginBottom: 16 }}>
             <div className="pj-section-head">
               <h2>Files</h2>
-              <label className={`btn-secondary pj-upload${uploading ? ' is-busy' : ''}`}>
-                {uploading ? 'Uploading...' : 'Upload'}
-                <input type="file" multiple onChange={uploadFiles} disabled={uploading} hidden />
-              </label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {files.length > 0 && !packaging && (
+                  <button type="button" className="btn-secondary" onClick={() => setPackaging(true)} title="Download every file as one zip, with a contents sheet">Package</button>
+                )}
+                <label className={`btn-secondary pj-upload${uploading ? ' is-busy' : ''}`}>
+                  {uploading ? 'Uploading...' : 'Upload'}
+                  <input type="file" multiple onChange={uploadFiles} disabled={uploading} hidden />
+                </label>
+              </div>
             </div>
+            {packaging && files.length > 0 && (
+              <ProjectPackage
+                project={project}
+                files={files}
+                aiEnabled={aiEnabled === true}
+                nameOf={nameOf}
+                onUsed={reloadNotes}
+                onClose={() => setPackaging(false)}
+              />
+            )}
             {files.length === 0 && <p className="pj-muted" style={{ margin: 0 }}>Drafts, the tender pack, pricing, photos - anything for this project.</p>}
             <ul className="pj-files">
               {files.map((f) => (
