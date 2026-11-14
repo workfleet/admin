@@ -1900,7 +1900,9 @@ a.rota-figure:hover b { text-decoration: underline; text-underline-offset: 3px; 
 @media (max-width: 980px) {
   /* One column. The columns dissolve so Needs attention can come straight
      after the figures instead of after the whole schedule. */
-  .dash-layout { display: flex; flex-direction: column; }
+  /* stretch: the desktop grid's align-items: start would otherwise shrink
+     each card to its content in this single column. */
+  .dash-layout { display: flex; flex-direction: column; align-items: stretch; }
   .dash-col { display: contents; }
   .dash-card.is-attention { order: -1; }
 }
