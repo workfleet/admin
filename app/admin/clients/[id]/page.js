@@ -642,6 +642,7 @@ export default function ClientDetail() {
             </button>
             <MoreMenu
               items={[
+                { label: 'Draft a document with AI', onClick: () => router.push(`/admin/assistant?client=${id}`), title: 'Open the AI assistant with this client filled in' },
                 { label: 'Export data', onClick: exportClientData, title: 'Download everything held about this client as a file - use this to answer a data request' },
                 {
                   label: client.relationship_ended_at ? 'Clear end date' : 'Mark relationship ended',

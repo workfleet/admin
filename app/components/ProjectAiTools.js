@@ -1,12 +1,25 @@
 'use client';
 
 import { useState } from 'react';
-import { Sparkles, Copy, X } from 'lucide-react';
+import Link from 'next/link';
+import { Sparkles, Copy, X, Download } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { DRAFT_TYPES, MAX_DRAFT_FILES, readableKind, unreadableReason } from '../../lib/projectAi';
+import { plainText, fileNameFor } from '../../lib/aiDrafting';
+import { companyFromSettings } from '../../lib/companyBranding';
+import DraftPreview from './DraftPreview';
 
-// The AI card on a project page. Two tools, both suggestion-only: nothing
-// is added to the project until someone ticks it or presses Save.
+async function downloadWord(draft, title) {
+  const [{ data }, { downloadDraftDocx }] = await Promise.all([
+    supabase.from('company_settings').select('*').limit(1).maybeSingle(),
+    import('../../lib/draftDocx'),
+  ]);
+  await downloadDraftDocx(draft, companyFromSettings(data), fileNameFor(title));
+}
+
+// The AI card on a project page. Suggest tasks from a file, ask a
+// question, get a summary, or draft something - all suggestion-only:
+// nothing is added to the project until someone ticks it or presses Save.
 //
 // props:
 //   project      - needs id and ai_enabled
@@ -50,6 +63,11 @@ export default function ProjectAiTools({ project, files, onToggleAi, onAddSugges
   const [draftFiles, setDraftFiles] = useState([]);
   const [draft, setDraft] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [change, setChange] = useState('');
+
+  const [question, setQuestion] = useState('');
+  const [askFiles, setAskFiles] = useState([]);
+  const [answer, setAnswer] = useState(null);
 
   const readable = files.filter((f) => readableKind(f.file_name));
 
@@ -67,7 +85,46 @@ export default function ProjectAiTools({ project, files, onToggleAi, onAddSugges
     );
   }
 
-  const close = () => { setMode(null); setError(''); setSuggestions(null); setDraft(null); };
+  const close = () => { setMode(null); setError(''); setSuggestions(null); setDraft(null); setAnswer(null); setChange(''); };
+
+  const runAsk = async (e) => {
+    e?.preventDefault();
+    if (!question.trim()) return;
+    setBusy(true); setError(''); setAnswer(null);
+    const { data, error: err } = await callAi({ project_id: project.id, tool: 'ask', question, file_ids: askFiles });
+    setBusy(false);
+    if (err) { setError(err); return; }
+    setAnswer(data.answer);
+    onUsed?.();
+  };
+
+  // One click: a summary of where the project stands, as a draft.
+  const runSummary = async () => {
+    setMode('draft');
+    setBusy(true); setError(''); setDraft(null);
+    const req = { draft_type: 'status_summary', instruction: 'What is done, what is next, what is late or at risk, and any decisions recorded in the notes.', file_ids: [] };
+    const { data, error: err } = await callAi({ project_id: project.id, tool: 'draft', ...req });
+    setBusy(false);
+    if (err) { setError(err); return; }
+    setDraft({ ...data, req });
+    onUsed?.();
+  };
+
+  const runRevise = async (e) => {
+    e.preventDefault();
+    if (!change.trim() || !draft) return;
+    setBusy(true); setError(''); setCopied(false);
+    const { data, error: err } = await callAi({ project_id: project.id, tool: 'draft', ...draft.req, previous_draft: draft.draft, change_request: change.trim() });
+    setBusy(false);
+    if (err) { setError(err); return; }
+    setDraft({ ...data, req: draft.req });
+    setChange('');
+    onUsed?.();
+  };
+
+  const toggleAskFile = (fid) => setAskFiles((prev) => (
+    prev.includes(fid) ? prev.filter((x) => x !== fid) : prev.length < MAX_DRAFT_FILES ? [...prev, fid] : prev
+  ));
 
   const runTasks = async () => {
     if (!fileId) return;
@@ -98,20 +155,21 @@ export default function ProjectAiTools({ project, files, onToggleAi, onAddSugges
 
   const runDraft = async () => {
     setBusy(true); setError(''); setDraft(null); setCopied(false);
-    const { data, error: err } = await callAi({ project_id: project.id, tool: 'draft', draft_type: draftType, instruction, file_ids: draftFiles });
+    const req = { draft_type: draftType, instruction, file_ids: draftFiles };
+    const { data, error: err } = await callAi({ project_id: project.id, tool: 'draft', ...req });
     setBusy(false);
     if (err) { setError(err); return; }
-    setDraft(data);
+    setDraft({ ...data, req });
     onUsed?.();
   };
 
   const copyDraft = async () => {
-    try { await navigator.clipboard.writeText(draft.draft); setCopied(true); } catch { setCopied(false); }
+    try { await navigator.clipboard.writeText(plainText(draft.draft)); setCopied(true); } catch { setCopied(false); }
   };
 
   const saveDraft = async () => {
     setBusy(true);
-    const ok = await onSaveNote(`AI draft (checked by the office before use):\n\n${draft.draft}`);
+    const ok = await onSaveNote(`AI draft (checked by the office before use): ${draft.title || ''}\n\n${draft.draft}`);
     setBusy(false);
     if (ok) close();
   };
@@ -136,8 +194,13 @@ export default function ProjectAiTools({ project, files, onToggleAi, onAddSugges
           <p className="pj-muted" style={{ margin: '0 0 10px' }}>Suggestions only - nothing is added until you choose it. Every use is noted in the history.</p>
           <div className="pj-ai-choices">
             <button type="button" className="btn-secondary" onClick={() => setMode('tasks')}>Suggest tasks from a file</button>
+            <button type="button" className="btn-secondary" onClick={() => setMode('ask')}>Ask a question</button>
+            <button type="button" className="btn-secondary" onClick={runSummary}>Summarise where it stands</button>
             <button type="button" className="btn-secondary" onClick={() => setMode('draft')}>Draft something</button>
           </div>
+          <p className="pj-muted" style={{ margin: '10px 0 0' }}>
+            Need a letter, policy or advert? <Link href={`/admin/assistant?project=${project.id}`}>Open the AI assistant</Link>
+          </p>
         </>
       )}
 
@@ -217,7 +280,40 @@ export default function ProjectAiTools({ project, files, onToggleAi, onAddSugges
         </div>
       )}
 
-      {mode === 'draft' && !draft && (
+      {mode === 'ask' && (
+        <form onSubmit={runAsk}>
+          <div className="field">
+            <label className="field-label" htmlFor="pj-ai-q">Your question</label>
+            <textarea id="pj-ai-q" rows={2} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="e.g. What did we decide about deep clean pricing? What's still missing for submission?" />
+          </div>
+          {readable.length > 0 && (
+            <div className="field">
+              <span className="field-label">Also read these files (optional, up to {MAX_DRAFT_FILES})</span>
+              <ul className="pj-ai-picks">
+                {readable.map((f) => (
+                  <li key={f.id}>
+                    <label>
+                      <input type="checkbox" checked={askFiles.includes(f.id)} onChange={() => toggleAskFile(f.id)} disabled={!askFiles.includes(f.id) && askFiles.length >= MAX_DRAFT_FILES} />
+                      <span className="pj-task-title">{f.file_name}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <button type="submit" className="btn-primary" disabled={busy || !question.trim()}>{busy ? 'Thinking... (up to a minute)' : 'Ask'}</button>
+          {answer && (
+            <div style={{ marginTop: 12 }}>
+              <p className="pj-ai-badge">AI answer - check it against the notes</p>
+              <p className="pj-ai-answer">{answer}</p>
+            </div>
+          )}
+        </form>
+      )}
+
+      {mode === 'draft' && !draft && busy && <p className="pj-muted">Writing... (up to a minute)</p>}
+
+      {mode === 'draft' && !draft && !busy && (
         <div>
           <div className="field">
             <label className="field-label" htmlFor="pj-ai-type">What kind of writing?</label>
@@ -255,7 +351,7 @@ export default function ProjectAiTools({ project, files, onToggleAi, onAddSugges
       {mode === 'draft' && draft && (
         <div>
           <p className="pj-ai-badge">AI draft - check every fact before you use it</p>
-          <div className="pj-ai-draft">{draft.draft}</div>
+          <DraftPreview body={draft.draft} />
           {draft.truncated && <p className="pj-late" style={{ marginTop: 8 }}>The draft was cut off before the end. Ask for something shorter.</p>}
           {draft.placeholders.length > 0 && (
             <>
@@ -267,8 +363,15 @@ export default function ProjectAiTools({ project, files, onToggleAi, onAddSugges
             <button type="button" className="btn-secondary" onClick={() => setDraft(null)}>Change the request</button>
             <span style={{ flex: 1 }} />
             <button type="button" className="btn-secondary" onClick={copyDraft}><Copy size={14} aria-hidden /> {copied ? 'Copied' : 'Copy'}</button>
+            <button type="button" className="btn-secondary" onClick={() => downloadWord(draft.draft, draft.title).catch(() => setError('Couldn\'t make the Word file.'))}><Download size={14} aria-hidden /> Word</button>
             <button type="button" className="btn-primary" onClick={saveDraft} disabled={busy}>Save as a note</button>
           </div>
+          <form className="ai-revise" onSubmit={runRevise}>
+            <div className="ai-revise-row">
+              <input value={change} onChange={(e) => setChange(e.target.value)} placeholder="Want it different? e.g. shorter, more formal" aria-label="Change to make" />
+              <button type="submit" className="btn-secondary" disabled={busy || !change.trim()}>{busy ? 'Rewriting...' : 'Rewrite'}</button>
+            </div>
+          </form>
         </div>
       )}
 
