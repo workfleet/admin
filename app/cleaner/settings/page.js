@@ -52,7 +52,7 @@ export default function CleanerSettings() {
       <h1>Settings</h1>
 
       <form className="card" onSubmit={changePassword}>
-        <h2>Change Password</h2>
+        <h2>Change password</h2>
         <label>New password</label>
         <input
           type="password"
@@ -69,12 +69,12 @@ export default function CleanerSettings() {
         />
         {error && <p style={{ color: 'var(--wf-overdue)', fontSize: 14 }}>{error}</p>}
         {message && <p style={{ color: 'var(--wf-verified-ink)', fontSize: 14 }}>{message}</p>}
-        <button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Update Password'}</button>
+        <button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Update password'}</button>
       </form>
 
       <div className="card" style={{ marginTop: 12 }}>
         <h2>Account</h2>
-        <button className="btn-secondary" onClick={logout} style={{ marginTop: 8 }} title="Sign out of the app on this device">Log Out</button>
+        <button className="btn-secondary" onClick={logout} style={{ marginTop: 8 }} title="Sign out of the app on this device">Log out</button>
       </div>
     </div>
   );

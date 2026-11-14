@@ -1,5 +1,7 @@
 'use client';
 
+import EmptyState from '../../components/EmptyState';
+import { CheckCircle2 as EmptyIconCheck, Inbox as EmptyIconInbox } from 'lucide-react';
 import { PageSkeleton, SkeletonLines } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -22,6 +24,14 @@ function holidayHoursUsed(cleanerId, timeOffRequests) {
   return timeOffRequests
     .filter((t) => t.cleaner_id === cleanerId && t.type === 'holiday' && t.status === 'approved')
     .reduce((sum, t) => sum + (t.hours || 0), 0);
+}
+
+// Empty Requests lists: "All clear" on the waiting view (pending / open),
+// plainer wording once someone has switched to Decided or All.
+function requestsEmpty(filter) {
+  return filter === 'pending' || filter === 'open'
+    ? { icon: EmptyIconCheck, tone: 'good', title: 'All clear', body: 'Nothing waiting for a decision.' }
+    : { icon: EmptyIconInbox, title: 'Nothing in this list', body: 'Try another filter above.' };
 }
 
 export default function AdminRequests() {
@@ -1204,22 +1214,22 @@ export default function AdminRequests() {
       key: 'staff',
       label: 'Staff',
       tabs: [
-        { key: 'requests', label: 'Kit & Issues', count: openCount },
-        { key: 'timeoff', label: 'Time Off', count: pendingCount },
+        { key: 'requests', label: 'Kit and issues', count: openCount },
+        { key: 'timeoff', label: 'Time off', count: pendingCount },
       ],
     },
     {
       key: 'hours',
       label: 'Hours',
       tabs: [
-        { key: 'extensions', label: 'Time Extensions', count: pendingExtensionCount },
-        { key: 'shortShifts', label: 'Hours to Check', count: shortShifts.length },
+        { key: 'extensions', label: 'Time extensions', count: pendingExtensionCount },
+        { key: 'shortShifts', label: 'Hours to check', count: shortShifts.length },
         // Both halves of the same problem: shifts somebody has asked about,
         // and shifts nobody has. The second kind is the one that reaches pay
         // day unpaid, so it has to be in the count.
-        { key: 'missedClockins', label: 'Missed Clock-ins', count: pendingMissedClockinCount + undecidedMissedCount + partlyMissed.reduce((n, e) => n + e.absent.length, 0) },
-        { key: 'hours', label: 'Amend Hours', title: 'Change what one person is paid for one job - arrived late, left early, one of two never came' },
-        { key: 'absences', label: 'Absence Record', title: 'Every missed shift that has been accounted for, per person' },
+        { key: 'missedClockins', label: 'Missed clock-ins', count: pendingMissedClockinCount + undecidedMissedCount + partlyMissed.reduce((n, e) => n + e.absent.length, 0) },
+        { key: 'hours', label: 'Amend hours', title: 'Change what one person is paid for one job - arrived late, left early, one of two never came' },
+        { key: 'absences', label: 'Absence record', title: 'Every missed shift that has been accounted for, per person' },
       ],
     },
     {
@@ -1227,16 +1237,16 @@ export default function AdminRequests() {
       label: 'Clients',
       tabs: [
         { key: 'reschedules', label: 'Reschedules', count: pendingRescheduleCount },
-        { key: 'clientRequests', label: 'Client Requests', count: openClientRequestCount },
-        { key: 'pauses', label: 'Pause Requests', count: pendingPauseCount },
+        { key: 'clientRequests', label: 'Client requests', count: openClientRequestCount },
+        { key: 'pauses', label: 'Pause requests', count: pendingPauseCount },
       ],
     },
     {
       key: 'sites',
-      label: 'Safety & Sites',
+      label: 'Safety and sites',
       tabs: [
-        { key: 'emergencies', label: 'Emergency Log', count: openEmergencyCount },
-        { key: 'pins', label: 'Property Pins', count: pendingPinCount },
+        { key: 'emergencies', label: 'Emergency log', count: openEmergencyCount },
+        { key: 'pins', label: 'Property pins', count: pendingPinCount },
       ],
     },
   ];
@@ -1296,7 +1306,7 @@ export default function AdminRequests() {
             <button className={`seg-btn${pinFilter === 'all' ? ' is-active' : ''}`} aria-pressed={pinFilter === 'all'} onClick={() => setPinFilter('all')}>All</button>
           </div>
 
-          {filteredPins.length === 0 && <p className="empty-state">Nothing here.</p>}
+          {filteredPins.length === 0 && <EmptyState compact {...requestsEmpty(pinFilter)} />}
 
           <div className="job-list">
             {filteredPins.map((p) => (
@@ -1352,14 +1362,14 @@ export default function AdminRequests() {
             <button className={`seg-btn${filter === 'all' ? ' is-active' : ''}`} aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>All</button>
           </div>
 
-          {filteredRequests.length === 0 && <p className="empty-state">Nothing here.</p>}
+          {filteredRequests.length === 0 && <EmptyState compact {...requestsEmpty(filter)} />}
 
           <div className="job-list">
             {filteredRequests.map((r) => (
               <div key={r.id} className="card job-card" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                   <div>
-                    <h2>{r.type === 'kit_topup' ? 'Kit Top-up' : 'Issue'}</h2>
+                    <h2>{r.type === 'kit_topup' ? 'Kit top-up' : 'Issue'}</h2>
                     <p style={{ fontSize: 14, margin: '4px 0' }}>{r.description}</p>
                     <p className="job-time">
                       {r.profiles?.full_name || 'Unknown cleaner'}
@@ -1379,7 +1389,7 @@ export default function AdminRequests() {
                   {r.status === 'resolved' ? (
                     <button className="btn-secondary" onClick={() => reopen(r.id)} style={{ height: 'fit-content' }}>Reopen</button>
                   ) : (
-                    <button className="btn-secondary" onClick={() => startResolve(r.id)} style={{ height: 'fit-content' }} title="Add a note and close this request off - the cleaner is told what you did">Mark Resolved</button>
+                    <button className="btn-secondary" onClick={() => startResolve(r.id)} style={{ height: 'fit-content' }} title="Add a note and close this request off - the cleaner is told what you did">Mark resolved</button>
                   )}
                 </div>
 
@@ -1396,7 +1406,7 @@ export default function AdminRequests() {
                     />
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button className="btn-secondary" onClick={() => setResolvingId(null)}>Cancel</button>
-                      <button className="btn-primary" onClick={() => confirmResolve(r.id)} title="Save your note and mark this request resolved">Confirm Resolved</button>
+                      <button className="btn-primary" onClick={() => confirmResolve(r.id)} title="Save your note and mark this request resolved">Confirm resolved</button>
                     </div>
                   </div>
                 )}
@@ -1514,7 +1524,7 @@ export default function AdminRequests() {
             </form>
           )}
 
-          {filteredTimeOff.length === 0 && <p className="empty-state">Nothing here.</p>}
+          {filteredTimeOff.length === 0 && <EmptyState compact {...requestsEmpty(timeOffFilter)} />}
 
           <div className="job-list">
             {filteredTimeOff.map((t) => (
@@ -1587,7 +1597,7 @@ export default function AdminRequests() {
             <button className={`seg-btn${extensionFilter === 'all' ? ' is-active' : ''}`} aria-pressed={extensionFilter === 'all'} onClick={() => setExtensionFilter('all')}>All</button>
           </div>
 
-          {filteredExtensions.length === 0 && <p className="empty-state">Nothing here.</p>}
+          {filteredExtensions.length === 0 && <EmptyState compact {...requestsEmpty(extensionFilter)} />}
 
           <div className="job-list">
             {filteredExtensions.map((r) => (
@@ -1623,7 +1633,7 @@ export default function AdminRequests() {
                   {r.status === 'pending' && r.jobs && (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, height: 'fit-content', justifyContent: 'flex-end' }}>
                       <button className="btn-secondary" onClick={() => startDecideExtension(r.id, 'declined')} title="Turn down the extra time asked for on this job">Decline</button>
-                      <button className="btn-secondary" onClick={() => startDecideExtension(r.id, 'alternative_suggested')}>Suggest Alternative</button>
+                      <button className="btn-secondary" onClick={() => startDecideExtension(r.id, 'alternative_suggested')}>Suggest alternative</button>
                       <button className="btn-primary" onClick={() => startDecideExtension(r.id, 'approved')} title="Give this cleaner the extra minutes they asked for">Approve</button>
                     </div>
                   )}
@@ -2143,7 +2153,7 @@ export default function AdminRequests() {
             </>
           )}
 
-          {filteredMissedClockins.length === 0 && <p className="empty-state">Nothing here.</p>}
+          {filteredMissedClockins.length === 0 && <EmptyState compact {...requestsEmpty(missedClockinFilter)} />}
 
           <div className="job-list">
             {filteredMissedClockins.map((c) => {
@@ -2218,8 +2228,8 @@ export default function AdminRequests() {
                       />
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button className="btn-secondary" onClick={() => setDecidingMissedClockinId(null)}>Cancel</button>
-                        <button className="btn-secondary" onClick={() => confirmDecideMissedClockin(c.id, 'declined')} title="Send the decline, along with your note - the shift stays unpaid">Confirm Decline</button>
-                        <button className="btn-primary" onClick={() => confirmDecideMissedClockin(c.id, 'approved')} title="Record the shift as worked and put the hours back">Confirm Approval</button>
+                        <button className="btn-secondary" onClick={() => confirmDecideMissedClockin(c.id, 'declined')} title="Send the decline, along with your note - the shift stays unpaid">Confirm decline</button>
+                        <button className="btn-primary" onClick={() => confirmDecideMissedClockin(c.id, 'approved')} title="Record the shift as worked and put the hours back">Confirm approval</button>
                       </div>
                     </div>
                   )}
@@ -2238,7 +2248,7 @@ export default function AdminRequests() {
             <button className={`seg-btn${rescheduleFilter === 'all' ? ' is-active' : ''}`} aria-pressed={rescheduleFilter === 'all'} onClick={() => setRescheduleFilter('all')}>All</button>
           </div>
 
-          {filteredReschedules.length === 0 && <p className="empty-state">Nothing here.</p>}
+          {filteredReschedules.length === 0 && <EmptyState compact {...requestsEmpty(rescheduleFilter)} />}
 
           <div className="job-list">
             {filteredReschedules.map((r) => {
@@ -2290,8 +2300,8 @@ export default function AdminRequests() {
                       />
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button className="btn-secondary" onClick={() => setDecidingRescheduleId(null)}>Cancel</button>
-                        <button className="btn-secondary" onClick={() => confirmDecideReschedule(r.id, 'declined')} title="Send the decline, along with your note">Confirm Decline</button>
-                        <button className="btn-primary" onClick={() => confirmDecideReschedule(r.id, 'approved')} title="Move the job to the date and time the client asked for">Confirm Approval</button>
+                        <button className="btn-secondary" onClick={() => confirmDecideReschedule(r.id, 'declined')} title="Send the decline, along with your note">Confirm decline</button>
+                        <button className="btn-primary" onClick={() => confirmDecideReschedule(r.id, 'approved')} title="Move the job to the date and time the client asked for">Confirm approval</button>
                       </div>
                     </div>
                   )}
@@ -2310,7 +2320,7 @@ export default function AdminRequests() {
             <button className={`seg-btn${clientRequestFilter === 'all' ? ' is-active' : ''}`} aria-pressed={clientRequestFilter === 'all'} onClick={() => setClientRequestFilter('all')}>All</button>
           </div>
 
-          {filteredClientRequests.length === 0 && <p className="empty-state">Nothing here.</p>}
+          {filteredClientRequests.length === 0 && <EmptyState compact {...requestsEmpty(clientRequestFilter)} />}
 
           <div className="job-list">
             {filteredClientRequests.map((r) => (
@@ -2333,7 +2343,7 @@ export default function AdminRequests() {
                   {r.status === 'resolved' ? (
                     <button className="btn-secondary" onClick={() => reopenClientRequest(r.id)} style={{ height: 'fit-content' }}>Reopen</button>
                   ) : (
-                    <button className="btn-secondary" onClick={() => startResolveClientRequest(r.id)} style={{ height: 'fit-content' }} title="Add a note and close this client request off - the client sees the note">Mark Resolved</button>
+                    <button className="btn-secondary" onClick={() => startResolveClientRequest(r.id)} style={{ height: 'fit-content' }} title="Add a note and close this client request off - the client sees the note">Mark resolved</button>
                   )}
                 </div>
 
@@ -2350,7 +2360,7 @@ export default function AdminRequests() {
                     />
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button className="btn-secondary" onClick={() => setResolvingClientRequestId(null)}>Cancel</button>
-                      <button className="btn-primary" onClick={() => confirmResolveClientRequest(r.id)} title="Save your note and mark this request resolved">Confirm Resolved</button>
+                      <button className="btn-primary" onClick={() => confirmResolveClientRequest(r.id)} title="Save your note and mark this request resolved">Confirm resolved</button>
                     </div>
                   </div>
                 )}
@@ -2368,7 +2378,7 @@ export default function AdminRequests() {
             <button className={`seg-btn${pauseFilter === 'all' ? ' is-active' : ''}`} aria-pressed={pauseFilter === 'all'} onClick={() => setPauseFilter('all')}>All</button>
           </div>
 
-          {filteredPauses.length === 0 && <p className="empty-state">Nothing here.</p>}
+          {filteredPauses.length === 0 && <EmptyState compact {...requestsEmpty(pauseFilter)} />}
 
           <div className="job-list">
             {filteredPauses.map((p) => (
@@ -2412,8 +2422,8 @@ export default function AdminRequests() {
                     />
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button className="btn-secondary" onClick={() => setDecidingPauseId(null)}>Cancel</button>
-                      <button className="btn-secondary" onClick={() => confirmDecidePause(p.id, 'declined')} title="Send the decline, along with your note">Confirm Decline</button>
-                      <button className="btn-primary" onClick={() => confirmDecidePause(p.id, 'approved')} title="Approve the pause - existing jobs in that period are not cancelled for you, check the rota">Confirm Approval</button>
+                      <button className="btn-secondary" onClick={() => confirmDecidePause(p.id, 'declined')} title="Send the decline, along with your note">Confirm decline</button>
+                      <button className="btn-primary" onClick={() => confirmDecidePause(p.id, 'approved')} title="Approve the pause - existing jobs in that period are not cancelled for you, check the rota">Confirm approval</button>
                     </div>
                   </div>
                 )}
@@ -2431,7 +2441,7 @@ export default function AdminRequests() {
             <button className={`seg-btn${emergencyFilter === 'all' ? ' is-active' : ''}`} aria-pressed={emergencyFilter === 'all'} onClick={() => setEmergencyFilter('all')}>All</button>
           </div>
 
-          {filteredEmergencies.length === 0 && <p className="empty-state">Nothing here.</p>}
+          {filteredEmergencies.length === 0 && <EmptyState compact {...requestsEmpty(emergencyFilter)} />}
 
           <div className="job-list">
             {filteredEmergencies.map((e) => (
@@ -2453,7 +2463,7 @@ export default function AdminRequests() {
                         className="btn-secondary"
                         onClick={() => window.open(`/emergency-location/${e.id}`, `emergency-location-${e.id}`, 'width=420,height=560,noopener')}
                       >
-                        View Location
+                        View location
                       </button>
                     )}
                     {e.status === 'open' && (

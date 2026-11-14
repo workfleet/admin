@@ -7,7 +7,7 @@ export default function NotFound() {
       <h1>Page not found</h1>
       <p className="login-subtitle">That page doesn't exist, or you don't have access to it.</p>
       <Link href="/" style={{ marginTop: 8 }}>
-        <button type="button">Back to Home</button>
+        <button type="button">Back to home</button>
       </Link>
     </div>
   );

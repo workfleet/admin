@@ -1,5 +1,6 @@
 'use client';
 
+import EmptyState from '../../components/EmptyState';
 import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -137,18 +138,18 @@ export default function AdminTasks() {
       <BackButton />
       <div className="page-header-row">
         <div>
-          <h1>Team Tasks</h1>
+          <h1>Team tasks</h1>
           <p className="page-subtitle">Internal work assigned between admins and supervisors — your own list first, everyone else's below</p>
         </div>
         <button className="btn-primary" onClick={() => setShowForm((s) => !s)} title="Add a task for the team to pick up">
-          {showForm ? 'Cancel' : '+ New Task'}
+          {showForm ? 'Cancel' : '+ New task'}
         </button>
       </div>
 
       {showForm && (
         <div className="card job-form-card">
           <div className="job-form-header">
-            <h2>New Task</h2>
+            <h2>New task</h2>
             <button className="job-form-close" type="button" onClick={() => setShowForm(false)}>×</button>
           </div>
           <form onSubmit={createTask}>
@@ -179,7 +180,7 @@ export default function AdminTasks() {
             </div>
             <div className="job-form-actions">
               <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
-              <button type="submit" className="btn-primary" disabled={creating} title="Save this task">{creating ? 'Adding...' : 'Add Task'}</button>
+              <button type="submit" className="btn-primary" disabled={creating} title="Save this task">{creating ? 'Adding...' : 'Add task'}</button>
             </div>
           </form>
         </div>
@@ -197,7 +198,7 @@ export default function AdminTasks() {
             {group.name} <span style={{ color: 'var(--muted)', fontWeight: 500 }}>({group.tasks.length})</span>
           </h2>
 
-          {group.tasks.length === 0 && <p className="empty-state" style={{ padding: '4px 0' }}>Nothing here.</p>}
+          {group.tasks.length === 0 && <p className="empty-state" style={{ padding: '4px 0' }}>{filter === 'open' ? 'No open tasks.' : filter === 'done' ? 'Nothing finished yet.' : 'No tasks.'}</p>}
 
           <div className="job-list">
             {group.tasks.map((task) => (

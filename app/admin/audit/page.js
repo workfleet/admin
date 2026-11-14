@@ -1,5 +1,7 @@
 'use client';
 
+import EmptyState from '../../components/EmptyState';
+import { Search as EmptyIconSearch } from 'lucide-react';
 import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -83,7 +85,7 @@ export default function AuditLog() {
       <BackButton />
       <div className="page-header-row">
         <div>
-          <h1>Change Log</h1>
+          <h1>Change log</h1>
           <p className="page-subtitle">
             Every job, cleaner assignment, series, property and client added, moved or deleted - most recent 1000
           </p>
@@ -108,7 +110,7 @@ export default function AuditLog() {
       {entries.length === 0 && (
         <p className="empty-state">Nothing recorded yet. Changes made from now on will show here.</p>
       )}
-      {entries.length > 0 && filtered.length === 0 && <p className="empty-state">No changes match.</p>}
+      {entries.length > 0 && filtered.length === 0 && <EmptyState compact icon={EmptyIconSearch} title="No matches" body="Try a different search or filter." />}
 
       {filtered.length > 0 && (
         <div className="wf-table-wrap">

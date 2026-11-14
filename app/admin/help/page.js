@@ -16,15 +16,15 @@ const HELP_SECTIONS = [
     body: 'Go to Clients → "+ New Client" to add a client and their first property. Further properties, contact details and call logs can be added from the client\'s own page. Use the Access button on a property to record alarm codes, key safe codes and how to get in - they show on the cleaner\'s job screen once they are assigned there, and are cleared along with the client\'s other details when a relationship is redacted.',
   },
   {
-    title: 'Onboarding a New Cleaner',
+    title: 'Onboarding a new cleaner',
     body: 'Go to Onboarding → "+ New Invite", enter their name and share the generated link with them. They\'ll use it to set a password and fill in their details, ID and contract — once submitted, they\'ll appear in Cleaners.',
   },
   {
-    title: 'Managing Cleaners',
+    title: 'Managing cleaners',
     body: 'The Cleaners page lists everyone with app access. Deactivate a cleaner who\'s left — they won\'t be able to log in until reactivated, but their job history is kept.',
   },
   {
-    title: 'Approving or Declining Time Off',
+    title: 'Approving or declining time off',
     body: 'Go to Requests → Time Off. Review pending requests and Approve or Decline, with an optional note. If approving would leave the cleaner with a job already scheduled during that period, you\'ll see a warning first so you can reassign it.',
   },
   {
@@ -32,11 +32,11 @@ const HELP_SECTIONS = [
     body: 'Open requests also show on your Dashboard To-Do list — tick one off there, or use Mark Resolved on the Requests page with a note explaining what was done. The cleaner will see your note.',
   },
   {
-    title: 'Messaging Clients',
+    title: 'Messaging clients',
     body: 'Go to Messages to see and reply to every client conversation in one place. Clients can also message you directly from their portal, and you\'ll see it there.',
   },
   {
-    title: 'Running Reports',
+    title: 'Running reports',
     body: 'Reports pulls together job history and summaries you can use for reviews or client updates.',
   },
   {
@@ -92,14 +92,14 @@ export default function AdminHelp() {
       ))}
 
       <div className="card" style={{ marginBottom: 12 }}>
-        <h2>Data Retention</h2>
+        <h2>Data retention</h2>
         <p style={{ fontSize: 14, margin: '6px 0 12px', lineHeight: 1.5 }}>
           Runs automatically every night, but you can trigger it manually here. It redacts personal
           details (and deletes any ID document on file) for deactivated staff, and for clients marked
           "relationship ended", once 6 years have passed - per our <Link href="/privacy">Privacy Notice</Link>.
         </p>
         <button className="btn-secondary" onClick={runRetentionSweep} disabled={runningRetention}>
-          {runningRetention ? 'Running...' : 'Run Retention Sweep Now'}
+          {runningRetention ? 'Running...' : 'Run retention sweep now'}
         </button>
       </div>
 

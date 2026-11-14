@@ -100,7 +100,7 @@ export default function PropertyMap({
       />
       {showDirections && (
         <a href={directionsUrl} target="_blank" rel="noreferrer" style={{ display: 'block' }}>
-          <button type="button" style={{ width: '100%' }}>Get Directions</button>
+          <button type="button" style={{ width: '100%' }}>Get directions</button>
         </a>
       )}
     </div>

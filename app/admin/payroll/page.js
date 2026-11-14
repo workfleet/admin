@@ -1,5 +1,7 @@
 'use client';
 
+import EmptyState from '../../components/EmptyState';
+import { Lock as EmptyIconLock } from 'lucide-react';
 import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -601,7 +603,7 @@ export default function AdminPayroll() {
       {/* ---- Closed periods ---- */}
       <h2 style={{ marginTop: 24, marginBottom: 4 }}>Closed periods</h2>
       {periods.length === 0 ? (
-        <p className="empty-state">Nothing closed yet. Once you close a period, what was sent to payroll is kept here.</p>
+        <EmptyState compact icon={EmptyIconLock} title="No closed periods yet" body="Once you close a period, what was sent to payroll is kept here." />
       ) : (
         <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
           Each one is a record of exactly what went out. Download the CSV for QuickBooks.

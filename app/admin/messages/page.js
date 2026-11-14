@@ -1,5 +1,7 @@
 'use client';
 
+import EmptyState from '../../components/EmptyState';
+import { MessageCircle as EmptyIconMessage } from 'lucide-react';
 import { PageSkeleton, SkeletonLines } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -211,7 +213,7 @@ export default function AdminMessages() {
 
       {mode === 'clients' && (
         <>
-          {clientThreads.length === 0 && <p className="empty-state">No messages yet.</p>}
+          {clientThreads.length === 0 && <EmptyState compact icon={EmptyIconMessage} title="No client messages yet" body="When a client writes in from their portal, the conversation appears here." />}
           <div className="job-list">
             {clientThreads.map((t) => {
               const isOpen = openThreadId === t.id;
@@ -255,7 +257,7 @@ export default function AdminMessages() {
         <>
           <div style={{ marginBottom: 16 }}>
             <button className="btn-secondary" onClick={() => (showDirectory ? setShowDirectory(false) : openDirectory())} title="Start a new conversation with a member of staff">
-              {showDirectory ? 'Cancel' : '+ New Chat'}
+              {showDirectory ? 'Cancel' : '+ New chat'}
             </button>
           </div>
 
@@ -273,7 +275,7 @@ export default function AdminMessages() {
             </div>
           )}
 
-          {conversations.length === 0 && <p className="empty-state">No chats yet.</p>}
+          {conversations.length === 0 && <EmptyState compact icon={EmptyIconMessage} title="No staff chats yet" action={{ label: '+ New chat', onClick: openDirectory }} />}
 
           <div className="job-list">
             {conversations.map((c) => {

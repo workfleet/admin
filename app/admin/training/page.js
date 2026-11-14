@@ -294,7 +294,7 @@ export default function AdminTraining() {
       <BackButton />
       <div className="page-header-row">
         <div>
-          <h1>Training Videos</h1>
+          <h1>Training videos</h1>
           <p className="page-subtitle">
             The how-to videos cleaners see under Help. {liveCount} of {ordered.length} uploaded
             {liveCount < ordered.length && ' - the rest are hidden from cleaners until you add a file'}.

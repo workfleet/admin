@@ -1,5 +1,7 @@
 'use client';
 
+import EmptyState from '../../components/EmptyState';
+import { Calendar as EmptyIconCalendar } from 'lucide-react';
 import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -217,11 +219,11 @@ export default function CleanerRota() {
   return (
     <div className="container">
       <BackButton />
-      <h1>My Rota</h1>
+      <h1>My rota</h1>
 
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ margin: 0 }}>Time Off</h2>
+          <h2 style={{ margin: 0 }}>Time off</h2>
           <button className="btn-secondary" onClick={() => { setShowForm((s) => !s); setForm(emptyForm()); setFormError(''); }} title="Request holiday, or tell the office you are unavailable on certain days">
             {showForm ? 'Cancel' : '+ Request'}
           </button>
@@ -303,7 +305,7 @@ export default function CleanerRota() {
             />
 
             <button type="submit" disabled={submitting} style={{ marginTop: 8 }}>
-              {submitting ? 'Sending...' : 'Submit Request'}
+              {submitting ? 'Sending...' : 'Submit request'}
             </button>
           </form>
         )}
@@ -332,7 +334,7 @@ export default function CleanerRota() {
       {jobs.length === 0 && <p className="empty-state">No jobs scheduled.</p>}
 
       {upcoming.length === 0 && (missed.length > 0 || past.length > 0) && (
-        <p className="empty-state">No current or upcoming jobs.</p>
+        <EmptyState icon={EmptyIconCalendar} title="No upcoming jobs" body="New shifts show here as soon as the office books them." />
       )}
 
       {Object.entries(upcomingGroups).map(([date, dayJobs]) => (

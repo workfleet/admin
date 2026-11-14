@@ -35,10 +35,10 @@ function getMonthRange(monthOffset) {
 
 const PERIODS = {
   all: { label: 'All time', range: () => null },
-  this_week: { label: 'This Week', range: () => getWeekRange(0) },
-  last_week: { label: 'Last Week', range: () => getWeekRange(-1) },
-  this_month: { label: 'This Month', range: () => getMonthRange(0) },
-  last_month: { label: 'Last Month', range: () => getMonthRange(-1) },
+  this_week: { label: 'This week', range: () => getWeekRange(0) },
+  last_week: { label: 'Last week', range: () => getWeekRange(-1) },
+  this_month: { label: 'This month', range: () => getMonthRange(0) },
+  last_month: { label: 'Last month', range: () => getMonthRange(-1) },
 };
 
 async function loadClients() {
@@ -274,7 +274,7 @@ export default function AdminDataReports() {
       <BackButton />
       <div className="page-header-row">
         <div>
-          <h1>Data Reports</h1>
+          <h1>Data reports</h1>
           <p className="page-subtitle">Pull data for clients, staff, hours, jobs, and more</p>
         </div>
         <button className="btn-secondary" onClick={handleDownload} disabled={loading || rows.length === 0} style={{ display: 'flex', alignItems: 'center', gap: 6 }} title="Download the rows below as a spreadsheet file">

@@ -1,6 +1,9 @@
 'use client';
 
+import EmptyState from '../../../components/EmptyState';
+import { Building2 as EmptyIconBuilding, Phone as EmptyIconPhone } from 'lucide-react';
 import { PageSkeleton, SkeletonLines } from '../../../components/Skeleton';
+import MoreMenu from '../../../components/MoreMenu';
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { FileText, Download, Trash2 } from 'lucide-react';
@@ -628,15 +631,23 @@ export default function ClientDetail() {
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="page-header-row" style={{ marginBottom: isEditing ? 12 : 0 }}>
           <h1 style={{ margin: 0 }}>{client.name}</h1>
+          {/* Edit is the everyday action; the rest live under More, with
+              Delete last and in red. */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="btn-secondary" onClick={exportClientData} title="Download everything held about this client as a file - use this to answer a data request">Export Data</button>
-            <button className="btn-secondary" onClick={toggleRelationshipEnded} title="Record that this client has left, which starts the 6 year clock on redacting their contact details - or clear that date again">
-              {client.relationship_ended_at ? 'Clear End Date' : 'Mark Relationship Ended'}
-            </button>
             <button className="btn-secondary" onClick={() => (isEditing ? setIsEditing(false) : startEdit())} title="Edit this client's details">
               {isEditing ? 'Cancel' : 'Edit'}
             </button>
-            <button className="btn-secondary" onClick={deleteClient} title="Delete this client and all their properties - this cannot be undone">Delete</button>
+            <MoreMenu
+              items={[
+                { label: 'Export data', onClick: exportClientData, title: 'Download everything held about this client as a file - use this to answer a data request' },
+                {
+                  label: client.relationship_ended_at ? 'Clear end date' : 'Mark relationship ended',
+                  onClick: toggleRelationshipEnded,
+                  title: 'Record that this client has left, which starts the 6 year clock on redacting their contact details - or clear that date again',
+                },
+                { label: 'Delete client', onClick: deleteClient, danger: true, title: 'Delete this client and all their properties - this cannot be undone' },
+              ]}
+            />
           </div>
         </div>
 
@@ -796,7 +807,7 @@ export default function ClientDetail() {
 
       {tab === 'properties' && (
         <div className="card">
-          {properties.length === 0 && <p className="empty-state">No properties yet.</p>}
+          {properties.length === 0 && <EmptyState compact icon={EmptyIconBuilding} title="No properties yet" body="Add the first site this client wants cleaned." />}
           {properties.map((p) => (
             <div key={p.id} style={{ borderBottom: '1px solid var(--hairline)', padding: '10px 0' }}>
               <div className="task-row" style={{ border: 'none', padding: 0 }}>
@@ -1008,7 +1019,7 @@ export default function ClientDetail() {
               />
               <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                 <button type="button" className="btn-secondary" onClick={() => setIsAddingProperty(false)}>Cancel</button>
-                <button type="submit" className="btn-primary">Add Property</button>
+                <button type="submit" className="btn-primary">Add property</button>
               </div>
             </form>
           ) : (
@@ -1039,11 +1050,11 @@ export default function ClientDetail() {
                 />
               </div>
             </div>
-            <button type="submit" className="btn-primary" style={{ marginTop: 8 }}>Log Call</button>
+            <button type="submit" className="btn-primary" style={{ marginTop: 8 }}>Log call</button>
           </form>
 
           {callLogsLoading && <SkeletonLines />}
-          {!callLogsLoading && (callLogs?.length || 0) === 0 && <p className="empty-state">No calls logged yet.</p>}
+          {!callLogsLoading && (callLogs?.length || 0) === 0 && <EmptyState compact icon={EmptyIconPhone} title="No calls logged yet" />}
 
           {(callLogs || []).map((log) => (
             <div key={log.id} className="task-row">
@@ -1135,7 +1146,7 @@ export default function ClientDetail() {
               />
               <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                 <button type="button" className="btn-secondary" onClick={() => setIsAddingReminder(false)}>Cancel</button>
-                <button type="submit" className="btn-primary">Add Reminder</button>
+                <button type="submit" className="btn-primary">Add reminder</button>
               </div>
             </form>
           ) : (

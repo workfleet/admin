@@ -4052,6 +4052,113 @@ a.btn-compact {
   padding: 8px 10px;
 }
 
+/* ---- Empty states (components/EmptyState.js) ---- */
+.empty-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 36px 20px;
+  border: 1px dashed #D9DCE0;
+  border-radius: var(--radius-card);
+  background: rgba(255, 255, 255, 0.55);
+  margin-bottom: 14px;
+}
+
+.empty-block.is-compact {
+  padding: 20px 16px;
+  border: none;
+  background: transparent;
+  margin-bottom: 0;
+}
+
+.empty-block-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #ECEDEF;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.empty-block.is-compact .empty-block-icon { width: 36px; height: 36px; }
+
+.empty-block.is-good .empty-block-icon {
+  background: var(--wf-verified-bg);
+  color: var(--wf-verified-text);
+}
+
+.empty-block-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.empty-block-body {
+  margin: 0;
+  max-width: 420px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+.empty-block-action { margin-top: 8px; }
+
+/* ---- More menu (components/MoreMenu.js) ---- */
+.more-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.more-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.more-menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 50;
+  min-width: 230px;
+  padding: 4px;
+  background: var(--wf-white);
+  border: 1px solid var(--surface-line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+}
+
+.more-menu-item {
+  background: transparent;
+  color: var(--ink);
+  box-shadow: none;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.more-menu-item:hover:not(:disabled) { background: #F4F5F6; }
+.more-menu-item:disabled { background: transparent; color: #9AA0A6; }
+.more-menu-item.is-danger { color: var(--wf-overdue); }
+.more-menu-item.is-danger:hover:not(:disabled) { background: var(--wf-overdue-bg); }
+
+.more-menu-divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--surface-line);
+}
+
 /* ---- Segmented control ---- */
 .segmented {
   display: inline-flex;

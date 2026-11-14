@@ -1,5 +1,7 @@
 'use client';
 
+import EmptyState from '../../components/EmptyState';
+import { Folder as EmptyIconFolder } from 'lucide-react';
 import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -57,7 +59,7 @@ export default function ClientDocuments() {
         </div>
       </div>
 
-      {documents.length === 0 && <p className="empty-state">Nothing shared with you yet.</p>}
+      {documents.length === 0 && <EmptyState icon={EmptyIconFolder} title="Nothing shared with you yet" body="Reports and documents we send you will appear here." />}
 
       {CATEGORY_ORDER.map((cat) => {
         const docsInCategory = documents.filter((d) => d.category === cat);

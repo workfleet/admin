@@ -1,5 +1,7 @@
 'use client';
 
+import EmptyState from '../../components/EmptyState';
+import { UserPlus as EmptyIconUserPlus } from 'lucide-react';
 import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -212,14 +214,14 @@ export default function AdminOnboarding() {
           onClick={() => { setShowForm((s) => !s); setJustCreatedLink(null); }}
           title={showForm ? 'Close the form' : 'Create an invite link for a new starter to set up their own account'}
         >
-          {showForm ? 'Cancel' : '+ New Invite'}
+          {showForm ? 'Cancel' : '+ New invite'}
         </button>
       </div>
 
       {showForm && (
         <div className="card job-form-card">
           <div className="job-form-header">
-            <h2>New Starter Invite</h2>
+            <h2>New starter invite</h2>
             <button className="job-form-close" type="button" onClick={() => setShowForm(false)}>×</button>
           </div>
           <form onSubmit={createInvite}>
@@ -307,7 +309,7 @@ export default function AdminOnboarding() {
             </div>
             <div className="job-form-actions">
               <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
-              <button type="submit" className="btn-primary" title="Create the invite and email them a link to set up their own account">Send Invite</button>
+              <button type="submit" className="btn-primary" title="Create the invite and email them a link to set up their own account">Send invite</button>
             </div>
           </form>
         </div>
@@ -331,7 +333,7 @@ export default function AdminOnboarding() {
         </div>
       )}
 
-      {invites.length === 0 && <p className="empty-state">No invites sent yet.</p>}
+      {invites.length === 0 && <EmptyState icon={EmptyIconUserPlus} title="No invites sent yet" body="Send a new starter a link to fill in their own details, ID and contract." action={{ label: '+ New invite', onClick: () => { setShowForm(true); setJustCreatedLink(null); } }} />}
 
       <div className="job-list">
         {invites.map((invite) => {
@@ -356,7 +358,7 @@ export default function AdminOnboarding() {
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   {invite.status === 'pending' && !expired && (
-                    <button className="btn-secondary" onClick={() => copyLink(invite.token)} title="Copy this invite link so you can send it to them yourself">Copy Link</button>
+                    <button className="btn-secondary" onClick={() => copyLink(invite.token)} title="Copy this invite link so you can send it to them yourself">Copy link</button>
                   )}
                   {submission && (
                     <button className="btn-secondary" onClick={() => toggleExpand(invite)} title="Show or hide the details they submitted">

@@ -1,5 +1,7 @@
 'use client';
 
+import EmptyState from '../../components/EmptyState';
+import { Folder as EmptyIconFolder } from 'lucide-react';
 import { SkeletonLines } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -24,7 +26,7 @@ const HELP_SECTIONS = [
     body: 'Tap a job on your Home tab to open it. Tap Check In when you arrive to start the job, then tick off each task as you complete it. When you\'re finished, tap Check Out. Once a job is checked out it moves to your job history and becomes read-only, so double-check everything (especially photos) before you check out.',
   },
   {
-    title: 'Taking Job Photos',
+    title: 'Taking job photos',
     body: 'Photos can only be added while a job is in progress — you\'ll see a reminder if a job has none yet. Once you check out, the job becomes read-only and no more photos can be added, so it\'s best to add them as you go rather than leaving it until the end.',
   },
   {
@@ -32,11 +34,11 @@ const HELP_SECTIONS = [
     body: 'The Rota tab shows your upcoming shifts, plus a history of completed jobs with hours worked. Your holiday balance (based on hours you\'ve actually worked) is shown at the top of the page.',
   },
   {
-    title: 'Requesting Time Off',
+    title: 'Requesting time off',
     body: 'From the Rota tab, use the request form to ask for holiday or mark yourself unavailable. Your available balance is shown before you submit — the app won\'t let you request more time off than you\'ve accrued.',
   },
   {
-    title: 'Messaging Admin',
+    title: 'Messaging admin',
     body: 'Use the Messages tab to send the office a message directly — for questions, schedule changes, or anything else. You\'ll see a reply here as soon as admin responds.',
   },
   {
@@ -48,7 +50,7 @@ const HELP_SECTIONS = [
     body: 'Open the job and tap "Ask for cover" as early as you can. The shift is offered to everyone else who’s free, and the office is told straight away. It stays your shift until someone actually takes it, so don’t assume it’s covered until you get the notification saying so.',
   },
   {
-    title: 'Picking Up Extra Shifts',
+    title: 'Picking up extra shifts',
     body: 'Shifts that need cover show on your Home tab. First to tap "I’ll take it" gets it. You won’t be able to take one that clashes with a job you’re already on, or that falls on approved time off.',
   },
   {
@@ -175,7 +177,7 @@ export default function CleanerHelp() {
       {section === 'documents' && (
         <>
           {documents === null && <SkeletonLines />}
-          {documents?.length === 0 && <p className="empty-state">No documents have been shared yet.</p>}
+          {documents?.length === 0 && <EmptyState compact icon={EmptyIconFolder} title="No documents shared yet" />}
           {CATEGORY_ORDER.map((cat) => {
             const docsInCategory = (documents || []).filter((d) => d.category === cat);
             if (docsInCategory.length === 0) return null;

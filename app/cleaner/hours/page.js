@@ -204,7 +204,7 @@ export default function CleanerHours() {
   return (
     <div className="container">
       <BackButton />
-      <h1>My Hours</h1>
+      <h1>My hours</h1>
 
       <div className="card" style={{ textAlign: 'center' }}>
         {/* stat-hours carries the hue, the same as an hours tile on the admin

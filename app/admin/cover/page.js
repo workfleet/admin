@@ -1,5 +1,7 @@
 'use client';
 
+import EmptyState from '../../components/EmptyState';
+import { CheckCircle2 as EmptyIconCheck } from 'lucide-react';
 import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -256,7 +258,7 @@ export default function AdminCover() {
       <BackButton />
       <div className="page-header-row">
         <div>
-          <h1>Shift Cover</h1>
+          <h1>Shift cover</h1>
           <p className="page-subtitle">
             Shifts that need someone — free cleaners can ask for them, and you approve who gets each one
           </p>
@@ -266,7 +268,7 @@ export default function AdminCover() {
           onClick={() => setShowOpenForm((s) => !s)}
           title={showOpenForm ? 'Close the form without opening a request' : 'Offer one of your upcoming shifts out for cover'}
         >
-          {showOpenForm ? 'Cancel' : 'Request Cover'}
+          {showOpenForm ? 'Cancel' : 'Request cover'}
         </button>
       </div>
 
@@ -305,14 +307,14 @@ export default function AdminCover() {
             disabled={saving}
             title="Offer this shift to every free cleaner - they ask for it and you approve one"
           >
-            {saving ? 'Opening...' : 'Open Cover Request'}
+            {saving ? 'Opening...' : 'Open cover request'}
           </button>
         </form>
       )}
 
       <div className="card" style={{ marginBottom: 16 }}>
         <h2>Needs cover ({openOffers.length})</h2>
-        {openOffers.length === 0 && <p className="empty-state">Every shift is covered.</p>}
+        {openOffers.length === 0 && <EmptyState compact tone="good" icon={EmptyIconCheck} title="Every shift is covered" />}
         {openOffers.map((offer) => (
           <div key={offer.id} className="task-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
@@ -465,7 +467,7 @@ export default function AdminCover() {
                   style={{ width: '100%' }}
                   title="Put this cleaner on the shift now and stop offering it to everyone else"
                 >
-                  {saving ? 'Assigning...' : 'Assign & Close Request'}
+                  {saving ? 'Assigning...' : 'Assign and close request'}
                 </button>
               </div>
             )}

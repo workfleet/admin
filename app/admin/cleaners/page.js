@@ -1,5 +1,7 @@
 'use client';
 
+import EmptyState from '../../components/EmptyState';
+import { Users as EmptyIconUsers } from 'lucide-react';
 import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -191,7 +193,7 @@ export default function AdminCleaners() {
             onClick={() => { setShowAddForm((s) => !s); setJustCreated(null); setCreateError(''); }}
             title="Create a staff account directly, without sending an onboarding invite"
           >
-            {showAddForm ? 'Cancel' : '+ Add Staff'}
+            {showAddForm ? 'Cancel' : '+ Add staff'}
           </button>
         </div>
       </div>
@@ -199,7 +201,7 @@ export default function AdminCleaners() {
       {showAddForm && (
         <div className="card job-form-card">
           <div className="job-form-header">
-            <h2>Add Staff</h2>
+            <h2>Add staff</h2>
             <button className="job-form-close" type="button" onClick={() => setShowAddForm(false)}>×</button>
           </div>
           <form onSubmit={createCleaner}>
@@ -245,7 +247,7 @@ export default function AdminCleaners() {
             {createError && <p style={{ color: 'var(--wf-overdue)', fontSize: 14, margin: '0 0 10px' }}>{createError}</p>}
             <div className="job-form-actions">
               <button type="button" className="btn-secondary" onClick={() => setShowAddForm(false)}>Cancel</button>
-              <button type="submit" className="btn-primary" disabled={creating}>{creating ? 'Adding...' : 'Add Staff'}</button>
+              <button type="submit" className="btn-primary" disabled={creating}>{creating ? 'Adding...' : 'Add staff'}</button>
             </div>
           </form>
         </div>
@@ -266,7 +268,7 @@ export default function AdminCleaners() {
         Add staff directly above, or send an onboarding invite from the Onboarding page for a new cleaner to fill in their own details, ID, and contract.
       </p>
 
-      {cleaners.length === 0 && <p className="empty-state">No staff yet.</p>}
+      {cleaners.length === 0 && <EmptyState icon={EmptyIconUsers} title="No staff yet" body="Add someone directly, or send a new starter an onboarding invite." action={{ label: '+ Add staff', onClick: () => { setShowAddForm(true); setJustCreated(null); setCreateError(''); } }} />}
 
       {showFormer && former.length > 0 && (
         <p className="empty-state" style={{ marginTop: 0 }}>

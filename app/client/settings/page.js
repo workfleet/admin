@@ -118,7 +118,7 @@ export default function ClientSettings() {
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
-        <h2>Your Details</h2>
+        <h2>Your details</h2>
         <form onSubmit={saveDetails}>
           <label>Contact name</label>
           <input value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="e.g. Jane Smith" />
@@ -133,14 +133,14 @@ export default function ClientSettings() {
           <input value={billingAddress} onChange={(e) => setBillingAddress(e.target.value)} placeholder="Billing address" />
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-            <button type="submit" disabled={savingDetails}>{savingDetails ? 'Saving...' : 'Save Details'}</button>
+            <button type="submit" disabled={savingDetails}>{savingDetails ? 'Saving...' : 'Save details'}</button>
             {detailsSaved && <span style={{ fontSize: 13, color: 'var(--wf-verified-ink)' }}>Saved</span>}
           </div>
         </form>
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
-        <h2>Visit Alerts</h2>
+        <h2>Visit alerts</h2>
         <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', fontSize: 14 }}>
           <input
             type="checkbox"
@@ -160,7 +160,7 @@ export default function ClientSettings() {
       </div>
 
       <div className="card">
-        <h2>Property Access Notes</h2>
+        <h2>Property access notes</h2>
         <p style={{ fontSize: 13.5, color: 'var(--muted)', margin: '0 0 12px' }}>
           Alarm codes, key safe codes, or anything your cleaner needs to know to get in. This is shared with our office and whoever is assigned to clean each property.
         </p>

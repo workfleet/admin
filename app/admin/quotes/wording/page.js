@@ -126,7 +126,7 @@ export default function QuoteWording() {
       <BackButton />
       <div className="page-header-row">
         <div>
-          <h1>Quote Wording</h1>
+          <h1>Quote wording</h1>
           <p className="page-subtitle">
             {counts.total} sections{counts.off > 0 ? `, ${counts.off} switched off` : ''} — changes apply to quotes generated from now on
           </p>
@@ -234,7 +234,7 @@ export default function QuoteWording() {
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--hairline)' }}>
                   <button className="btn-secondary" onClick={() => revert(section)}>Discard</button>
                   <button className="btn-primary" onClick={() => save(section)} disabled={savingKey === section.id}>
-                    {savingKey === section.id ? 'Saving...' : 'Save Section'}
+                    {savingKey === section.id ? 'Saving...' : 'Save section'}
                   </button>
                 </div>
               )}

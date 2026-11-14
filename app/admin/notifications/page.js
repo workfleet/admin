@@ -1,5 +1,7 @@
 'use client';
 
+import EmptyState from '../../components/EmptyState';
+import { Bell as EmptyIconBell } from 'lucide-react';
 import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -73,7 +75,7 @@ export default function AdminNotifications() {
       </div>
 
       {notifications.length === 0 && (
-        <p className="empty-state">Nothing yet. Requests, messages, dropped shifts and claims will show up here as they happen.</p>
+        <EmptyState icon={EmptyIconBell} title="No notifications yet" body="Requests, messages, dropped shifts and claims will show up here as they happen." />
       )}
 
       {notifications.map((n) => (

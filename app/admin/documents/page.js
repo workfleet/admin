@@ -1,5 +1,7 @@
 'use client';
 
+import EmptyState from '../../components/EmptyState';
+import { Folder as EmptyIconFolder } from 'lucide-react';
 import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -236,7 +238,7 @@ export default function AdminDocuments() {
         {uploading && <p style={{ fontSize: 13, color: 'var(--muted)', margin: '8px 0 0' }}>Uploading...</p>}
       </div>
 
-      {documents.length === 0 && <p className="empty-state">No documents uploaded yet.</p>}
+      {documents.length === 0 && <EmptyState icon={EmptyIconFolder} title="No documents uploaded yet" body="Policies, handbooks and forms you upload here can be shared with staff." />}
 
       {CATEGORY_ORDER.map((cat) => {
         const docsInCategory = documents.filter((d) => d.category === cat);

@@ -1,5 +1,7 @@
 'use client';
 
+import EmptyState from '../components/EmptyState';
+import { CheckCircle2 as EmptyIconCheck } from 'lucide-react';
 import { PageSkeleton } from '../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -112,10 +114,10 @@ function getMonthRange(monthOffset) {
 }
 
 const PAYROLL_PERIODS = {
-  this_week: { label: 'This Week', range: () => getWeekRange(0) },
-  last_week: { label: 'Last Week', range: () => getWeekRange(-1) },
-  this_month: { label: 'This Month', range: () => getMonthRange(0) },
-  last_month: { label: 'Last Month', range: () => getMonthRange(-1) },
+  this_week: { label: 'This week', range: () => getWeekRange(0) },
+  last_week: { label: 'Last week', range: () => getWeekRange(-1) },
+  this_month: { label: 'This month', range: () => getMonthRange(0) },
+  last_month: { label: 'Last month', range: () => getMonthRange(-1) },
 };
 
 function HoursRing({ completedHours, totalHours }) {
@@ -910,7 +912,7 @@ export default function AdminDashboard() {
               <h2>Needs attention</h2>
               {attention.length > 0 && <span className="dash-card-note">Most urgent first</span>}
             </div>
-            {attention.length === 0 && <p className="empty-state">Nothing needs attention right now.</p>}
+            {attention.length === 0 && <EmptyState compact tone="good" icon={EmptyIconCheck} title="Nothing needs attention right now" />}
             {attention.slice(0, 6).map((item) => {
               const tone = attentionTone(item);
               const icon = <span className={`dash-att-icon ${tone}`}>{attentionIcon(item)}</span>;
@@ -1063,7 +1065,7 @@ export default function AdminDashboard() {
                 onClick={() => { completeTodo(detailItem.rawId); setDetailItem(null); }}
                 title="Tick this off your to-do list"
               >
-                Mark Resolved
+                Mark resolved
               </button>
             </div>
           </div>

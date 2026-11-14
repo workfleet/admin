@@ -58,7 +58,7 @@ export default function EmergencyLocationPage() {
     <div style={{ padding: 16, fontFamily: 'inherit' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#dc2626', marginBottom: 4 }}>
         <Siren size={20} />
-        <h1 style={{ fontSize: 18, margin: 0 }}>Emergency Alert</h1>
+        <h1 style={{ fontSize: 18, margin: 0 }}>Emergency alert</h1>
       </div>
       <p style={{ fontSize: 14, margin: '0 0 4px' }}>
         <strong>{alert.profiles?.full_name || 'Unknown cleaner'}</strong>

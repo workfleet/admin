@@ -1,5 +1,7 @@
 'use client';
 
+import EmptyState from '../../../components/EmptyState';
+import { Search as EmptyIconSearch } from 'lucide-react';
 import { PageSkeleton } from '../../../components/Skeleton';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -56,7 +58,7 @@ export default function QuoteHistory() {
       <BackButton />
       <div className="page-header-row">
         <div>
-          <h1>Quote History</h1>
+          <h1>Quote history</h1>
           <p className="page-subtitle">{quotes.length} quote{quotes.length === 1 ? '' : 's'} logged, oldest to newest</p>
         </div>
       </div>
@@ -76,7 +78,7 @@ export default function QuoteHistory() {
         </select>
       </div>
 
-      {filtered.length === 0 && <p className="empty-state">No quotes match.</p>}
+      {filtered.length === 0 && <EmptyState compact icon={EmptyIconSearch} title="No matches" body="Try a different search or filter." />}
 
       <div className="wf-table-wrap">
         <table className="wf-table">

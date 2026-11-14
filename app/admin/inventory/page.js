@@ -1,5 +1,7 @@
 'use client';
 
+import EmptyState from '../../components/EmptyState';
+import { Package as EmptyIconPackage } from 'lucide-react';
 import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -276,7 +278,7 @@ export default function AdminInventory() {
             </div>
             <div className="job-form-actions">
               <button type="button" className="btn-secondary" onClick={() => setShowAddForm(false)}>Cancel</button>
-              <button type="submit" className="btn-primary" title="Save this product to the inventory">Add Product</button>
+              <button type="submit" className="btn-primary" title="Save this product to the inventory">Add product</button>
             </div>
           </form>
         </div>
@@ -288,7 +290,7 @@ export default function AdminInventory() {
         </p>
       )}
 
-      {products.length === 0 && <p className="empty-state">No products tracked yet - add one to get started.</p>}
+      {products.length === 0 && <EmptyState icon={EmptyIconPackage} title="No products tracked yet" body="Add the supplies you stock to keep an eye on what is running low." action={{ label: 'Add product', onClick: () => setShowAddForm(true) }} />}
 
       {products.length > 0 && (
         <div className="card" style={{ marginBottom: 16 }}>
@@ -299,7 +301,7 @@ export default function AdminInventory() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {shoppingListItems.length > 0 && (shoppingListOpen ? <ChevronUp size={18} color="var(--muted)" /> : <ChevronDown size={18} color="var(--muted)" />)}
               <div>
-                <h2 style={{ margin: 0 }}>Shopping List</h2>
+                <h2 style={{ margin: 0 }}>Shopping list</h2>
                 <p style={{ fontSize: 13, color: 'var(--muted)', margin: '2px 0 0' }}>
                   {shoppingListItems.length === 0 ? 'Nothing needs reordering right now.' : `${shoppingListItems.length} item${shoppingListItems.length === 1 ? '' : 's'} below reorder level`}
                 </p>

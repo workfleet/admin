@@ -221,7 +221,7 @@ export default function AdminReports() {
                   {report && <span className="badge completed" style={{ marginLeft: 6 }}>report ready</span>}
                 </div>
                 <button className="btn-secondary" onClick={() => toggleExpand(job)} title="Show or hide the report and notes for this job">
-                  {isExpanded ? 'Close' : report ? 'View Report' : 'Generate Report'}
+                  {isExpanded ? 'Close' : report ? 'View report' : 'Generate report'}
                 </button>
               </div>
 
@@ -326,7 +326,7 @@ export default function AdminReports() {
                         style={{ flex: 1 }}
                         title="Write a report from your notes and the job's photos"
                       >
-                        {generating ? 'Generating...' : report ? 'Regenerate Report' : 'Generate Report'}
+                        {generating ? 'Generating...' : report ? 'Regenerate report' : 'Generate report'}
                       </button>
                     </div>
                     {error && <p style={{ color: 'var(--wf-overdue)', fontSize: 13, marginTop: 8 }}>{error}</p>}

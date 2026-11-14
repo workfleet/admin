@@ -1,5 +1,7 @@
 'use client';
 
+import EmptyState from '../../components/EmptyState';
+import { KeyRound as EmptyIconKeyRound, CheckCircle2 as EmptyIconCheck } from 'lucide-react';
 import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -216,7 +218,7 @@ export default function AdminKeys() {
       <BackButton />
       <div className="page-header-row">
         <div>
-          <h1>Key Register</h1>
+          <h1>Key register</h1>
           <p className="page-subtitle">
             Every key, fob and access code issued — who holds it now, and the signed handover trail
           </p>
@@ -226,7 +228,7 @@ export default function AdminKeys() {
           onClick={() => setShowAddForm((s) => !s)}
           title={showAddForm ? 'Close the form without adding anything' : 'Add a new key, fob or access code to the register'}
         >
-          {showAddForm ? 'Cancel' : 'Add Key'}
+          {showAddForm ? 'Cancel' : 'Add key'}
         </button>
       </div>
 
@@ -282,14 +284,14 @@ export default function AdminKeys() {
             disabled={saving}
             title="Save this key to the register - it starts off in the office, not issued to anyone"
           >
-            {saving ? 'Saving...' : 'Add Key'}
+            {saving ? 'Saving...' : 'Add key'}
           </button>
         </form>
       )}
 
       <div className="card" style={{ marginBottom: 16 }}>
         <h2>Out now ({outNow.length})</h2>
-        {outNow.length === 0 && <p className="empty-state">Every key is accounted for.</p>}
+        {outNow.length === 0 && <EmptyState compact tone="good" icon={EmptyIconCheck} title="Every key is accounted for" />}
         {outNow.map(({ key, holding }) => (
           <div key={key.id} className="task-row" style={{ justifyContent: 'space-between', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
@@ -328,7 +330,7 @@ export default function AdminKeys() {
       </div>
 
       {propertiesWithKeys.length === 0 && (
-        <p className="empty-state">No keys on the register yet. Add the first one above.</p>
+        <EmptyState icon={EmptyIconKeyRound} title="No keys on the register yet" body="Record each client key so you always know who is holding it." action={{ label: 'Add key', onClick: () => setShowAddForm(true) }} />
       )}
 
       {propertiesWithKeys.map((property) => {
@@ -456,7 +458,7 @@ export default function AdminKeys() {
                         style={{ width: '100%' }}
                         title="Sign this key out to the chosen person and notify them to confirm they have it"
                       >
-                        {saving ? 'Issuing...' : 'Issue Key'}
+                        {saving ? 'Issuing...' : 'Issue key'}
                       </button>
                     </form>
                   )}

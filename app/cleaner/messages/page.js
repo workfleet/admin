@@ -1,5 +1,7 @@
 'use client';
 
+import EmptyState from '../../components/EmptyState';
+import { MessageCircle as EmptyIconMessage } from 'lucide-react';
 import { PageSkeleton, SkeletonLines } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -195,7 +197,7 @@ export default function CleanerMessages() {
       <div className="page-header-row" style={{ marginBottom: 12 }}>
         <h1 style={{ margin: 0 }}>Chats</h1>
         <button className="btn-secondary" onClick={() => (showDirectory ? setShowDirectory(false) : openDirectory())} title="Start a new conversation with the office">
-          {showDirectory ? 'Cancel' : '+ New Chat'}
+          {showDirectory ? 'Cancel' : '+ New chat'}
         </button>
       </div>
 
@@ -213,7 +215,7 @@ export default function CleanerMessages() {
         </div>
       )}
 
-      {conversations.length === 0 && <p className="empty-state">No chats yet. Use + New Chat to message the office.</p>}
+      {conversations.length === 0 && <EmptyState icon={EmptyIconMessage} title="No chats yet" body="Message the office any time - they will reply here." action={{ label: '+ New chat', onClick: openDirectory }} />}
 
       {conversations.map((c) => (
         <div key={c.id} className="card" onClick={() => openConversation(c.id)} style={{ cursor: 'pointer' }}>

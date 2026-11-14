@@ -37,7 +37,7 @@ function skeletonFor(pathname) {
 // Their jobs live in the cleaner app, which is outside /admin and so outside
 // the bounce; this is the way across to them.
 const INVENTORY_HOME = '/admin/inventory';
-const INVENTORY_JOBS_ITEM = { href: '/cleaner', label: 'My Jobs', icon: Calendar };
+const INVENTORY_JOBS_ITEM = { href: '/cleaner', label: 'My jobs', icon: Calendar };
 
 // Grouped so the menu reads as four areas rather than one list of 23. Items
 // with no group sit at the top; Help sits on its own at the bottom.

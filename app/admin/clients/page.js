@@ -101,14 +101,14 @@ export default function AdminClients() {
           onClick={() => { setShowClientForm((s) => !s); setClientForm(EMPTY_PROFILE); }}
           title="Add a new client and their first site"
         >
-          {showClientForm ? 'Cancel' : '+ New Client'}
+          {showClientForm ? 'Cancel' : '+ New client'}
         </button>
       </div>
 
       {showClientForm && (
         <div className="card job-form-card">
           <div className="job-form-header">
-            <h2>New Client</h2>
+            <h2>New client</h2>
             <button className="job-form-close" type="button" onClick={() => setShowClientForm(false)}>×</button>
           </div>
           <form onSubmit={addClient}>
@@ -181,7 +181,7 @@ export default function AdminClients() {
             </div>
             <div className="job-form-actions">
               <button type="button" className="btn-secondary" onClick={() => setShowClientForm(false)}>Cancel</button>
-              <button type="submit" className="btn-primary">Add Client</button>
+              <button type="submit" className="btn-primary">Add client</button>
             </div>
           </form>
         </div>

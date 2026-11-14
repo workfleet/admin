@@ -1,5 +1,7 @@
 'use client';
 
+import EmptyState from '../../../components/EmptyState';
+import { Search as EmptyIconSearch } from 'lucide-react';
 import { PageSkeleton } from '../../../components/Skeleton';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -65,7 +67,7 @@ export default function JobHistory() {
       <BackButton />
       <div className="page-header-row">
         <div>
-          <h1>Job History</h1>
+          <h1>Job history</h1>
           <p className="page-subtitle">{jobs.length} past job{jobs.length === 1 ? '' : 's'}, most recent 300</p>
         </div>
       </div>
@@ -85,7 +87,7 @@ export default function JobHistory() {
         </select>
       </div>
 
-      {filtered.length === 0 && <p className="empty-state">No jobs match.</p>}
+      {filtered.length === 0 && <EmptyState compact icon={EmptyIconSearch} title="No matches" body="Try a different search or filter." />}
 
       <div className="wf-table-wrap">
         <table className="wf-table">

@@ -2724,7 +2724,7 @@ export default function AdminRota() {
               style={{ marginTop: 10, width: '100%' }}
               title="Save the changes to this job's date, time and length"
             >
-              {savingJob ? 'Saving...' : 'Save Changes'}
+              {savingJob ? 'Saving...' : 'Save changes'}
             </button>
             {jobSaveError && <p style={{ color: 'var(--wf-overdue)', fontSize: 13, marginTop: 8 }}>{jobSaveError}</p>}
           </div>
@@ -2987,7 +2987,7 @@ export default function AdminRota() {
         <div className="job-modal-overlay">
         <div className="card job-form-card job-form-modal">
           <div className="job-form-header">
-            <h2>{formKind === 'training' ? 'New Training' : 'New Job'}</h2>
+            <h2>{formKind === 'training' ? 'New training' : 'New job'}</h2>
             <button className="job-modal-close" onClick={() => setShowForm(false)} type="button" aria-label="Close" title="Close - keeps what you have filled in">×</button>
           </div>
 
@@ -3374,7 +3374,7 @@ export default function AdminRota() {
 
             <div className="job-form-actions">
               <button type="button" className="btn-secondary" onClick={resetForm}>Cancel</button>
-              <button type="submit" className="btn-primary" disabled={creatingJob} title="Create this job and notify anyone you have assigned to it">{creatingJob ? 'Booking…' : 'Add Job'}</button>
+              <button type="submit" className="btn-primary" disabled={creatingJob} title="Create this job and notify anyone you have assigned to it">{creatingJob ? 'Booking…' : 'Add job'}</button>
             </div>
           </form>
         </div>

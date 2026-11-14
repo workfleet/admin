@@ -1,6 +1,9 @@
 'use client';
 
+import EmptyState from '../../components/EmptyState';
+import { FileText as EmptyIconFile } from 'lucide-react';
 import { PageSkeleton } from '../../components/Skeleton';
+import MoreMenu from '../../components/MoreMenu';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -623,31 +626,36 @@ export default function AdminQuotes() {
           <h1>Quotes</h1>
           <p className="page-subtitle">Priced proposals for clients and prospects</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Link href="/admin/quotes/history" className="btn-secondary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
             History
           </Link>
+          {/* The three set-once screens share one menu so the header reads
+              History / Settings / New quote. Each form has its own close. */}
           {role === 'admin' && (
-            <Link href="/admin/quotes/wording" className="btn-secondary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }} title="Change the wording of the sections that appear on every quote">
-              Wording
-            </Link>
-          )}
-          {role === 'admin' && companySettings && (
-            <button className="btn-secondary" onClick={() => (showCompanySettings ? setShowCompanySettings(false) : startEditCompany())} title="Change the company name, address and contact details printed on quotes">
-              {showCompanySettings ? 'Cancel' : 'Company Details'}
-            </button>
-          )}
-          {role === 'admin' && (
-            <button className="btn-secondary" onClick={() => (showPricingSettings ? setShowPricingSettings(false) : startEditPricing())} title="Change the rates the quote calculator works from">
-              {showPricingSettings ? 'Cancel' : 'Pricing Settings'}
-            </button>
+            <MoreMenu
+              label="Settings"
+              items={[
+                { label: 'Quote wording', onClick: () => router.push('/admin/quotes/wording'), title: 'Change the wording of the sections that appear on every quote' },
+                companySettings && {
+                  label: showCompanySettings ? 'Close company details' : 'Company details',
+                  onClick: () => (showCompanySettings ? setShowCompanySettings(false) : startEditCompany()),
+                  title: 'Change the company name, address and contact details printed on quotes',
+                },
+                {
+                  label: showPricingSettings ? 'Close pricing settings' : 'Pricing settings',
+                  onClick: () => (showPricingSettings ? setShowPricingSettings(false) : startEditPricing()),
+                  title: 'Change the rates the quote calculator works from',
+                },
+              ]}
+            />
           )}
           <button
             className="btn-primary"
             onClick={() => { if (showForm) { resetForm(); setShowForm(false); } else { resetForm(); setShowForm(true); } }}
             title="Write a new quote for a client"
           >
-            {showForm ? 'Cancel' : '+ New Quote'}
+            {showForm ? 'Cancel' : '+ New quote'}
           </button>
         </div>
       </div>
@@ -655,7 +663,7 @@ export default function AdminQuotes() {
       {showCompanySettings && companyForm && (
         <div className="card job-form-card">
           <div className="job-form-header">
-            <h2>Company Details</h2>
+            <h2>Company details</h2>
             <button className="job-form-close" type="button" onClick={() => setShowCompanySettings(false)}>×</button>
           </div>
           <form onSubmit={saveCompanySettings}>
@@ -677,7 +685,7 @@ export default function AdminQuotes() {
             </div>
             <div className="job-form-actions">
               <button type="button" className="btn-secondary" onClick={() => setShowCompanySettings(false)}>Cancel</button>
-              <button type="submit" className="btn-primary" disabled={savingCompany}>{savingCompany ? 'Saving...' : 'Save Details'}</button>
+              <button type="submit" className="btn-primary" disabled={savingCompany}>{savingCompany ? 'Saving...' : 'Save details'}</button>
             </div>
           </form>
         </div>
@@ -686,7 +694,7 @@ export default function AdminQuotes() {
       {showPricingSettings && pricingForm && (
         <div className="card job-form-card">
           <div className="job-form-header">
-            <h2>Pricing Settings</h2>
+            <h2>Pricing settings</h2>
             <button className="job-form-close" type="button" onClick={() => setShowPricingSettings(false)}>×</button>
           </div>
           <form onSubmit={savePricingSettings}>
@@ -706,7 +714,7 @@ export default function AdminQuotes() {
             </div>
             <div className="job-form-actions">
               <button type="button" className="btn-secondary" onClick={() => setShowPricingSettings(false)}>Cancel</button>
-              <button type="submit" className="btn-primary" disabled={savingPricing}>{savingPricing ? 'Saving...' : 'Save Settings'}</button>
+              <button type="submit" className="btn-primary" disabled={savingPricing}>{savingPricing ? 'Saving...' : 'Save settings'}</button>
             </div>
           </form>
         </div>
@@ -715,7 +723,7 @@ export default function AdminQuotes() {
       {showForm && (
         <div className="card job-form-card">
           <div className="job-form-header">
-            <h2>{editingQuoteId ? 'Edit Quote' : 'New Quote'}</h2>
+            <h2>{editingQuoteId ? 'Edit quote' : 'New quote'}</h2>
             <button className="job-form-close" type="button" onClick={() => { resetForm(); setShowForm(false); }}>×</button>
           </div>
           <form onSubmit={saveQuote}>
@@ -1092,7 +1100,7 @@ export default function AdminQuotes() {
             <div className="job-form-actions">
               <button type="button" className="btn-secondary" onClick={() => { resetForm(); setShowForm(false); }}>Cancel</button>
               <button type="submit" className="btn-primary" disabled={creating}>
-                {creating ? 'Saving...' : editingQuoteId ? 'Save Changes' : 'Add Quote'}
+                {creating ? 'Saving...' : editingQuoteId ? 'Save changes' : 'Add quote'}
               </button>
             </div>
           </form>
@@ -1107,7 +1115,11 @@ export default function AdminQuotes() {
       </div>
 
       {filteredQuotes.length === 0 && (
-        <p className="empty-state">{filter === 'archived' ? 'No archived quotes.' : 'Nothing here.'}</p>
+        <EmptyState
+          icon={EmptyIconFile}
+          title={{ open: 'No open quotes', decided: 'No decided quotes yet', archived: 'No archived quotes' }[filter] || 'No quotes yet'}
+          action={filter === 'open' || filter === 'all' ? { label: '+ New quote', onClick: () => { resetForm(); setShowForm(true); } } : undefined}
+        />
       )}
 
       <div className="job-list">

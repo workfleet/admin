@@ -22,7 +22,7 @@ export default function GlobalError({ error, reset }) {
       <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
         <button type="button" onClick={() => reset()}>Try again</button>
         <Link href="/">
-          <button type="button" className="btn-secondary">Back to Home</button>
+          <button type="button" className="btn-secondary">Back to home</button>
         </Link>
       </div>
     </div>

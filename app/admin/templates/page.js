@@ -1,5 +1,7 @@
 'use client';
 
+import EmptyState from '../../components/EmptyState';
+import { ListChecks as EmptyIconListChecks } from 'lucide-react';
 import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -119,18 +121,18 @@ export default function AdminTemplates() {
       <BackButton />
       <div className="page-header-row">
         <div>
-          <h1>Job Templates</h1>
+          <h1>Job templates</h1>
           <p className="page-subtitle">Reusable checklists you can apply to any job instead of retyping tasks each time</p>
         </div>
         <button className="btn-primary" onClick={toggleForm} title="Build a reusable checklist you can drop onto any job">
-          {showForm ? 'Cancel' : '+ New Template'}
+          {showForm ? 'Cancel' : '+ New template'}
         </button>
       </div>
 
       {showForm && (
         <div className="card job-form-card">
           <div className="job-form-header">
-            <h2>New Template</h2>
+            <h2>New template</h2>
             <button className="job-form-close" type="button" onClick={resetForm}>×</button>
           </div>
           <form onSubmit={createTemplate}>
@@ -166,13 +168,13 @@ export default function AdminTemplates() {
             </div>
             <div className="job-form-actions">
               <button type="button" className="btn-secondary" onClick={resetForm}>Cancel</button>
-              <button type="submit" className="btn-primary">Save Template</button>
+              <button type="submit" className="btn-primary">Save template</button>
             </div>
           </form>
         </div>
       )}
 
-      {templates.length === 0 && <p className="empty-state">No templates yet.</p>}
+      {templates.length === 0 && <EmptyState icon={EmptyIconListChecks} title="No job templates yet" body="A template is a checklist you can drop onto any job." action={{ label: '+ New template', onClick: () => setShowForm(true) }} />}
 
       <div className="job-list">
         {templates.map((t) => {

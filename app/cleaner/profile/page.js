@@ -144,7 +144,7 @@ export default function CleanerProfile() {
   return (
     <div className="container">
       <BackButton />
-      <h1>My Profile</h1>
+      <h1>My profile</h1>
       <form className="card" onSubmit={save}>
         <label>Full name</label>
         <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Your name" autoComplete="name" />
@@ -182,7 +182,7 @@ export default function CleanerProfile() {
 
         {saved && <p style={{ color: 'var(--wf-verified-ink)', fontSize: 14 }}>Saved.</p>}
         {error && <p style={{ color: 'var(--wf-overdue)', fontSize: 14 }}>{error}</p>}
-        <button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save Changes'}</button>
+        <button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save changes'}</button>
       </form>
 
       <div className="card" style={{ marginTop: 16 }}>

@@ -178,7 +178,7 @@ export default function OnboardPage() {
 
       <form onSubmit={handleSubmit}>
         <div className="card">
-          <h2>Create Your Login</h2>
+          <h2>Create your login</h2>
           <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: -6, marginBottom: 10 }}>
             You'll use this email and password to log in to the app.
           </p>
@@ -256,7 +256,7 @@ export default function OnboardPage() {
         </div>
 
         <div className="card">
-          <h2>Company Policies</h2>
+          <h2>Company policies</h2>
           <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: -6, marginBottom: 10 }}>
             Please read through how we work at CrewConnect Cleaning before you get started.
           </p>
@@ -348,7 +348,7 @@ export default function OnboardPage() {
         {formError && <p style={{ color: 'var(--wf-overdue)', fontSize: 14, marginBottom: 10 }}>{formError}</p>}
 
         <button type="submit" disabled={submitting || !policiesAgreed || !agreed || !signedName.trim()} style={{ width: '100%' }}>
-          {submitting ? 'Submitting...' : 'Create Account & Submit'}
+          {submitting ? 'Submitting...' : 'Create account and submit'}
         </button>
       </form>
     </div>

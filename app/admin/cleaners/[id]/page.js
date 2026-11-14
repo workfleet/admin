@@ -1,6 +1,7 @@
 'use client';
 
 import { PageSkeleton, SkeletonLines } from '../../../components/Skeleton';
+import MoreMenu from '../../../components/MoreMenu';
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '../../../../lib/supabaseClient';
@@ -39,18 +40,18 @@ function computeReliability(pastJobs, completedJobIds, checkins, photoRows, rati
 
   if (pastJobs.length > 0) {
     const completedCount = pastJobs.filter((j) => j.status === 'completed').length;
-    parts.push({ key: 'completion', label: 'Completion Rate', score: (completedCount / pastJobs.length) * 100 });
+    parts.push({ key: 'completion', label: 'Completion rate', score: (completedCount / pastJobs.length) * 100 });
   }
 
   if (completedJobIds.length > 0) {
     const jobsWithPhotos = new Set(photoRows.map((p) => p.job_id));
     const withPhotos = completedJobIds.filter((jid) => jobsWithPhotos.has(jid)).length;
-    parts.push({ key: 'photos', label: 'Photo Compliance', score: (withPhotos / completedJobIds.length) * 100 });
+    parts.push({ key: 'photos', label: 'Photo compliance', score: (withPhotos / completedJobIds.length) * 100 });
   }
 
   if (ratingRows.length > 0) {
     const avgRating = ratingRows.reduce((sum, r) => sum + r.rating, 0) / ratingRows.length;
-    parts.push({ key: 'rating', label: 'Client Rating', score: (avgRating / 5) * 100, avgRating });
+    parts.push({ key: 'rating', label: 'Client rating', score: (avgRating / 5) * 100, avgRating });
   }
 
   const overall = parts.length > 0 ? parts.reduce((sum, p) => sum + p.score, 0) / parts.length : null;
@@ -702,24 +703,37 @@ export default function CleanerProfile() {
               {email ? ` · ${email}` : ''}
             </p>
           </div>
+          {/* Edit account is the everyday action; the rest live under More.
+              Remove and Delete sit last, in red - Deactivate is undoable so
+              it stays with the ordinary items. */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button className="btn-secondary" onClick={() => (editingAccount ? setEditingAccount(false) : startEditAccount())} title="Change their name, login email, role, or set a new password">
-              {editingAccount ? 'Cancel' : 'Edit Account'}
+              {editingAccount ? 'Cancel' : 'Edit account'}
             </button>
-            <button className="btn-secondary" onClick={exportCleanerData} title="Download everything held about this person as a file - use this to answer a data request">Export Data</button>
-            <button className="btn-secondary" onClick={toggleActive} title="Switch this account between active and deactivated - deactivating signs them out everywhere and blocks login, but keeps all their history">
-              {cleaner.active === false ? 'Reactivate' : 'Deactivate'}
-            </button>
-            {cleaner.active !== false && (
-              <button className="btn-secondary" onClick={removeAccount} disabled={removing} title="Deactivate them and free up their email so a new starter can use it - their history is kept, and this is blocked while they still hold keys">
-                {removing ? 'Removing...' : 'Remove Account'}
-              </button>
-            )}
-            {jobs.length === 0 && (checkins || []).length === 0 && (
-              <button className="btn-secondary" onClick={deleteAccount} disabled={removing} style={{ color: 'var(--wf-overdue)' }} title="Delete the account completely - only possible while they have no shifts or history; otherwise use Remove">
-                Delete Account
-              </button>
-            )}
+            <MoreMenu
+              items={[
+                { label: 'Export data', onClick: exportCleanerData, title: 'Download everything held about this person as a file - use this to answer a data request' },
+                {
+                  label: cleaner.active === false ? 'Reactivate' : 'Deactivate',
+                  onClick: toggleActive,
+                  title: 'Switch this account between active and deactivated - deactivating signs them out everywhere and blocks login, but keeps all their history',
+                },
+                cleaner.active !== false && {
+                  label: removing ? 'Removing...' : 'Remove account',
+                  onClick: removeAccount,
+                  disabled: removing,
+                  danger: true,
+                  title: 'Deactivate them and free up their email so a new starter can use it - their history is kept, and this is blocked while they still hold keys',
+                },
+                jobs.length === 0 && (checkins || []).length === 0 && {
+                  label: 'Delete account',
+                  onClick: deleteAccount,
+                  disabled: removing,
+                  danger: true,
+                  title: 'Delete the account completely - only possible while they have no shifts or history; otherwise use Remove',
+                },
+              ]}
+            />
           </div>
         </div>
         {cleaner.active === false && cleaner.deactivated_at && (
@@ -814,7 +828,7 @@ export default function CleanerProfile() {
             {accountError && <p style={{ color: 'var(--wf-overdue)', fontSize: 14, margin: '0 0 10px' }}>{accountError}</p>}
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="button" className="btn-secondary" onClick={() => setEditingAccount(false)}>Cancel</button>
-              <button type="submit" className="btn-primary" disabled={savingAccount}>{savingAccount ? 'Saving...' : 'Save Account'}</button>
+              <button type="submit" className="btn-primary" disabled={savingAccount}>{savingAccount ? 'Saving...' : 'Save account'}</button>
             </div>
           </form>
         )}
@@ -831,13 +845,13 @@ export default function CleanerProfile() {
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="page-header-row" style={{ marginBottom: 8 }}>
-          <h2 style={{ margin: 0 }}>Personal Details</h2>
+          <h2 style={{ margin: 0 }}>Personal details</h2>
           <button
             className="btn-secondary"
             onClick={() => (editingDetails ? setEditingDetails(false) : startEditDetails())}
             title="Edit their phone, address, date of birth, NI number and emergency contact - they can also keep these up to date themselves from My Profile"
           >
-            {editingDetails ? 'Cancel' : (details ? 'Edit' : 'Add Details')}
+            {editingDetails ? 'Cancel' : (details ? 'Edit' : 'Add details')}
           </button>
         </div>
 
@@ -858,7 +872,7 @@ export default function CleanerProfile() {
             <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
               <button type="button" className="btn-secondary" onClick={() => setEditingDetails(false)}>Cancel</button>
               <button type="submit" className="btn-primary" disabled={savingDetails} title="Save these details against this person">
-                {savingDetails ? 'Saving...' : 'Save Details'}
+                {savingDetails ? 'Saving...' : 'Save details'}
               </button>
             </div>
           </form>
@@ -909,13 +923,13 @@ export default function CleanerProfile() {
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="page-header-row" style={{ marginBottom: 8 }}>
-          <h2 style={{ margin: 0 }}>Bank Details</h2>
+          <h2 style={{ margin: 0 }}>Bank details</h2>
           <button
             className="btn-secondary"
             onClick={() => (editingBank ? setEditingBank(false) : startEditBank())}
             title="Where their pay goes - they can add or change these themselves from My Profile, and every change is announced to the office"
           >
-            {editingBank ? 'Cancel' : (bank ? 'Replace' : 'Add Bank Details')}
+            {editingBank ? 'Cancel' : (bank ? 'Replace' : 'Add bank details')}
           </button>
         </div>
 
@@ -938,7 +952,7 @@ export default function CleanerProfile() {
             <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
               <button type="button" className="btn-secondary" onClick={() => setEditingBank(false)}>Cancel</button>
               <button type="submit" className="btn-primary" disabled={savingBank} title="Save these bank details against this person">
-                {savingBank ? 'Saving...' : 'Save Bank Details'}
+                {savingBank ? 'Saving...' : 'Save bank details'}
               </button>
             </div>
           </form>
@@ -963,7 +977,7 @@ export default function CleanerProfile() {
 
       {submission && (
         <div className="card" style={{ marginBottom: 16 }}>
-          <h2>Onboarding Record</h2>
+          <h2>Onboarding record</h2>
           <div style={{ fontSize: 14, color: 'var(--muted)', lineHeight: 1.9 }}>
             <div>Contract signed {new Date(submission.signed_at).toLocaleDateString()}{submission.email ? ` as ${submission.email}` : ''}</div>
             <div style={{ fontSize: 12.5 }}>
@@ -974,7 +988,7 @@ export default function CleanerProfile() {
             <div style={{ marginTop: 10 }}>
               {docUrl ? (
                 <a href={docUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary" style={{ display: 'inline-block', textDecoration: 'none' }}>
-                  Open ID Document
+                  Open ID document
                 </a>
               ) : (
                 <button className="btn-secondary" onClick={viewDocument} disabled={docLoading} title="Open the ID document they uploaded when they onboarded">
@@ -1011,7 +1025,7 @@ export default function CleanerProfile() {
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
-        <h2>Reliability Score</h2>
+        <h2>Reliability score</h2>
         {reliability?.overall === null || !reliability ? (
           <p className="empty-state">Not enough history yet to score this cleaner.</p>
         ) : (
@@ -1064,7 +1078,7 @@ export default function CleanerProfile() {
             <input value={newCertNotes} onChange={(e) => setNewCertNotes(e.target.value)} placeholder="e.g. Reference number, issuing body" />
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
               <button type="button" className="btn-secondary" onClick={() => setIsAddingCert(false)}>Cancel</button>
-              <button type="submit" className="btn-primary" title="Save this certification against this person">Add Certification</button>
+              <button type="submit" className="btn-primary" title="Save this certification against this person">Add certification</button>
             </div>
           </form>
         ) : (
@@ -1176,7 +1190,7 @@ export default function CleanerProfile() {
             />
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
               <button type="button" className="btn-secondary" onClick={() => setIsAddingReminder(false)}>Cancel</button>
-              <button type="submit" className="btn-primary" title="Save this reminder">Add Reminder</button>
+              <button type="submit" className="btn-primary" title="Save this reminder">Add reminder</button>
             </div>
           </form>
         ) : (
@@ -1248,7 +1262,7 @@ export default function CleanerProfile() {
 
       <div className="card" style={{ cursor: 'pointer' }} onClick={() => setShowClockIns((s) => !s)}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ margin: 0 }}>Clock-in Summary</h2>
+          <h2 style={{ margin: 0 }}>Clock-in summary</h2>
           <span style={{ fontSize: 13, color: 'var(--brand-link)', fontWeight: 600 }}>{showClockIns ? 'Hide' : 'Show'}</span>
         </div>
         {showClockIns && (

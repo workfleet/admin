@@ -227,7 +227,7 @@ export default function ClientDashboard() {
       </div>
 
       <div className="card">
-        <h2>Need Something?</h2>
+        <h2>Need something?</h2>
         <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 12px' }}>
           Anything you'd like us to know - an extra job, a change to your clean, anything at all.
         </p>
@@ -243,7 +243,7 @@ export default function ClientDashboard() {
             }}
           />
           <button type="submit" disabled={submittingRequest || !requestText.trim()}>
-            {submittingRequest ? 'Sending...' : 'Send Request'}
+            {submittingRequest ? 'Sending...' : 'Send request'}
           </button>
         </form>
 
@@ -266,7 +266,7 @@ export default function ClientDashboard() {
 
       <div className="card">
         <div className="dash-panel-header">
-          <h2>Pause My Cleans</h2>
+          <h2>Pause my cleans</h2>
         </div>
         <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 12px' }}>
           Going away, or having work done? Ask us to pause your cleans over a date range - no need to cancel altogether.
@@ -293,13 +293,13 @@ export default function ClientDashboard() {
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="button" className="btn-secondary" onClick={() => setShowPauseForm(false)}>Cancel</button>
               <button type="submit" disabled={submittingPause}>
-                {submittingPause ? 'Sending...' : 'Send Request'}
+                {submittingPause ? 'Sending...' : 'Send request'}
               </button>
             </div>
           </form>
         ) : (
           <button type="button" className="btn-secondary" onClick={() => setShowPauseForm(true)} title="Ask us to pause your cleans for a period">
-            + Request a Pause
+            + Request a pause
           </button>
         )}
 
@@ -358,7 +358,7 @@ export default function ClientDashboard() {
 
           <div className="card">
             <div className="dash-panel-header">
-              <h2>Recent Updates</h2>
+              <h2>Recent updates</h2>
             </div>
             {updates.length === 0 && <p className="empty-state">Arrivals, departures and replies will show here.</p>}
             {updates.map((n) => (
@@ -376,7 +376,7 @@ export default function ClientDashboard() {
       <div className="dash-grid-2">
         <div className="card">
           <div className="dash-panel-header">
-            <h2>Upcoming Visits</h2>
+            <h2>Upcoming visits</h2>
             <Link href="/client/history" className="dash-panel-link">View history &rarr;</Link>
           </div>
           {upcoming.length === 0 && <p className="empty-state">Nothing scheduled right now.</p>}
@@ -418,7 +418,7 @@ export default function ClientDashboard() {
 
       <div className="card">
         <div className="dash-panel-header">
-          <h2>Recent Activity</h2>
+          <h2>Recent activity</h2>
           <Link href="/client/history" className="dash-panel-link">View all &rarr;</Link>
         </div>
         {recent.length === 0 && <p className="empty-state">No completed cleans yet.</p>}

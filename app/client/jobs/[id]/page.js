@@ -166,7 +166,7 @@ export default function ClientJobDetail() {
 
       {report && (
         <div className="card" style={{ marginBottom: 16 }}>
-          <h2>Clean Report</h2>
+          <h2>Clean report</h2>
           {report.summary && (
             <div style={{ marginBottom: 10 }}>
               <strong style={{ fontSize: 13.5, color: 'var(--muted)' }}>{reportLabels.summary}</strong>
@@ -195,7 +195,7 @@ export default function ClientJobDetail() {
 
       {checkins.length > 0 && (
         <div className="card" style={{ marginBottom: 16 }}>
-          <h2>Visit Log</h2>
+          <h2>Visit log</h2>
           {checkins.map((c) => (
             <p key={c.id} style={{ fontSize: 13, color: 'var(--muted)' }}>
               {c.profiles?.full_name ? `${c.profiles.full_name} — ` : ''}
@@ -261,7 +261,7 @@ export default function ClientJobDetail() {
               <div style={{ display: 'flex', gap: 8 }}>
                 <button type="button" className="btn-secondary" onClick={() => setShowRescheduleForm(false)}>Cancel</button>
                 <button type="submit" disabled={submittingReschedule}>
-                  {submittingReschedule ? 'Sending...' : 'Send Request'}
+                  {submittingReschedule ? 'Sending...' : 'Send request'}
                 </button>
               </div>
             </form>
@@ -275,7 +275,7 @@ export default function ClientJobDetail() {
 
       {job.status === 'completed' && (
         <div className="card">
-          <h2>Rate This Clean</h2>
+          <h2>Rate this clean</h2>
           {rating ? (
             <>
               <div style={{ display: 'flex', gap: 2 }}>
@@ -288,7 +288,7 @@ export default function ClientJobDetail() {
                 <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--hairline)' }}>
                   <p style={{ fontSize: 14, margin: '0 0 8px' }}>Glad you're happy with the clean! Mind leaving us a quick public review?</p>
                   <a href={COMPANY.googleReviewUrl} target="_blank" rel="noopener noreferrer">
-                    <button type="button">Leave a Review</button>
+                    <button type="button">Leave a review</button>
                   </a>
                 </div>
               )}

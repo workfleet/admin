@@ -56,7 +56,7 @@ export default function EmergencyBanner() {
             className="emergency-banner-ack emergency-banner-location"
             onClick={() => window.open(`/emergency-location/${a.id}`, `emergency-location-${a.id}`, 'width=420,height=560,noopener')}
           >
-            View Location
+            View location
           </button>
           <button
             type="button"

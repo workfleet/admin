@@ -226,7 +226,7 @@ export default function InvoiceBreakdown() {
 
               {breakdown.refreshes.length > 0 && (
                 <div className="card" style={{ marginBottom: 16 }}>
-                  <h2 style={{ margin: '0 0 12px' }}>Room Refreshes</h2>
+                  <h2 style={{ margin: '0 0 12px' }}>Room refreshes</h2>
                   <InvoiceTable
                     rows={breakdown.refreshes.map((r, i) => ({ key: `${r.jobId}-${i}`, text: refreshLineText(r), qty: formatHours(r.minutes), amount: r.amount }))}
                     onCopy={(text) => copy(text, 'Line')}

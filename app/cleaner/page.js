@@ -311,7 +311,7 @@ export default function CleanerDashboard() {
         </div>
         <div style={{ display: 'flex', gap: 14, flexShrink: 0, paddingTop: 6 }}>
           <Link href="/cleaner/hours" style={{ fontSize: 13, fontWeight: 600, color: 'var(--brand-link)', textDecoration: 'none' }}>
-            My Hours
+            My hours
           </Link>
           <Link href="/cleaner/notifications" style={{ fontSize: 13, fontWeight: 600, color: 'var(--brand-link)', textDecoration: 'none' }}>
             Notifications
@@ -520,7 +520,7 @@ export default function CleanerDashboard() {
             onClick={() => openRequestForm('kit_topup')}
             style={{ flex: 1 }}
           >
-            Request Kit Top-up
+            Request kit top-up
           </button>
           <button
             type="button"
@@ -528,7 +528,7 @@ export default function CleanerDashboard() {
             onClick={() => openRequestForm('issue')}
             style={{ flex: 1 }}
           >
-            Report an Issue
+            Report an issue
           </button>
         </div>
         {/* Its own page rather than a third request type: an accident
@@ -616,7 +616,7 @@ export default function CleanerDashboard() {
               </>
             )}
             <button type="submit" disabled={submittingRequest} style={{ width: '100%' }}>
-              {submittingRequest ? 'Sending...' : 'Send Request'}
+              {submittingRequest ? 'Sending...' : 'Send request'}
             </button>
           </form>
         )}
