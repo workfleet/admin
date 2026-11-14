@@ -1,5 +1,6 @@
 'use client';
 
+import { useDocumentTitle } from '../../../components/useDocumentTitle';
 import { PageSkeleton, SkeletonLines } from '../../../components/Skeleton';
 import MoreMenu from '../../../components/MoreMenu';
 import { useEffect, useState } from 'react';
@@ -65,6 +66,7 @@ export default function CleanerProfile() {
   const toast = useToast();
 
   const [cleaner, setCleaner] = useState(null);
+  useDocumentTitle(cleaner?.full_name);
   const [jobs, setJobs] = useState([]);
   const [checkins, setCheckins] = useState(null);
   const [showClockIns, setShowClockIns] = useState(false);

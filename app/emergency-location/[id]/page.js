@@ -1,5 +1,6 @@
 'use client';
 
+import { useDocumentTitle } from '../../components/useDocumentTitle';
 import { SkeletonLines } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -15,6 +16,7 @@ const PropertyMap = dynamic(() => import('../../components/PropertyMap'), { ssr:
 // window.open() as a small popup from the emergency banner, so it
 // should read at a glance rather than carry the full app chrome.
 export default function EmergencyLocationPage() {
+  useDocumentTitle('Emergency alert');
   const { id } = useParams();
   const router = useRouter();
   const [alert, setAlert] = useState(null);

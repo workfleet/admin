@@ -16,6 +16,7 @@ import ClockQueueFlusher from '../components/ClockQueueFlusher';
 import PhotoQueueFlusher from '../components/PhotoQueueFlusher';
 import AnnouncementPopup from '../components/AnnouncementPopup';
 import { PageSkeleton } from '../components/Skeleton';
+import { useDocumentTitle, titleForPath } from '../components/useDocumentTitle';
 import IncidentQueueFlusher from '../components/IncidentQueueFlusher';
 
 const NAV_ITEMS = [
@@ -39,6 +40,7 @@ const INVENTORY_NAV_ITEM = { href: '/admin/inventory', label: 'Stock', icon: Pac
 
 export default function CleanerLayout({ children }) {
   const pathname = usePathname();
+  useDocumentTitle(titleForPath(pathname, NAV_ITEMS) || 'My jobs');
   const router = useRouter();
   const [authorized, setAuthorized] = useState(false);
   const [role, setRole] = useState(null);

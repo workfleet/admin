@@ -1,5 +1,6 @@
 'use client';
 
+import { useDocumentTitle } from '../../components/useDocumentTitle';
 import { PageSkeleton } from '../../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
@@ -23,6 +24,7 @@ ask what information we hold about you, or ask us to correct it, at any
 time by contacting your employer.`;
 
 export default function OnboardPage() {
+  useDocumentTitle('Create your login');
   const { token } = useParams();
   const [status, setStatus] = useState('loading'); // loading | ready | error | done
   const [errorReason, setErrorReason] = useState('');

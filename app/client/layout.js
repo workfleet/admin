@@ -9,6 +9,7 @@ import { getSessionAndProfile } from '../../lib/authGate';
 import { supabase } from '../../lib/supabaseClient';
 import { signOutAndClearPresence } from '../../lib/signOut';
 import { PageSkeleton, SkeletonNav } from '../components/Skeleton';
+import { useDocumentTitle, titleForPath } from '../components/useDocumentTitle';
 
 const NAV_ITEMS = [
   { href: '/client', label: 'Dashboard', icon: LayoutDashboard },
@@ -24,6 +25,8 @@ const NAV_ITEMS = [
 
 export default function ClientLayout({ children }) {
   const pathname = usePathname();
+  // The portal is CrewConnect's, so its tabs carry CrewConnect's name.
+  useDocumentTitle(titleForPath(pathname, NAV_ITEMS) || 'Client portal', 'CrewConnect');
   const router = useRouter();
   const [authorized, setAuthorized] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -86,13 +89,13 @@ export default function ClientLayout({ children }) {
       <div className="client-shell-layout">
         <div className="client-topbar">
           <div className="client-topbar-brand">
-            <div className="sidebar-logo">CC</div>
+            <img src="/crewconnect-mark.png" alt="" className="client-brand-mark" width={34} height={34} />
             <div className="sidebar-brand-name">CrewConnect</div>
           </div>
         </div>
         <aside className="client-sidebar">
           <div className="sidebar-brand">
-            <div className="sidebar-logo">CC</div>
+            <img src="/crewconnect-mark.png" alt="" className="client-brand-mark" width={34} height={34} />
             <div>
               <div className="sidebar-brand-name">CrewConnect</div>
               <div className="sidebar-brand-sub">Client Portal</div>
@@ -111,7 +114,7 @@ export default function ClientLayout({ children }) {
     <div className="client-shell-layout">
       <div className="client-topbar">
         <div className="client-topbar-brand">
-          <div className="sidebar-logo">CC</div>
+          <img src="/crewconnect-mark.png" alt="" className="client-brand-mark" width={34} height={34} />
           <div className="sidebar-brand-name">CrewConnect</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -128,7 +131,7 @@ export default function ClientLayout({ children }) {
 
       <aside className={`client-sidebar ${drawerOpen ? 'client-sidebar-open' : ''}`}>
         <div className="sidebar-brand">
-          <div className="sidebar-logo">CC</div>
+          <img src="/crewconnect-mark.png" alt="" className="client-brand-mark" width={34} height={34} />
           <div>
             <div className="sidebar-brand-name">CrewConnect</div>
             <div className="sidebar-brand-sub">Client Portal</div>

@@ -13,6 +13,7 @@ import EmergencyBanner from '../components/EmergencyBanner';
 import EnablePush from '../components/EnablePush';
 import Logo from '../components/Logo';
 import { PageSkeleton, SkeletonNav } from '../components/Skeleton';
+import { useDocumentTitle, titleForPath } from '../components/useDocumentTitle';
 
 // Which placeholder shape the page is about to fill, so the shell's first
 // frame already looks like the page that follows.
@@ -87,6 +88,8 @@ export default function AdminLayout({ children }) {
   const [showInvoices, setShowInvoices] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [loadError, setLoadError] = useState(false);
+
+  useDocumentTitle(titleForPath(pathname, NAV_ITEMS) || 'Office');
 
   useEffect(() => {
     checkAccess();

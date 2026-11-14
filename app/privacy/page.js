@@ -1,5 +1,6 @@
 'use client';
 
+import { useDocumentTitle } from '../components/useDocumentTitle';
 import Link from 'next/link';
 import { COMPANY } from '../../lib/companyBranding';
 
@@ -53,6 +54,8 @@ const SECTIONS = [
 ];
 
 export default function PrivacyNotice() {
+  // CrewConnect's notice (they are the data controller), so their name.
+  useDocumentTitle('Privacy notice', COMPANY.name);
   return (
     <div className="container" style={{ maxWidth: 720, margin: '0 auto', padding: '32px 20px' }}>
       <Link href="/" style={{ fontSize: 13.5, color: 'var(--muted)', textDecoration: 'none' }}>← Back to login</Link>

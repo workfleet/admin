@@ -1,5 +1,6 @@
 'use client';
 
+import { useDocumentTitle } from '../../../components/useDocumentTitle';
 import EmptyState from '../../../components/EmptyState';
 import { Building2 as EmptyIconBuilding, Phone as EmptyIconPhone } from 'lucide-react';
 import { PageSkeleton, SkeletonLines } from '../../../components/Skeleton';
@@ -28,6 +29,7 @@ export default function ClientDetail() {
   const toast = useToast();
 
   const [client, setClient] = useState(null);
+  useDocumentTitle(client?.name);
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('properties'); // properties | calls | hours | reviews | clockins | documents

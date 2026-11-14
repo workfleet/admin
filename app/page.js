@@ -1,5 +1,6 @@
 'use client';
 
+import { useDocumentTitle } from './components/useDocumentTitle';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -7,6 +8,7 @@ import { supabase } from '../lib/supabaseClient';
 import { signOutAndClearPresence } from '../lib/signOut';
 import { getSessionAndProfile, loginErrorMessage } from '../lib/authGate';
 import Logo from './components/Logo';
+import { COMPANY } from '../lib/companyBranding';
 
 // The hard-navigation below depends on Supabase actually having written
 // the new session to localStorage first - normally near-instant, but
@@ -31,12 +33,14 @@ function sessionPersisted() {
 }
 
 export default function LoginPage() {
+  useDocumentTitle('Sign in');
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
 
   // Through the shared gate rather than a bare getSession(): the app icon
   // opens here, and on a weak signal the token refresh fails and getSession()
@@ -141,6 +145,19 @@ export default function LoginPage() {
         <button type="submit" disabled={loading}>
           {loading ? 'Please wait...' : 'Log in'}
         </button>
+        <button type="button" className="login-forgot" onClick={() => setShowForgot((s) => !s)} aria-expanded={showForgot}>
+          Forgot your password?
+        </button>
+        {/* No emailed reset link yet - email sending waits on the WorkFleet
+            domain. Until then the office sets a new password from the
+            person's page (Cleaners > their name > Edit account). */}
+        {showForgot && (
+          <div className="login-forgot-help" role="status">
+            Get in touch with the office and they&apos;ll set you a new one:{' '}
+            <a href={`tel:${COMPANY.phone.replace(/\s/g, '')}`}>{COMPANY.phone}</a>
+            {' '}or <a href={`mailto:${COMPANY.email}`}>{COMPANY.email}</a>.
+          </div>
+        )}
       </form>
       <p style={{ marginTop: 12, fontSize: 14, color: 'var(--muted)' }}>
         New staff get an account set up via their onboarding invite link.

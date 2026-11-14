@@ -270,6 +270,17 @@ body {
   display: none;
 }
 
+/* CrewConnect's own teal C (cut from the master logo, public/
+   crewconnect-mark.png) beside its name - the portal is the cleaning
+   company's face to its clients, so it carries their mark, not
+   WorkFleet's. */
+.client-brand-mark {
+  display: block;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+}
+
 .client-sidebar-close {
   display: none;
 }
@@ -400,6 +411,31 @@ body {
 }
 
 .login-page .card input { margin-bottom: 16px; }
+
+/* "Forgot your password?" - a quiet text link under the button, opening a
+   short note on how to get a new one. */
+.login-page .card .login-forgot {
+  display: block;
+  margin: 14px auto 0;
+  padding: 2px 4px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+.login-page .card .login-forgot:hover { text-decoration: underline; }
+
+.login-forgot-help {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-control);
+  background: #F4F5F6;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
 
 /* The one action on the page, so it spans the card. */
 .login-page .card button[type="submit"] {
