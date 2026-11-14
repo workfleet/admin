@@ -3,10 +3,11 @@
 import EmptyState from '../components/EmptyState';
 import { CheckCircle2 as EmptyIconCheck } from 'lucide-react';
 import { PageSkeleton } from '../components/Skeleton';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ChevronDown, ChevronRight, CircleAlert, Package, Wrench, CalendarClock, BadgeCheck, FileText, Boxes, Plus, Check, FileBarChart } from 'lucide-react';
+import { ChevronDown, ChevronRight, CircleAlert, Package, Wrench, CalendarClock, BadgeCheck, FileText, Boxes, Plus, Check, FileBarChart, KeyRound, RefreshCw, Search } from 'lucide-react';
+import { openSearch } from '../components/SearchPalette';
 import { supabase } from '../../lib/supabaseClient';
 import { withoutTestAccounts } from '../../lib/testAccounts';
 import { BOOKABLE_ROLES } from '../../lib/staffRoles';
@@ -32,6 +33,15 @@ function initialsOf(fullName) {
 
 function clockOf(value) {
   return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+// "just now" / "4 min ago" / "at 14:05" for the dashboard's last update.
+function updatedAgo(at) {
+  if (!at) return 'just now';
+  const mins = Math.floor((Date.now() - at.getTime()) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  return `at ${clockOf(at)}`;
 }
 
 // Where each kind of item sits in Needs attention. A job with nobody on it
@@ -178,9 +188,46 @@ export default function AdminDashboard() {
   const [payrollRows, setPayrollRows] = useState([]);
   const [payrollTotals, setPayrollTotals] = useState({ completedHours: 0, totalHours: 0, missedHours: 0, pendingClaims: 0 });
 
+  // When the figures were last fetched, so "Nobody clocked in" can be
+  // trusted - and a tick to keep "Updated 3 min ago" honest between loads.
+  const [updatedAt, setUpdatedAt] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [, setTick] = useState(0);
+  const refreshingRef = useRef(false);
+  const updatedAtRef = useRef(null);
+  useEffect(() => { updatedAtRef.current = updatedAt; }, [updatedAt]);
+
   useEffect(() => {
     loadDashboard();
   }, []);
+
+  // Keep the dashboard current without a reload: every two minutes while
+  // the tab is in front, and straight away on coming back to it after a
+  // while away. Skipped while hidden, so a tab left open overnight costs
+  // nothing.
+  useEffect(() => {
+    const REFRESH_MS = 2 * 60 * 1000;
+    const stale = () => !updatedAtRef.current || Date.now() - updatedAtRef.current.getTime() > 60 * 1000;
+    const timer = setInterval(() => {
+      setTick((t) => t + 1);
+      if (document.visibilityState === 'visible' && updatedAtRef.current && Date.now() - updatedAtRef.current.getTime() >= REFRESH_MS) refresh();
+    }, 30 * 1000);
+    const onVisible = () => { if (document.visibilityState === 'visible' && stale()) refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
+  }, []);
+
+  const refresh = async () => {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
+    setRefreshing(true);
+    try {
+      await loadDashboard({ refresh: true });
+    } finally {
+      refreshingRef.current = false;
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     // Payroll hours are admin-only, same as before this redesign - wait
@@ -246,15 +293,20 @@ export default function AdminDashboard() {
     setPayrollLoading(false);
   };
 
-  const loadDashboard = async () => {
+  // refresh: the quiet re-load every couple of minutes - same figures, no
+  // anniversary pop-up again, and no bounce to login if a token blips. The
+  // sweeps below still run each time: they are idempotent, and pg_cron was
+  // found not to be firing the clock-in nudge (2026-10-06), so a dashboard
+  // left open is what keeps nudges going out on time.
+  const loadDashboard = async ({ refresh = false } = {}) => {
     const session = await getSessionWithRetry();
-    if (!session) { router.push('/'); return; }
+    if (!session) { if (!refresh) router.push('/'); return; }
 
     const { data: ownProfile } = await supabase.from('profiles').select('role, full_name, created_at').eq('id', session.user.id).single();
     setRole(ownProfile?.role || null);
     setGreetingName((ownProfile?.full_name || '').split(' ')[0] || 'there');
     const years = getWorkAnniversaryYears(ownProfile?.created_at);
-    if (years) setAnniversary({ name: ownProfile.full_name || 'there', years });
+    if (years && !refresh) setAnniversary({ name: ownProfile.full_name || 'there', years });
 
     // Auto-marks overdue jobs missed/completed based on elapsed time,
     // same as the Rota page, so Today's Jobs stays consistent with it.
@@ -553,6 +605,7 @@ export default function AdminDashboard() {
       interleaveByKind(attentionItems).sort((a, b) => attentionRank(a) - attentionRank(b))
     );
 
+    setUpdatedAt(new Date());
     setLoading(false);
   };
 
@@ -612,6 +665,96 @@ export default function AdminDashboard() {
     return '';
   };
 
+  // Needs attention, in order: red items (a job with nobody on it, an
+  // expired certificate...) first, then the amber access-code warning,
+  // then everything else, each part keeping its own order.
+  const shownAttention = attention.slice(0, 6);
+  const redAttention = shownAttention.filter((item) => attentionTone(item) === 'is-urgent');
+  const otherAttention = shownAttention.filter((item) => attentionTone(item) !== 'is-urgent');
+
+  const renderAttentionItem = (item) => {
+    const tone = attentionTone(item);
+    const icon = <span className={`dash-att-icon ${tone}`}>{attentionIcon(item)}</span>;
+    if (item.kind === 'request') {
+      const kit = item.requestType === 'kit_topup';
+      return (
+        <div key={item.id} className="dash-att" onClick={() => setDetailItem(item)}>
+          {icon}
+          <div className="dash-att-main">
+            <div className="dash-att-title">{kit ? 'Kit top-up' : 'Issue reported'} · {item.cleanerName}</div>
+            <div className="dash-att-sub">{item.description}</div>
+          </div>
+          <button
+            type="button"
+            className="pill-btn is-small"
+            onClick={(e) => { e.stopPropagation(); completeTodo(item.rawId); }}
+            title={kit ? 'The kit has gone out - clear it off the list' : 'Dealt with - clear it off the list'}
+          >
+            {kit ? 'Mark sent' : 'Resolved'}
+          </button>
+        </div>
+      );
+    }
+    if (item.kind === 'reminder') {
+      return (
+        <div key={item.id} className="dash-att" style={{ cursor: 'default' }}>
+          {icon}
+          <div className="dash-att-main">
+            <div className={`dash-att-title ${tone}`}>
+              {item.title} · <Link href={item.href} className="dash-row-name">{item.name}</Link>
+            </div>
+            <div className="dash-att-sub">{item.subtitle}</div>
+          </div>
+          <button type="button" className="pill-btn is-small" onClick={() => completeReminder(item)} title="Mark this reminder done and clear it off your dashboard">Done</button>
+        </div>
+      );
+    }
+    const action = item.kind === 'unassigned' ? 'Find cover' : item.kind === 'stock' ? 'Order list' : null;
+    return (
+      <Link key={item.id} href={item.href} className="dash-att">
+        {icon}
+        <div className="dash-att-main">
+          <div className={`dash-att-title ${tone}`}>{item.title}</div>
+          <div className="dash-att-sub">{item.subtitle}</div>
+        </div>
+        {action
+          ? <span className={`pill-btn is-small${item.kind === 'unassigned' ? ' is-urgent' : ''}`}>{action}</span>
+          : <ChevronRight size={16} className="dash-att-chevron" aria-hidden />}
+      </Link>
+    );
+  };
+
+  // Sites with jobs this week and no door or key-safe codes. Was a red
+  // banner across the top of the page every day - it is a housekeeping job,
+  // not an emergency, so it is an amber item here that opens the list of
+  // sites.
+  const accessItem = noAccessSites.length > 0 && (
+    <div className="dash-att-group">
+      <button type="button" className="dash-att is-toggle" onClick={() => setShowNoAccess((v) => !v)} aria-expanded={showNoAccess}>
+        <span className="dash-att-icon is-warn"><KeyRound size={17} /></span>
+        <div className="dash-att-main">
+          <div className="dash-att-title">No access codes for {noAccessSites.length} site{noAccessSites.length === 1 ? '' : 's'}</div>
+          <div className="dash-att-sub">
+            {noAccessSites.reduce((n, site) => n + site.jobs, 0)} jobs in the next 7 days · staff will see no codes there
+          </div>
+        </div>
+        {showNoAccess ? <ChevronDown size={16} className="dash-att-chevron" aria-hidden /> : <ChevronRight size={16} className="dash-att-chevron" aria-hidden />}
+      </button>
+      {showNoAccess && (
+        <ul className="dash-att-list">
+          {noAccessSites.map((site) => (
+            <li key={site.id}>
+              <Link href={`/admin/clients/${site.clientId}`} title="Open the client, then press Access on this site">
+                {site.name}
+              </Link>
+              {' '}<span>{shortAddress(site.address)} · {site.jobs} job{site.jobs === 1 ? '' : 's'}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+
   const renderTodayJob = (job, state) => {
     const { title, street } = jobWhere(job);
     const names = namesOf(job);
@@ -668,12 +811,27 @@ export default function AdminDashboard() {
       <div className="dash-head">
         <div>
           <h1>{timeGreeting}, {greetingName}</h1>
-          <p className="page-subtitle">
+          <p className="page-subtitle dash-updated">
             {new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
-            {' · '}{clockOf(new Date())}
+            {' · '}
+            <button
+              type="button"
+              className="dash-refresh"
+              onClick={refresh}
+              disabled={refreshing}
+              title="Fetch the latest now - it also updates by itself every two minutes"
+            >
+              <RefreshCw size={13} aria-hidden className={refreshing ? 'is-spinning' : ''} />
+              {refreshing ? 'Updating…' : `Updated ${updatedAgo(updatedAt)}`}
+            </button>
           </p>
         </div>
         <div className="dash-head-actions">
+          <button type="button" className="dash-search" onClick={openSearch} title="Find a client, site, cleaner or page (Ctrl+K)">
+            <Search size={15} aria-hidden />
+            <span>Find a client, site or cleaner</span>
+            <kbd>Ctrl K</kbd>
+          </button>
           <Link href="/admin/reports" className="pill-btn" title="Today's numbers in full">
             <FileBarChart size={16} aria-hidden />
             Today's report
@@ -685,59 +843,41 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Today's figures as one line. Each still opens the page it comes
-          from, as the cards did. */}
-      <div className="rota-figures dash-figures">
-        <Link href="/admin/rota" className="rota-figure" title="Today's jobs and how many are done">
-          <b>{stats.todaysJobs}</b> jobs today · {stats.todaysCompleted} done
+      {/* Today's figures as four small tiles - two by two on a phone, so the
+          jobs start after two rows rather than five lines. Each opens the
+          page it comes from. */}
+      <div className="dash-kpis">
+        <Link href="/admin/rota" className="dash-kpi" title="Today's jobs and how many are done">
+          <span className="dash-kpi-label">Jobs today</span>
+          {stats.todaysJobs > 0 ? (
+            <span className="dash-kpi-value">{stats.todaysCompleted}<small> of {stats.todaysJobs} done</small></span>
+          ) : (
+            <span className="dash-kpi-value">0<small> booked</small></span>
+          )}
+          <span className="dash-kpi-bar" aria-hidden="true">
+            <span style={{ width: `${stats.todaysJobs > 0 ? Math.round((stats.todaysCompleted / stats.todaysJobs) * 100) : 0}%` }} />
+          </span>
+          {stats.unassigned > 0 ? (
+            <span className="dash-kpi-note is-alert">{stats.unassigned} with no cleaner</span>
+          ) : (
+            <span className="dash-kpi-note is-good"><Check size={13} strokeWidth={2.6} aria-hidden /> Every job has a cleaner</span>
+          )}
         </Link>
-        <Link href="/admin/cleaners" className="rota-figure" title="Staff clocked in right now">
+        <Link href="/admin/cleaners" className="dash-kpi" title="Staff clocked in right now">
+          <span className="dash-kpi-label">Working now</span>
           {/* A figure with no denominator says nothing: one of two is a
               problem, one of twelve is a Tuesday. */}
-          <b>{stats.staffWorking}</b> working now, of {staffGlance.total}
+          <span className="dash-kpi-value">{stats.staffWorking}<small> of {staffGlance.total} staff</small></span>
         </Link>
-        <Link href="/admin/rota" className="rota-figure" title="Total length of today's scheduled work">
-          <b>{Math.round(stats.jobHours * 10) / 10}</b> hours booked
+        <Link href="/admin/rota" className="dash-kpi" title="Total length of today's scheduled work">
+          <span className="dash-kpi-label">Hours booked</span>
+          <span className="dash-kpi-value">{Math.round(stats.jobHours * 10) / 10}<small> today</small></span>
         </Link>
-        <Link href="/admin/requests" className="rota-figure" title="Open kit top-ups, issues and time off">
-          <b>{stats.openRequests}</b> requests open
+        <Link href="/admin/requests" className="dash-kpi" title="Open kit top-ups, issues and time off">
+          <span className="dash-kpi-label">Requests open</span>
+          <span className="dash-kpi-value">{stats.openRequests}</span>
         </Link>
-        {stats.unassigned > 0 ? (
-          <Link href="/admin/rota" className="rota-figure is-alert" title="Today's jobs with nobody assigned">
-            <b>{stats.unassigned}</b> with no cleaner today
-          </Link>
-        ) : (
-          <span className="rota-figure is-good" title="Every job today has someone on it">
-            <Check size={15} strokeWidth={2.6} aria-hidden />
-            Every job today has a cleaner
-          </span>
-        )}
       </div>
-
-      {noAccessSites.length > 0 && (
-        <div role="alert" className="dash-access-banner">
-          <button type="button" className="dash-access-banner-head" onClick={() => setShowNoAccess((v) => !v)} aria-expanded={showNoAccess}>
-            <CircleAlert size={18} aria-hidden />
-            <span>
-              <b>No access codes for {noAccessSites.length} site{noAccessSites.length === 1 ? '' : 's'}</b> with jobs in the next 7 days
-              {' '}({noAccessSites.reduce((n, s) => n + s.jobs, 0)} jobs). Staff will see no codes there.
-            </span>
-            {showNoAccess ? <ChevronDown size={18} aria-hidden /> : <ChevronRight size={18} aria-hidden />}
-          </button>
-          {showNoAccess && (
-            <ul className="dash-access-banner-list">
-              {noAccessSites.map((s) => (
-                <li key={s.id}>
-                  <Link href={`/admin/clients/${s.clientId}`} title="Open the client, then press Access on this site">
-                    {s.name}
-                  </Link>
-                  {' '}<span>{shortAddress(s.address)} · {s.jobs} job{s.jobs === 1 ? '' : 's'}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
 
       <div className="dash-layout">
         <div className="dash-col">
@@ -866,6 +1006,22 @@ export default function AdminDashboard() {
         </div>
 
         <div className="dash-col">
+          {/* First in this column, and first after the figures on a phone
+              (order: -1 under 980px) - it is the list the office acts on. */}
+          <section className="dash-card is-attention">
+            <div className="dash-card-head">
+              <h2>Needs attention</h2>
+              {(attention.length > 0 || noAccessSites.length > 0) && <span className="dash-card-note">Most urgent first</span>}
+            </div>
+            {attention.length === 0 && noAccessSites.length === 0 && <EmptyState compact tone="good" icon={EmptyIconCheck} title="Nothing needs attention right now" />}
+            {redAttention.map(renderAttentionItem)}
+            {accessItem}
+            {otherAttention.map(renderAttentionItem)}
+            {attention.length > 6 && (
+              <Link href="/admin/requests" className="dash-panel-more">+{attention.length - 6} more &rarr;</Link>
+            )}
+          </section>
+
           <section className="dash-card">
             <div className="dash-card-head">
               <h2>Who's on now</h2>
@@ -905,68 +1061,6 @@ export default function AdminDashboard() {
               </button>
               <Link href="/admin/cleaners" className="dash-panel-link">Staff &rarr;</Link>
             </div>
-          </section>
-
-          <section className="dash-card">
-            <div className="dash-card-head">
-              <h2>Needs attention</h2>
-              {attention.length > 0 && <span className="dash-card-note">Most urgent first</span>}
-            </div>
-            {attention.length === 0 && <EmptyState compact tone="good" icon={EmptyIconCheck} title="Nothing needs attention right now" />}
-            {attention.slice(0, 6).map((item) => {
-              const tone = attentionTone(item);
-              const icon = <span className={`dash-att-icon ${tone}`}>{attentionIcon(item)}</span>;
-              if (item.kind === 'request') {
-                const kit = item.requestType === 'kit_topup';
-                return (
-                  <div key={item.id} className="dash-att" onClick={() => setDetailItem(item)}>
-                    {icon}
-                    <div className="dash-att-main">
-                      <div className="dash-att-title">{kit ? 'Kit top-up' : 'Issue reported'} · {item.cleanerName}</div>
-                      <div className="dash-att-sub">{item.description}</div>
-                    </div>
-                    <button
-                      type="button"
-                      className="pill-btn is-small"
-                      onClick={(e) => { e.stopPropagation(); completeTodo(item.rawId); }}
-                      title={kit ? 'The kit has gone out - clear it off the list' : 'Dealt with - clear it off the list'}
-                    >
-                      {kit ? 'Mark sent' : 'Resolved'}
-                    </button>
-                  </div>
-                );
-              }
-              if (item.kind === 'reminder') {
-                return (
-                  <div key={item.id} className="dash-att" style={{ cursor: 'default' }}>
-                    {icon}
-                    <div className="dash-att-main">
-                      <div className={`dash-att-title ${tone}`}>
-                        {item.title} · <Link href={item.href} className="dash-row-name">{item.name}</Link>
-                      </div>
-                      <div className="dash-att-sub">{item.subtitle}</div>
-                    </div>
-                    <button type="button" className="pill-btn is-small" onClick={() => completeReminder(item)} title="Mark this reminder done and clear it off your dashboard">Done</button>
-                  </div>
-                );
-              }
-              const action = item.kind === 'unassigned' ? 'Find cover' : item.kind === 'stock' ? 'Order list' : null;
-              return (
-                <Link key={item.id} href={item.href} className="dash-att">
-                  {icon}
-                  <div className="dash-att-main">
-                    <div className={`dash-att-title ${tone}`}>{item.title}</div>
-                    <div className="dash-att-sub">{item.subtitle}</div>
-                  </div>
-                  {action
-                    ? <span className={`pill-btn is-small${item.kind === 'unassigned' ? ' is-urgent' : ''}`}>{action}</span>
-                    : <ChevronRight size={16} className="dash-att-chevron" aria-hidden />}
-                </Link>
-              );
-            })}
-            {attention.length > 6 && (
-              <Link href="/admin/requests" className="dash-panel-more">+{attention.length - 6} more &rarr;</Link>
-            )}
           </section>
 
           {role === 'admin' && (

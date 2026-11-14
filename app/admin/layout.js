@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Download, Folder, Package, KeyRound, LifeBuoy, Banknote, Video, Bell, HardHat, Menu, X, Receipt, Megaphone } from 'lucide-react';
+import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Download, Folder, Package, KeyRound, LifeBuoy, Banknote, Video, Bell, HardHat, Menu, X, Receipt, Megaphone, Search } from 'lucide-react';
 import { signOutAndClearPresence } from '../../lib/signOut';
 import { getSessionAndProfile } from '../../lib/authGate';
 import { canSeeInvoices } from '../../lib/invoiceAccess';
@@ -14,6 +14,7 @@ import EnablePush from '../components/EnablePush';
 import Logo from '../components/Logo';
 import { PageSkeleton, SkeletonNav } from '../components/Skeleton';
 import { useDocumentTitle, titleForPath } from '../components/useDocumentTitle';
+import SearchPalette, { openSearch } from '../components/SearchPalette';
 
 // Which placeholder shape the page is about to fill, so the shell's first
 // frame already looks like the page that follows.
@@ -174,12 +175,19 @@ export default function AdminLayout({ children }) {
   return (
     <>
       <EmergencyBanner />
+      {/* Staff pages are admin-only, so supervisors search clients and sites. */}
+      {!stockOnly && <SearchPalette pages={navItems} canSeeStaff={role === 'admin'} />}
       <div className="admin-shell">
       <div className="admin-topbar">
         <div className="admin-topbar-brand">
           <Logo size={28} tone="light" showWordmark />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {!stockOnly && (
+            <button type="button" className="admin-topbar-menu-btn" onClick={openSearch} aria-label="Search" title="Find a client, site, cleaner or page">
+              <Search size={20} />
+            </button>
+          )}
           <EnablePush iconColor="white" />
           <PresenceIndicator iconColor="white" />
           <button type="button" className="admin-topbar-menu-btn" onClick={() => setDrawerOpen(true)} aria-label="Open menu" title="Open the menu">
@@ -202,6 +210,14 @@ export default function AdminLayout({ children }) {
             <X size={18} />
           </button>
         </div>
+
+        {!stockOnly && (
+          <button type="button" className="sidebar-search" onClick={() => { setDrawerOpen(false); openSearch(); }} title="Find a client, site, cleaner or page">
+            <Search size={15} aria-hidden />
+            <span>Search</span>
+            <kbd className="search-kbd">Ctrl K</kbd>
+          </button>
+        )}
 
         <nav className="sidebar-nav">
           {NAV_GROUPS.map((group) => {

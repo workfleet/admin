@@ -1397,38 +1397,44 @@ a.stat-card.is-alert:hover {
 
 /* A rounded button, as a link or a button. :not(:disabled) on the hover so
    it outranks the app-wide button hover. */
+/* Now the same shape as every other button (8px corners, fine border, no
+   coral glow) - the round pills with a halo were the dashboard's last
+   different-looking controls. The class name stays so the rota keeps
+   working unchanged. */
 .pill-btn {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   width: auto;
-  height: 40px;
+  height: 38px;
   margin: 0;
-  padding: 0 16px;
+  padding: 0 14px;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-control);
   background: var(--surface);
   color: var(--ink);
-  font-family: var(--wf-data);
-  font-size: 13.5px;
-  font-weight: 600;
+  font-family: var(--app-ui-font);
+  font-size: 14px;
+  font-weight: 500;
   white-space: nowrap;
   text-decoration: none;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(32, 35, 39, 0.06), inset 0 0 0 1px rgba(32, 35, 39, 0.08);
+  box-shadow: var(--shadow-xs), inset 0 0 0 1px var(--control-border);
   transition: background 0.15s ease;
 }
 .pill-btn:hover:not(:disabled) { background: #F6F7F8; color: var(--ink); }
 .pill-btn.is-primary {
   background: var(--wf-coral);
   color: var(--wf-graphite);
-  box-shadow: 0 1px 2px rgba(232, 82, 63, 0.30), 0 6px 16px rgba(255, 107, 91, 0.30);
+  font-weight: 600;
+  box-shadow: var(--shadow-xs);
 }
 .pill-btn.is-primary:hover:not(:disabled) { background: var(--wf-coral-dark); color: var(--wf-graphite); }
 .pill-btn.is-small {
-  height: 32px;
-  padding: 0 13px;
-  font-size: 12.5px;
+  height: 30px;
+  padding: 0 11px;
+  font-size: 13px;
+  border-radius: 7px;
   background: #F3F4F6;
   box-shadow: none;
 }
@@ -1463,9 +1469,10 @@ a.rota-figure:hover b { text-decoration: underline; text-underline-offset: 3px; 
 
 .dash-card {
   background: var(--surface);
-  border-radius: 18px;
-  box-shadow: 0 1px 3px rgba(32, 35, 39, 0.05), 0 8px 24px rgba(32, 35, 39, 0.05);
-  padding: 20px 22px;
+  border: 1px solid var(--surface-line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-xs);
+  padding: 18px 20px;
   min-width: 0;
 }
 .dash-card-head {
@@ -1550,16 +1557,26 @@ a.rota-figure:hover b { text-decoration: underline; text-underline-offset: 3px; 
   background: var(--wf-verified);
 }
 
+/* Job states read as the same tinted pills used for statuses everywhere
+   else; "In 2 h" (still to come) stays as plain text - it is a time, not a
+   state. */
 .dash-job-state {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding-top: 2px;
-  font-size: 12.5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
   font-weight: 500;
   color: #4A5058;
   white-space: nowrap;
 }
+.dash-job-state.is-next { padding: 2px 0; }
+.dash-job-state.is-onsite { background: var(--wf-verified-bg); }
+.dash-job-state.is-held,
+.dash-job-state.is-missed,
+.dash-job-state.is-late { background: var(--wf-overdue-bg); }
+.dash-job-state.is-done { background: #EDEEF0; }
 .dash-state-dot {
   width: 8px;
   height: 8px;
@@ -1571,7 +1588,7 @@ a.rota-figure:hover b { text-decoration: underline; text-underline-offset: 3px; 
 .dash-job-state.is-onsite .dash-state-dot { background: var(--wf-verified); box-shadow: 0 0 0 3px rgba(52, 199, 123, 0.25); }
 .dash-job-state.is-held,
 .dash-job-state.is-missed,
-.dash-job-state.is-late { color: var(--wf-overdue); }
+.dash-job-state.is-late { color: #A3152A; }
 .dash-job-state.is-held .dash-state-dot,
 .dash-job-state.is-missed .dash-state-dot,
 .dash-job-state.is-late .dash-state-dot { background: var(--wf-overdue); box-shadow: none; }
@@ -1755,8 +1772,146 @@ a.rota-figure:hover b { text-decoration: underline; text-underline-offset: 3px; 
 }
 .dash-att-chevron { color: var(--muted); }
 
+/* The access-code item is a <button> that opens its list of sites, so it
+   drops the button chrome and looks like the rows around it. */
+.dash-att.is-toggle {
+  width: 100%;
+  background: transparent;
+  color: inherit;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 11px 0;
+  font: inherit;
+  text-align: left;
+}
+.dash-att.is-toggle:hover:not(:disabled) { background: transparent; }
+.dash-att + .dash-att-group,
+.dash-att-group + .dash-att { border-top: 1px solid rgba(32, 35, 39, 0.06); }
+.dash-att-icon.is-warn { background: #FBF1DF; color: #8A5A0B; }
+.dash-att-list {
+  list-style: none;
+  margin: 0 0 8px 46px;
+  padding: 0;
+  font-size: 13px;
+}
+.dash-att-list li { padding: 4px 0; }
+.dash-att-list a { font-weight: 600; color: var(--ink); }
+.dash-att-list span { color: var(--muted); }
+
+/* ---- Dashboard figures: four small tiles ---- */
+.dash-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.dash-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--surface-line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-xs);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+.dash-kpi:hover { border-color: var(--control-border-hover); }
+.dash-kpi-label { font-size: 13px; color: var(--muted); }
+.dash-kpi-value {
+  font-family: var(--wf-data);
+  font-variant-numeric: tabular-nums;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+.dash-kpi-value small {
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+.dash-kpi-bar {
+  display: block;
+  height: 4px;
+  margin: 6px 0 4px;
+  border-radius: 2px;
+  background: #ECEDEF;
+  overflow: hidden;
+}
+.dash-kpi-bar span { display: block; height: 100%; border-radius: 2px; background: var(--wf-verified); }
+.dash-kpi-note { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; }
+.dash-kpi-note.is-good { color: var(--wf-verified-text); }
+.dash-kpi-note.is-alert { color: #A3152A; font-weight: 600; }
+
+/* ---- Dashboard header: search box and "Updated" ---- */
+.dash-updated { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.dash-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 4px;
+  margin: 0 -4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: inherit;
+  font-weight: 400;
+  box-shadow: none;
+  border-radius: 6px;
+}
+.dash-refresh:hover:not(:disabled) { background: #E8EAED; color: var(--ink); }
+.dash-refresh:disabled { background: transparent; color: var(--muted); }
+.dash-refresh .is-spinning { animation: dash-spin 0.9s linear infinite; }
+@keyframes dash-spin { to { transform: rotate(360deg); } }
+
+.dash-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 260px;
+  height: 38px;
+  padding: 0 10px 0 12px;
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-xs), inset 0 0 0 1px var(--control-border);
+  font-size: 14px;
+  font-weight: 400;
+  text-align: left;
+}
+.dash-search span { flex: 1; }
+.dash-search:hover:not(:disabled) { background: #F6F7F8; color: var(--ink-soft); }
+.dash-search kbd,
+.search-kbd {
+  font-family: var(--wf-data);
+  font-size: 11px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--control-border);
+  color: var(--muted);
+  background: var(--wf-white);
+}
+
 @media (max-width: 980px) {
-  .dash-layout { grid-template-columns: minmax(0, 1fr); }
+  /* One column. The columns dissolve so Needs attention can come straight
+     after the figures instead of after the whole schedule. */
+  .dash-layout { display: flex; flex-direction: column; }
+  .dash-col { display: contents; }
+  .dash-card.is-attention { order: -1; }
+}
+
+@media (max-width: 720px) {
+  .dash-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .dash-kpi { padding: 10px 12px; }
+  .dash-kpi-value { font-size: 20px; }
+  .dash-head-actions { width: 100%; }
+  .dash-search { min-width: 0; flex: 1 1 100%; order: -1; }
+  .dash-search kbd { display: none; }
 }
 
 @media (max-width: 520px) {
@@ -4144,6 +4299,126 @@ a.btn-compact {
 
 .empty-block-action { margin-top: 8px; }
 
+/* ---- Search (components/SearchPalette.js) ---- */
+.sidebar-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0 0 14px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.72);
+  border-radius: var(--radius-control);
+  font-size: 13.5px;
+  font-weight: 400;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.sidebar-search span { flex: 1; text-align: left; }
+.sidebar-search:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.sidebar-search .search-kbd {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.search-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 600;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 12vh 16px 16px;
+  background: rgba(32, 35, 39, 0.4);
+  backdrop-filter: blur(2px);
+}
+
+.search-panel {
+  width: 100%;
+  max-width: 560px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--wf-white);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.search-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--surface-line);
+  color: var(--muted);
+}
+.search-input-row input {
+  flex: 1;
+  margin: 0;
+  padding: 4px 0;
+  border: none;
+  box-shadow: none;
+  font-size: 16px;
+  background: transparent;
+}
+.search-input-row input:focus { box-shadow: none; border: none; }
+.search-esc {
+  padding: 2px 6px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--control-border);
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  box-shadow: none;
+}
+.search-esc:hover:not(:disabled) { background: #F4F5F6; color: var(--ink); }
+
+.search-results { overflow-y: auto; padding: 6px; }
+.search-group + .search-group { margin-top: 4px; }
+.search-group-label {
+  padding: 8px 10px 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.search-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--ink);
+  border-radius: 8px;
+  box-shadow: none;
+  font-size: 14px;
+  font-weight: 400;
+  text-align: left;
+}
+.search-item svg { color: var(--muted); flex-shrink: 0; }
+.search-item.is-active,
+.search-item.is-active:hover:not(:disabled) { background: #F1F2F4; }
+.search-item-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-item-sub { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.search-hint { margin: 0; padding: 18px 12px; font-size: 13.5px; color: var(--muted); text-align: center; }
+.search-foot {
+  display: flex;
+  gap: 16px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--surface-line);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+@media (max-width: 720px) {
+  .search-overlay { padding-top: 8px; }
+  .search-panel { max-height: 80vh; }
+  .search-foot { display: none; }
+}
+
 /* ---- More menu (components/MoreMenu.js) ---- */
 .more-menu {
   position: relative;
@@ -5058,36 +5333,3 @@ a.btn-compact {
   color: var(--wf-on-coral);
 }
 
-/* ---- Dashboard: sites with jobs this week and no access codes ---- */
-.dash-access-banner {
-  background: var(--wf-overdue-bg);
-  border: 1px solid var(--wf-overdue);
-  border-radius: var(--wf-radius);
-  margin: 0 0 16px;
-  color: var(--wf-graphite);
-}
-.dash-access-banner-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  background: transparent;
-  border: none;
-  color: inherit;
-  text-align: left;
-  font-size: 14px;
-  line-height: 1.4;
-  padding: 10px 14px;
-  cursor: pointer;
-}
-.dash-access-banner-head span { flex: 1; }
-.dash-access-banner-head svg:first-child { color: var(--wf-overdue); flex-shrink: 0; }
-.dash-access-banner-list {
-  list-style: none;
-  margin: 0;
-  padding: 0 14px 12px 42px;
-  font-size: 13px;
-  line-height: 1.7;
-}
-.dash-access-banner-list a { font-weight: 600; color: inherit; }
-.dash-access-banner-list span { color: var(--muted); }
