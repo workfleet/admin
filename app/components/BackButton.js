@@ -10,7 +10,7 @@ import { ArrowLeft } from 'lucide-react';
 // Keep in step with NAV_ITEMS in app/admin, app/cleaner and app/client
 // layout.js.
 const MENU_PAGES = new Set([
-  '/admin', '/admin/notifications', '/admin/messages', '/admin/rota', '/admin/cover',
+  '/admin', '/admin/notifications', '/admin/messages', '/admin/announcements', '/admin/rota', '/admin/cover',
   '/admin/tasks', '/admin/requests', '/admin/clients', '/admin/quotes', '/admin/invoices',
   '/admin/cleaners', '/admin/onboarding', '/admin/payroll', '/admin/training',
   '/admin/templates', '/admin/documents', '/admin/inventory', '/admin/keys',

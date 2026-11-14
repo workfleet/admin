@@ -10,6 +10,8 @@ import { notify } from '../../../lib/notify';
 import { useConfirm } from '../../components/ConfirmProvider';
 import { useToast } from '../../components/ToastProvider';
 import BackButton from '../../components/BackButton';
+import EmptyState from '../../components/EmptyState';
+import { Megaphone } from 'lucide-react';
 
 // Messages to every cleaner at once (0136). Each one pops up over the
 // cleaner app the next time they open it, until they tap "Got it".
@@ -156,7 +158,9 @@ export default function AdminAnnouncements() {
       </div>
 
       <h2 style={{ fontSize: 15, margin: '24px 0 10px' }}>Sent</h2>
-      {announcements.length === 0 && <p className="empty-state">Nothing sent yet.</p>}
+      {announcements.length === 0 && (
+        <EmptyState compact icon={Megaphone} title="Nothing sent yet" body="Messages you send pop up for every cleaner the next time they open the app." />
+      )}
 
       {announcements.map((ann) => {
         const seenBy = new Map(reads.filter((r) => r.announcement_id === ann.id).map((r) => [r.profile_id, r.read_at]));
