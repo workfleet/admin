@@ -95,6 +95,9 @@ export default function AnnouncementPopup() {
         <button className="btn-primary" onClick={gotIt} disabled={saving} style={{ width: '100%' }}>
           {saving ? 'Saving...' : 'Got it'}
         </button>
+        <p style={{ color: 'var(--muted)', fontSize: 12, textAlign: 'center', margin: '10px 0 0' }}>
+          You can read this again any time in Notifications.
+        </p>
       </div>
     </div>
   );
