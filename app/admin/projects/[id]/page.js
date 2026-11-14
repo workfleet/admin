@@ -28,6 +28,7 @@ import MoreMenu from '../../../components/MoreMenu';
 import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 import BackButton from '../../../components/BackButton';
+import ProjectAiTools from '../../../components/ProjectAiTools';
 
 const BUCKET = 'project-files';
 const PROJECT_SELECT = 'id, name, kind, status, outcome, description, client_id, property_id, owner_id, start_date, due_date, created_at, completed_at, clients(name), properties(address)';
@@ -93,6 +94,8 @@ export default function ProjectPage() {
   const [newDate, setNewDate] = useState({ label: '', date: '' });
   const [noteBody, setNoteBody] = useState('');
   const [uploading, setUploading] = useState(false);
+  // null = the AI switch column isn't there yet (0138 not run).
+  const [aiEnabled, setAiEnabled] = useState(null);
 
   const today = localDateString(new Date());
   useDocumentTitle(project?.name || 'Project');
@@ -112,7 +115,10 @@ export default function ProjectPage() {
       return;
     }
 
-    const [tasksRes, datesRes, notesRes, filesRes, staffRes, clientsRes, propertiesRes] = await Promise.all([
+    const [aiRes, tasksRes, datesRes, notesRes, filesRes, staffRes, clientsRes, propertiesRes] = await Promise.all([
+      // Asked for on its own so the page still loads before 0138 is run:
+      // then the AI card just doesn't show.
+      supabase.from('projects').select('ai_enabled').eq('id', id).maybeSingle(),
       supabase.from('project_tasks').select(TASK_SELECT).eq('project_id', id).order('position'),
       supabase.from('project_dates').select('id, label, date, done').eq('project_id', id).order('date'),
       supabase.from('project_notes').select('id, kind, body, created_by, created_at').eq('project_id', id).order('created_at', { ascending: false }).limit(200),
@@ -124,6 +130,7 @@ export default function ProjectPage() {
     ]);
 
     setProject(projectData);
+    setAiEnabled(aiRes.error ? null : Boolean(aiRes.data?.ai_enabled));
     setTasks(tasksRes.data || []);
     setDates(datesRes.data || []);
     setNotes(notesRes.data || []);
@@ -348,6 +355,60 @@ export default function ProjectPage() {
     const { error } = await supabase.from('project_files').delete().eq('id', f.id);
     if (error) { toast.error("Couldn't delete the file record."); return; }
     setFiles((prev) => prev.filter((x) => x.id !== f.id));
+  };
+
+  // --- AI tools --------------------------------------------------------
+
+  const toggleAi = async (enabled) => {
+    if (enabled && project.kind === 'tender') {
+      const ok = await confirm('Switch AI tools on for this tender? Check the tender documents first - some ban AI or require you to declare it. Every use is noted in the history.');
+      if (!ok) return;
+    }
+    const { data, error } = await supabase.from('projects').update({ ai_enabled: enabled }).eq('id', id).select('ai_enabled').single();
+    if (error || !data) { toast.error("Couldn't change the AI setting."); return; }
+    setAiEnabled(data.ai_enabled);
+    logEvent(enabled ? 'AI tools switched on' : 'AI tools switched off');
+  };
+
+  const reloadNotes = async () => {
+    const { data } = await supabase.from('project_notes').select('id, kind, body, created_by, created_at').eq('project_id', id).order('created_at', { ascending: false }).limit(200);
+    if (data) setNotes(data);
+  };
+
+  const addSuggestions = async ({ tasks: newTasks, dates: newDates }) => {
+    let position = tasks.reduce((max, t) => Math.max(max, t.position ?? 0), -1) + 1;
+    const taskRows = newTasks.map((t) => ({
+      project_id: id,
+      title: t.title,
+      due_date: t.due_date || null,
+      notes: [t.notes, t.source && `From: ${t.source}`].filter(Boolean).join('\n') || null,
+      position: position++,
+      created_by: ownId,
+    }));
+    const dateRows = newDates.map((d) => ({ project_id: id, label: d.label, date: d.date }));
+    const [tRes, dRes] = await Promise.all([
+      taskRows.length ? supabase.from('project_tasks').insert(taskRows).select(TASK_SELECT) : Promise.resolve({ data: [] }),
+      dateRows.length ? supabase.from('project_dates').insert(dateRows).select('id, label, date, done') : Promise.resolve({ data: [] }),
+    ]);
+    if (tRes.error || dRes.error) { toast.error("Some of them didn't save. Please try again."); return false; }
+    setTasks((prev) => [...prev, ...(tRes.data || [])]);
+    setDates((prev) => [...prev, ...(dRes.data || [])].sort((a, b) => (a.date < b.date ? -1 : 1)));
+    const parts = [taskRows.length && `${taskRows.length} task${taskRows.length === 1 ? '' : 's'}`, dateRows.length && `${dateRows.length} date${dateRows.length === 1 ? '' : 's'}`].filter(Boolean);
+    logEvent(`Added ${parts.join(' and ')} suggested by AI`);
+    toast.success(`Added ${parts.join(' and ')}.`);
+    return true;
+  };
+
+  const saveNoteText = async (text) => {
+    const { data, error } = await supabase
+      .from('project_notes')
+      .insert({ project_id: id, kind: 'note', body: text, created_by: ownId })
+      .select('id, kind, body, created_by, created_at')
+      .single();
+    if (error || !data) { toast.error("Couldn't save the note."); return false; }
+    setNotes((prev) => [data, ...prev]);
+    toast.success('Saved to the notes.');
+    return true;
   };
 
   // --- Notes -----------------------------------------------------------
@@ -641,6 +702,17 @@ export default function ProjectPage() {
         </div>
 
         <div className="pj-side">
+          {aiEnabled !== null && (
+            <ProjectAiTools
+              project={{ id: project.id, kind: project.kind, ai_enabled: aiEnabled }}
+              files={files}
+              onToggleAi={toggleAi}
+              onAddSuggestions={addSuggestions}
+              onSaveNote={saveNoteText}
+              onUsed={reloadNotes}
+            />
+          )}
+
           {/* Key dates */}
           <div className="card" style={{ marginBottom: 16 }}>
             <h2>Key dates</h2>
