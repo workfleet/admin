@@ -14,6 +14,7 @@ import AutoCheckoutWatcher from '../components/AutoCheckoutWatcher';
 import ShiftLocationWatcher from '../components/ShiftLocationWatcher';
 import ClockQueueFlusher from '../components/ClockQueueFlusher';
 import PhotoQueueFlusher from '../components/PhotoQueueFlusher';
+import AnnouncementPopup from '../components/AnnouncementPopup';
 import { PageSkeleton } from '../components/Skeleton';
 
 const NAV_ITEMS = [
@@ -100,6 +101,7 @@ export default function CleanerLayout({ children }) {
       </div>
       <EmergencyButton />
       <InstallPrompt />
+      <AnnouncementPopup />
       {/* Two halves of the same job: AutoCheckoutWatcher takes one fix when
           the app is opened, ShiftLocationWatcher watches continuously while
           it is in front of them. Neither can see a locked phone. */}
