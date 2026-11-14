@@ -1,7 +1,7 @@
 'use client';
 
 import { PageSkeleton } from '../../components/Skeleton';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
@@ -13,6 +13,8 @@ import IncidentForm from '../../components/IncidentForm';
 import SafetyGuidance from '../../components/SafetyGuidance';
 import { companyFromSettings } from '../../../lib/companyBranding';
 import BackButton from '../../components/BackButton';
+import { OUTBOX_CHANGED, outboxEntries } from '../../../lib/incidentOutbox';
+import { warmPageWithAssets } from '../../../lib/jobSnapshot';
 
 const REPORT_COLUMNS = 'id, kind, incident_type, occurred_at, location, description, injured_party, injured_name, injured_address, injured_occupation, injury_details, treatment, damage_details, immediate_action, witnesses, photo_paths, status, corrective_action, closed_at, created_at, jobs(scheduled_at, properties(address))';
 
@@ -27,6 +29,9 @@ export default function CleanerIncidents() {
   const [loading, setLoading] = useState(true);
   const [jobs, setJobs] = useState([]);
   const [reports, setReports] = useState([]);
+  // Reports kept on this phone because there was no signal (lib/incidentOutbox).
+  const [waiting, setWaiting] = useState([]);
+  const waitingIds = useRef(new Set());
   const [openId, setOpenId] = useState(null);
   const [photoUrls, setPhotoUrls] = useState({});
   // From their staff record, offered when they were the one hurt so the
@@ -38,7 +43,29 @@ export default function CleanerIncidents() {
 
   useEffect(() => {
     load();
+    warmPageWithAssets('/cleaner/incidents');
   }, []);
+
+  // When the flusher sends one, it leaves the phone and joins the list
+  // from the server.
+  useEffect(() => {
+    if (!userId) return undefined;
+    const refresh = async () => {
+      const before = waitingIds.current;
+      const entries = await outboxEntries(userId);
+      waitingIds.current = new Set(entries.map((e) => e.id));
+      setWaiting(entries);
+      const sentNow = [...before].some((id) => !waitingIds.current.has(id));
+      if (sentNow) {
+        const { data } = await supabase.from('incident_reports').select(REPORT_COLUMNS)
+          .eq('reported_by', userId).order('occurred_at', { ascending: false });
+        if (data) setReports(data);
+      }
+    };
+    refresh();
+    window.addEventListener(OUTBOX_CHANGED, refresh);
+    return () => window.removeEventListener(OUTBOX_CHANGED, refresh);
+  }, [userId]);
 
   const load = async () => {
     const session = await getSessionWithRetry();
@@ -133,13 +160,29 @@ export default function CleanerIncidents() {
           ownAddress={ownAddress}
           columns={REPORT_COLUMNS}
           onCancel={() => setFormStart(null)}
-          onSaved={(row) => { setReports((prev) => [row, ...prev]); setFormStart(null); }}
+          onSaved={(row) => { if (!row.pending) setReports((prev) => [row, ...prev]); setFormStart(null); }}
         />
       )}
 
       <div className="card">
         <h2>Your reports</h2>
-        {reports.length === 0 && <p style={{ color: 'var(--muted)', fontSize: 14, margin: 0 }}>You haven't reported anything yet.</p>}
+        {waiting.map((w) => (
+          <div key={w.id} className="task-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600 }}>{KIND_LABELS[w.row.kind]} - {formatWhen(w.row.occurred_at)}</div>
+                <div style={{ fontSize: 13, color: 'var(--muted)' }}>{w.row.location} · {incidentSummary(w.row)}</div>
+              </div>
+              <span className="badge missed">{w.refusedAt ? "Couldn't send" : 'Waiting to send'}</span>
+            </div>
+            <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '6px 0 0' }}>
+              {w.refusedAt
+                ? 'Still saved on this phone. Ring the office and tell them what happened.'
+                : "Saved on this phone. It will send itself when you're back in range - don't clear the app until it has gone."}
+            </p>
+          </div>
+        ))}
+        {reports.length === 0 && waiting.length === 0 && <p style={{ color: 'var(--muted)', fontSize: 14, margin: 0 }}>You haven't reported anything yet.</p>}
         {reports.map((r) => (
           <div key={r.id} className="task-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
             <button

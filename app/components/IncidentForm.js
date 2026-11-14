@@ -10,6 +10,7 @@ import {
   FORM_INJURED_PARTIES, TREATMENT_LABELS, MAX_PHOTOS, buildIncidentRow, toLocalInputValue,
 } from '../../lib/incidents';
 import { useToast } from './ToastProvider';
+import { saveToOutbox, sendReport } from '../../lib/incidentOutbox';
 
 // The one form for an accident, incident or near miss, used by staff from
 // their phone and by the office. office: an admin adding a report somebody
@@ -112,38 +113,57 @@ export default function IncidentForm({
 
   const submit = async (e) => {
     e.preventDefault();
-    // Checked before any photo goes up, so a missing field never leaves
-    // orphaned uploads behind.
+    // Checked before anything is compressed or sent, so a missing field
+    // never leaves orphaned uploads behind.
     const check = buildIncidentRow({ ...form, photoPaths: photos.map(() => 'pending') }, { reporterId: userId, office });
     if (check.errors.length > 0) { setErrors(check.errors); return; }
     setErrors([]);
     setSubmitting(true);
 
-    const paths = [];
+    // Every id and photo path is fixed here, when the report is written, so
+    // a send that is retried later cannot make it twice (lib/incidentOutbox).
+    const reportId = crypto.randomUUID();
+    const photoEntries = [];
     for (const photo of photos) {
-      const file = await compressImage(photo.file);
-      const path = `${userId}/${crypto.randomUUID()}.jpg`;
-      const { error } = await supabase.storage.from('incident-photos').upload(path, file, { contentType: 'image/jpeg' });
-      if (error) {
-        setSubmitting(false);
-        toast.error("A photo didn't upload. Check your signal and try again, or send it without the photos.");
-        return;
-      }
-      paths.push(path);
+      photoEntries.push({ path: `${userId}/${crypto.randomUUID()}.jpg`, blob: await compressImage(photo.file) });
     }
+    const { row } = buildIncidentRow({ ...form, photoPaths: photoEntries.map((ph) => ph.path) }, { reporterId: userId, office });
+    const entry = { id: reportId, userId, row: { ...row, id: reportId }, photos: photoEntries, savedAt: new Date().toISOString() };
 
-    const { row } = buildIncidentRow({ ...form, photoPaths: paths }, { reporterId: userId, office });
-    const { data, error } = await supabase.from('incident_reports').insert(row).select(columns).single();
-    setSubmitting(false);
-    if (error || !data) {
-      toast.error(office
-        ? "Couldn't save the report. Try again in a moment."
-        : "Couldn't send the report. Check your signal and try again - if it keeps failing, ring the office.");
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    const result = offline ? { ok: false, retry: true } : await sendReport(supabase, entry, columns);
+    const done = (saved, message) => {
+      photos.forEach((ph) => URL.revokeObjectURL(ph.preview));
+      setSubmitting(false);
+      toast.success(message);
+      onSaved(saved);
+    };
+
+    if (result.ok) {
+      done(result.data, office ? 'Report added.' : 'Report sent to the office. Thank you for reporting it.');
       return;
     }
-    photos.forEach((p) => URL.revokeObjectURL(p.preview));
-    toast.success(office ? 'Report added.' : 'Report sent to the office. Thank you for reporting it.');
-    onSaved(data);
+
+    // No signal: keep it on the phone and let IncidentQueueFlusher send it.
+    // Staff only - the office is at a desk, and its pages have no flusher.
+    if (result.retry && !office && await saveToOutbox(entry)) {
+      done(
+        { ...entry.row, status: 'open', created_at: entry.savedAt, jobs: null, pending: true },
+        "No signal - your report is saved on this phone and will send itself when you're back in range.",
+      );
+      return;
+    }
+
+    setSubmitting(false);
+    if (result.retry) {
+      toast.error(office
+        ? "Couldn't save the report - check the connection and try again."
+        : "Couldn't send the report or keep it on this phone. Try again when you have signal, or ring the office.");
+    } else {
+      toast.error(office
+        ? "The report was refused. Check the details and try again."
+        : 'The report was refused. Ring the office and tell them what happened.');
+    }
   };
 
   const accident = form.kind === 'accident';

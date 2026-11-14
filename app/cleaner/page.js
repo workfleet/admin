@@ -20,6 +20,7 @@ import { KIT_PRODUCTS } from '../../lib/kitProducts';
 import { HOLIDAY_ACCRUAL_RATE, assignedJob, fetchAssigneeCounts, hoursWorked, formatHours } from '../../lib/hoursWorked';
 import { fetchEmploymentTypes, isSubcontractor } from '../../lib/profilePrivate';
 import { jobHeadline, TRAINING_JOB_COLUMNS } from '../../lib/training';
+import { warmPageWithAssets } from '../../lib/jobSnapshot';
 import {
   greetingFor, firstNameOf, splitJobsForHome, hoursThisWeek, hoursLeftThisWeek,
   jobsCompletedThisMonth, daySummary, unreadMessageCount, unreadSince, ratingSummary,
@@ -89,6 +90,9 @@ export default function CleanerDashboard() {
 
   useEffect(() => {
     loadData();
+    // So Report a problem opens with no signal even if they have never
+    // opened it before: accidents happen where the signal is worst.
+    warmPageWithAssets('/cleaner/incidents');
   }, []);
 
   const loadData = async () => {

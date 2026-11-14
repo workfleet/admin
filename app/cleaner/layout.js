@@ -16,6 +16,7 @@ import ClockQueueFlusher from '../components/ClockQueueFlusher';
 import PhotoQueueFlusher from '../components/PhotoQueueFlusher';
 import AnnouncementPopup from '../components/AnnouncementPopup';
 import { PageSkeleton } from '../components/Skeleton';
+import IncidentQueueFlusher from '../components/IncidentQueueFlusher';
 
 const NAV_ITEMS = [
   { href: '/cleaner', label: 'Home', icon: Home },
@@ -114,6 +115,7 @@ export default function CleanerLayout({ children }) {
       <div className="queue-banners">
         <ClockQueueFlusher />
         <PhotoQueueFlusher />
+        <IncidentQueueFlusher />
       </div>
       {children}
       <nav className="bottom-nav">
