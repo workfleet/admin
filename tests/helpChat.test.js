@@ -53,6 +53,18 @@ describe('action cards', () => {
     expect(actionDetails(site)).toEqual(['10 Wind Street, Swansea', 'Map pin found - check it is the right place.']);
   });
 
+  it('shows a client edit as before and after', () => {
+    const a = { type: 'update_client', clientName: 'Acme', diff: [{ label: 'Phone', from: '07700 900123', to: '07700 900456' }, { label: 'Email', from: '', to: 'a@acme.co.uk' }] };
+    expect(actionHeadline(a)).toBe("Change Acme's details");
+    expect(actionDetails(a)).toEqual(['Phone: 07700 900123 → 07700 900456', 'Email: (blank) → a@acme.co.uk']);
+  });
+
+  it('shows a site move as from and to', () => {
+    const a = { type: 'update_site', clientName: 'Acme', fromAddress: '1 High St', address: '2 High St' };
+    expect(actionHeadline(a)).toBe("Change a site's address for Acme");
+    expect(actionDetails(a)).toEqual(['From: 1 High St', 'To: 2 High St', 'New map pin found - check it is the right place.']);
+  });
+
   it('only lets the AI pick a sector from the New client list', () => {
     const props = ROTA_TOOLS.find((t) => t.name === 'propose_changes').input_schema.properties.changes.items.properties;
     expect(props.industry.anyOf[0].enum).toContain('Office / Commercial');
