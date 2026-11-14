@@ -139,19 +139,95 @@ export default function CleanerProfile() {
     const session = await getSessionWithRetry();
     if (!session) { router.push('/'); return; }
 
-    // Same admin-only gate as the Cleaners list this page is reached
-    // from - staff records (and onboarding PII below) aren't for
-    // supervisors, checked here too in case of a direct URL visit.
-    const { data: ownProfile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+    // Everything below depends only on this cleaner's id, so it is asked for
+    // at once - one wait instead of thirteen in a row, which is what made
+    // this page slow to open. The admin check (same gate as the Cleaners
+    // list this page is reached from; staff records and onboarding PII
+    // aren't for supervisors, checked here too for a direct URL visit) still
+    // decides whether any of it is shown, and row security decides what a
+    // non-admin's queries could return in the first place.
+    const [
+      { data: ownProfile },
+      { data: cleanerRow },
+      { data: assignmentRows },
+      { data: timeOffData },
+      { data: submissionData },
+      { data: detailsData },
+      { data: bankData },
+      { data: remindersData },
+      { data: certsData },
+      { data: checkinsData },
+      { data: claimRows },
+      { data: outcomeRows },
+    ] = await Promise.all([
+      supabase.from('profiles').select('role').eq('id', session.user.id).single(),
+      supabase
+        .from('profiles')
+        .select('id, full_name, role, manages_inventory, takes_cover, created_at, active, profile_private(holiday_adjustment_hours, deactivated_at)')
+        .eq('id', id)
+        .single(),
+      supabase
+        .from('job_assignments')
+        .select(`job_id, paid_minutes, paid_minutes_reason, jobs(id, scheduled_at, status, duration_minutes, ${TRAINING_JOB_COLUMNS}, properties(address))`)
+        .eq('cleaner_id', id),
+      supabase
+        .from('time_off_requests')
+        .select('type, status, hours')
+        .eq('cleaner_id', id),
+      // Only present if this account came through the onboarding flow
+      // rather than being added directly by an admin - no submission row
+      // means there's nothing more to show here.
+      supabase
+        .from('staff_onboarding_submissions')
+        .select('date_of_birth, address, phone, email, ni_number, emergency_contact_name, emergency_contact_phone, id_document_path, signed_at')
+        .eq('profile_id', id)
+        .maybeSingle(),
+      // The living record of their details (staff_details, 0092) - present
+      // for anyone who has filled it in or been filled in by the office,
+      // whichever way they joined. Queried on its own rather than embedded
+      // on profiles so that nothing else on this page depends on it.
+      supabase
+        .from('staff_details')
+        .select('phone, address, date_of_birth, ni_number, emergency_contact_name, emergency_contact_phone, start_date, updated_at')
+        .eq('profile_id', id)
+        .maybeSingle(),
+      supabase
+        .from('staff_bank_details')
+        .select('account_holder_name, sort_code, account_number, updated_at, updated_by')
+        .eq('profile_id', id)
+        .maybeSingle(),
+      supabase
+        .from('reminders')
+        .select('id, due_date, recurs_yearly, notes')
+        .eq('staff_id', id)
+        .order('due_date', { ascending: true }),
+      supabase
+        .from('staff_certifications')
+        .select('id, name, expiry_date, notes')
+        .eq('staff_id', id)
+        .order('expiry_date', { ascending: true, nullsFirst: false }),
+      supabase
+        .from('checkins')
+        .select('id, job_id, cleaner_id, checked_in_at, checked_out_at, auto_checked_out, self_declared, closed_at_booked_end, jobs(scheduled_at, properties(address))')
+        .eq('cleaner_id', id)
+        .order('checked_in_at', { ascending: false }),
+      // Only needed to tell "they told us and we agreed" from "we recorded it
+      // for them". Bounded to this cleaner, so one extra query rather than one
+      // per row - see describeClockRecord in lib/clockIn.js.
+      supabase
+        .from('missed_clockin_claims')
+        .select('job_id, cleaner_id, status, raised_by_admin')
+        .eq('cleaner_id', id),
+      supabase
+        .from('missed_shift_outcomes')
+        .select('job_id, outcome, decided_at, jobs(scheduled_at, properties(address))')
+        .eq('cleaner_id', id)
+        .order('decided_at', { ascending: false }),
+    ]);
+
     if (ownProfile?.role !== 'admin') { router.push('/admin'); return; }
 
-    const { data: cleanerData } = await supabase
-      .from('profiles')
-      .select('id, full_name, role, manages_inventory, takes_cover, created_at, active, profile_private(holiday_adjustment_hours, deactivated_at)')
-      .eq('id', id)
-      .single()
-      .then((res) => ({ ...res, data: flattenPrivate(res.data) }));
-
+    const cleanerData = flattenPrivate(cleanerRow);
     if (!cleanerData) { router.push('/admin/cleaners'); return; }
     fetchEmploymentTypes().then((types) => setEmploymentType(types[id] || 'employee'));
 
@@ -160,11 +236,9 @@ export default function CleanerProfile() {
       .then((body) => setEmail(body?.email ?? null))
       .catch(() => setEmail(null));
 
-    const { data: assignmentRows } = await supabase
-      .from('job_assignments')
-      .select(`job_id, paid_minutes, paid_minutes_reason, jobs(id, scheduled_at, status, duration_minutes, ${TRAINING_JOB_COLUMNS}, properties(address))`)
-      .eq('cleaner_id', id);
-
+    // The one query that needs another's answer: who else is on each of
+    // their jobs, so a shared job's hours are split the way payroll splits
+    // them.
     const jobIds = (assignmentRows || []).map((r) => r.job_id);
     const { data: allAssignmentsForJobs } = jobIds.length > 0
       ? await supabase.from('job_assignments').select('job_id').in('job_id', jobIds)
@@ -178,67 +252,6 @@ export default function CleanerProfile() {
       .filter((j) => j.id)
       .sort((a, b) => new Date(b.scheduled_at) - new Date(a.scheduled_at));
 
-    const { data: timeOffData } = await supabase
-      .from('time_off_requests')
-      .select('type, status, hours')
-      .eq('cleaner_id', id);
-
-    // Only present if this account came through the onboarding flow
-    // rather than being added directly by an admin - no submission row
-    // means there's nothing more to show here.
-    const { data: submissionData } = await supabase
-      .from('staff_onboarding_submissions')
-      .select('date_of_birth, address, phone, email, ni_number, emergency_contact_name, emergency_contact_phone, id_document_path, signed_at')
-      .eq('profile_id', id)
-      .maybeSingle();
-
-    // The living record of their details (staff_details, 0092) - present
-    // for anyone who has filled it in or been filled in by the office,
-    // whichever way they joined. Queried on its own rather than embedded
-    // on profiles so that nothing else on this page depends on it.
-    const { data: detailsData } = await supabase
-      .from('staff_details')
-      .select('phone, address, date_of_birth, ni_number, emergency_contact_name, emergency_contact_phone, start_date, updated_at')
-      .eq('profile_id', id)
-      .maybeSingle();
-
-    const { data: bankData } = await supabase
-      .from('staff_bank_details')
-      .select('account_holder_name, sort_code, account_number, updated_at, updated_by')
-      .eq('profile_id', id)
-      .maybeSingle();
-
-    const { data: remindersData } = await supabase
-      .from('reminders')
-      .select('id, due_date, recurs_yearly, notes')
-      .eq('staff_id', id)
-      .order('due_date', { ascending: true });
-
-    const { data: certsData } = await supabase
-      .from('staff_certifications')
-      .select('id, name, expiry_date, notes')
-      .eq('staff_id', id)
-      .order('expiry_date', { ascending: true, nullsFirst: false });
-
-    const { data: checkinsData } = await supabase
-      .from('checkins')
-      .select('id, job_id, cleaner_id, checked_in_at, checked_out_at, auto_checked_out, self_declared, closed_at_booked_end, jobs(scheduled_at, properties(address))')
-      .eq('cleaner_id', id)
-      .order('checked_in_at', { ascending: false });
-
-    // Only needed to tell "they told us and we agreed" from "we recorded it
-    // for them". Bounded to this cleaner, so one extra query rather than one
-    // per row - see describeClockRecord in lib/clockIn.js.
-    const { data: claimRows } = await supabase
-      .from('missed_clockin_claims')
-      .select('job_id, cleaner_id, status, raised_by_admin')
-      .eq('cleaner_id', id);
-
-    const { data: outcomeRows } = await supabase
-      .from('missed_shift_outcomes')
-      .select('job_id, outcome, decided_at, jobs(scheduled_at, properties(address))')
-      .eq('cleaner_id', id)
-      .order('decided_at', { ascending: false });
     const outcomeByJob = {};
     (outcomeRows || []).forEach((o) => { outcomeByJob[o.job_id] = o.outcome; });
     setAbsences((outcomeRows || []).filter((o) => o.jobs)

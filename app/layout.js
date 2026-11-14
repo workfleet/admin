@@ -6,12 +6,15 @@ import { ToastProvider } from './components/ToastProvider';
 import TooltipLayer from './components/TooltipLayer';
 
 // Route W type: Poppins to read, Inter to count. brand.css picks these
-// up as --wf-display and --wf-data. 300 is the body weight and 600 the
-// heading weight; 700 is loaded only because a handful of older rules
-// still ask for it, and faux-bold looks worse than the real cut.
+// up as --wf-display and --wf-data. Since the modern pass (2026-11-13)
+// Inter carries the working text and Poppins only headings (600), names
+// on the rota (500) and the "Work" of the wordmark (300) - so 400 and 700
+// are no longer loaded. Each Poppins weight is its own file preloaded on
+// every first visit; anything still asking for 400 or 700 gets the
+// nearest loaded cut.
 const poppins = Poppins({
   subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700'],
+  weight: ['300', '500', '600'],
   variable: '--font-poppins',
   display: 'swap',
 });

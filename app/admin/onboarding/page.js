@@ -61,30 +61,37 @@ export default function AdminOnboarding() {
     // Onboarding involves reviewing ID documents and other sensitive
     // personal data - stays full-admin only, checked here too in case
     // someone navigates here directly by URL rather than via the nav.
-    const { data: ownProfile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+    // All asked at once - one wait instead of four. The admin check still
+    // decides whether anything is shown; row security decides what a
+    // non-admin's queries could return.
+    const [
+      { data: ownProfile },
+      { data: invitesData },
+      { data: submissionsData },
+      // The rate a new cleaner is normally started on is already a setting -
+      // the one the quote calculator costs jobs at. The form offers it rather
+      // than making the office remember it, and it stays editable per hire.
+      { data: pricing },
+    ] = await Promise.all([
+      supabase.from('profiles').select('role').eq('id', session.user.id).single(),
+      supabase
+        .from('staff_invites')
+        .select(`
+          id, token, expected_name, email, status, created_at, expires_at,
+          job_title, hourly_rate, pay_frequency, start_date, reports_to
+        `)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('staff_onboarding_submissions')
+        .select('*'),
+      supabase
+        .from('pricing_settings')
+        .select('cleaner_hourly_pay')
+        .limit(1)
+        .maybeSingle(),
+    ]);
     if (ownProfile?.role !== 'admin') { router.push('/admin'); return; }
     setUserId(session.user.id);
-
-    const { data: invitesData } = await supabase
-      .from('staff_invites')
-      .select(`
-        id, token, expected_name, email, status, created_at, expires_at,
-        job_title, hourly_rate, pay_frequency, start_date, reports_to
-      `)
-      .order('created_at', { ascending: false });
-
-    const { data: submissionsData } = await supabase
-      .from('staff_onboarding_submissions')
-      .select('*');
-
-    // The rate a new cleaner is normally started on is already a setting -
-    // the one the quote calculator costs jobs at. The form offers it rather
-    // than making the office remember it, and it stays editable per hire.
-    const { data: pricing } = await supabase
-      .from('pricing_settings')
-      .select('cleaner_hourly_pay')
-      .limit(1)
-      .maybeSingle();
     const rate = pricing?.cleaner_hourly_pay ?? CONTRACT_DEFAULTS.hourlyRate;
     setStandardRate(String(rate));
     setForm((f) => (f.hourlyRate === '' ? { ...f, hourlyRate: String(rate) } : f));

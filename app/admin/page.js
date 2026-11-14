@@ -240,11 +240,21 @@ export default function AdminDashboard() {
     setPayrollLoading(true);
     const { start, end } = PAYROLL_PERIODS[payrollPeriod].range();
 
-    const { data: allRows } = await supabase
-      .from('job_assignments')
-      .select('cleaner_id, paid_minutes, profiles(full_name), jobs!inner(id, duration_minutes, status, scheduled_at)')
-      .gte('jobs.scheduled_at', start.toISOString())
-      .lt('jobs.scheduled_at', end.toISOString());
+    // The period's hours and the claims waiting on a decision, side by side.
+    // Claims are separate on purpose: these are hours somebody has already
+    // put their hand up for, and the only thing between them and payroll is
+    // an admin clicking.
+    const [{ data: allRows }, { count: pendingClaims }] = await Promise.all([
+      supabase
+        .from('job_assignments')
+        .select('cleaner_id, paid_minutes, profiles(full_name), jobs!inner(id, duration_minutes, status, scheduled_at)')
+        .gte('jobs.scheduled_at', start.toISOString())
+        .lt('jobs.scheduled_at', end.toISOString()),
+      supabase
+        .from('missed_clockin_claims')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pending'),
+    ]);
 
     // A job's duration is split evenly across everyone assigned to it, so
     // a 2-hour job with 2 people counts as 1 hour each - not 2 hours each -
@@ -275,14 +285,6 @@ export default function AdminDashboard() {
       }
     });
 
-    // Claims waiting on a decision. Separate from the missed figure on
-    // purpose: these are hours somebody has already put their hand up for,
-    // and the only thing between them and payroll is an admin clicking.
-    const { count: pendingClaims } = await supabase
-      .from('missed_clockin_claims')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'pending');
-
     setPayrollRows(Object.values(totals).sort((a, b) => b.minutes - a.minutes));
     setPayrollTotals({
       completedHours: completedMinutes / 60,
@@ -302,15 +304,18 @@ export default function AdminDashboard() {
     const session = await getSessionWithRetry();
     if (!session) { if (!refresh) router.push('/'); return; }
 
-    const { data: ownProfile } = await supabase.from('profiles').select('role, full_name, created_at').eq('id', session.user.id).single();
+    // Who is looking, and the status tidy-up, side by side: neither needs
+    // the other. The tidy-up auto-marks overdue jobs missed/completed based
+    // on elapsed time, same as the Rota page, so Today's Jobs stays
+    // consistent with it - it still finishes before the jobs are read below.
+    const [{ data: ownProfile }] = await Promise.all([
+      supabase.from('profiles').select('role, full_name, created_at').eq('id', session.user.id).single(),
+      supabase.rpc('reconcile_job_statuses'),
+    ]);
     setRole(ownProfile?.role || null);
     setGreetingName((ownProfile?.full_name || '').split(' ')[0] || 'there');
     const years = getWorkAnniversaryYears(ownProfile?.created_at);
     if (years && !refresh) setAnniversary({ name: ownProfile.full_name || 'there', years });
-
-    // Auto-marks overdue jobs missed/completed based on elapsed time,
-    // same as the Rota page, so Today's Jobs stays consistent with it.
-    await supabase.rpc('reconcile_job_statuses');
 
     // Nudge anyone who's started a shift without clocking in.
     //

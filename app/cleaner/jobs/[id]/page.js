@@ -224,6 +224,65 @@ export default function JobDetailPage() {
     setUserId(session.user.id);
 
     setLoadError(null);
+    const me = session.user.id;
+
+    // Everything that needs only this job's id and who is looking starts now,
+    // alongside the job itself. On one bar of signal each round trip is half
+    // a second or more, and these used to queue behind one another - eleven
+    // waits in a row before the page showed. Supabase answers a failed
+    // request with { error } rather than throwing, so if the job below fails
+    // and the page falls back to the saved copy, this batch is just dropped.
+    const sideQueries = Promise.all([
+      supabase
+        .from('time_extension_requests')
+        .select('*')
+        .eq('job_id', id)
+        .eq('cleaner_id', me)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('tasks')
+        .select('*')
+        .eq('job_id', id),
+      supabase
+        .from('photos')
+        .select('*')
+        .eq('job_id', id)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('checkins')
+        .select('*')
+        .eq('job_id', id)
+        .eq('cleaner_id', me)
+        .maybeSingle(),
+      supabase
+        .from('shift_offers')
+        .select('id, status, released_by, created_at')
+        .eq('job_id', id)
+        .eq('status', 'open')
+        .maybeSingle(),
+      // Newest first rather than maybeSingle: a declined claim doesn't block a
+      // corrected one (0076's unique index only covers pending), so there can
+      // legitimately be more than one and the latest is the one they're owed
+      // an answer about.
+      supabase
+        .from('missed_clockin_claims')
+        .select('*')
+        .eq('job_id', id)
+        .eq('cleaner_id', me)
+        .order('created_at', { ascending: false })
+        .limit(1),
+      // What to send them to once this one is finished. Without it the end of
+      // a job is a dead end and they go hunting through the rota for the next.
+      supabase
+        .from('job_assignments')
+        .select('jobs!inner(id, scheduled_at, properties(address, clients(name)))')
+        .eq('cleaner_id', me)
+        .gt('jobs.scheduled_at', new Date().toISOString())
+        .neq('jobs.id', id)
+        .order('scheduled_at', { referencedTable: 'jobs', ascending: true })
+        .limit(1),
+    ]);
+
     // Limited for the same reason as photo uploads: one bar of signal hangs
     // rather than failing, and a hang never reaches the saved copy below.
     const { data: jobData, error: jobError } = await withTimeout(supabase
@@ -245,89 +304,52 @@ export default function JobDetailPage() {
       return;
     }
 
-    const { data: checklistData } = jobData?.property_id
-      ? await supabase
-          .from('property_checklist_items')
-          .select('id, room, task')
-          .eq('property_id', jobData.property_id)
-          .order('sort_order', { ascending: true })
-      : { data: [] };
+    // The two that need the job's site, together, while the batch above
+    // finishes. Warnings the office put on this site after an accident
+    // (0135) are carried on the job so the copy kept for no signal has them
+    // too; an error (before 0135 is run) just means no warnings.
+    const siteQueries = Promise.all([
+      jobData.property_id
+        ? supabase
+            .from('property_checklist_items')
+            .select('id, room, task')
+            .eq('property_id', jobData.property_id)
+            .order('sort_order', { ascending: true })
+        : Promise.resolve({ data: [] }),
+      jobData.property_id
+        ? supabase
+            .from('site_hazards')
+            .select('id, hazard, created_at')
+            .eq('property_id', jobData.property_id)
+            .is('resolved_at', null)
+            .order('created_at', { ascending: false })
+        : Promise.resolve({ data: [] }),
+    ]);
 
-    // Warnings the office put on this site after an accident (0135). Carried
-    // on the job so the copy kept for no signal has them too. An error
-    // (before 0135 is run) just means no warnings.
-    const { data: hazardData } = jobData?.property_id
-      ? await supabase
-          .from('site_hazards')
-          .select('id, hazard, created_at')
-          .eq('property_id', jobData.property_id)
-          .is('resolved_at', null)
-          .order('created_at', { ascending: false })
-      : { data: [] };
-    if (jobData) jobData.site_hazards = hazardData || [];
+    const [
+      [
+        { data: extensionData },
+        { data: taskData },
+        { data: photoData },
+        { data: checkinData },
+        { data: offerData },
+        { data: claimData },
+        { data: nextData },
+      ],
+      [{ data: checklistData }, { data: hazardData }],
+    ] = await Promise.all([sideQueries, siteQueries]);
+    jobData.site_hazards = hazardData || [];
 
-    const { data: extensionData } = await supabase
-      .from('time_extension_requests')
-      .select('*')
-      .eq('job_id', id)
-      .eq('cleaner_id', session.user.id)
-      .order('created_at', { ascending: false });
-
-    const { data: taskData } = await supabase
-      .from('tasks')
-      .select('*')
-      .eq('job_id', id);
-
-    const { data: photoData } = await supabase
-      .from('photos')
-      .select('*')
-      .eq('job_id', id)
-      .order('created_at', { ascending: false });
-
-    const { data: checkinData } = await supabase
-      .from('checkins')
-      .select('*')
-      .eq('job_id', id)
-      .eq('cleaner_id', session.user.id)
-      .maybeSingle();
-
-    const { data: offerData } = await supabase
-      .from('shift_offers')
-      .select('id, status, released_by, created_at')
-      .eq('job_id', id)
-      .eq('status', 'open')
-      .maybeSingle();
-
-    // Newest first rather than maybeSingle: a declined claim doesn't block a
-    // corrected one (0076's unique index only covers pending), so there can
-    // legitimately be more than one and the latest is the one they're owed
-    // an answer about.
-    const { data: claimData } = await supabase
-      .from('missed_clockin_claims')
-      .select('*')
-      .eq('job_id', id)
-      .eq('cleaner_id', session.user.id)
-      .order('created_at', { ascending: false })
-      .limit(1);
-
-    // What to send them to once this one is finished. Without it the end of
-    // a job is a dead end and they go hunting through the rota for the next.
-    const { data: nextData } = await supabase
-      .from('job_assignments')
-      .select('jobs!inner(id, scheduled_at, properties(address, clients(name)))')
-      .eq('cleaner_id', session.user.id)
-      .gt('jobs.scheduled_at', new Date().toISOString())
-      .neq('jobs.id', id)
-      .order('scheduled_at', { referencedTable: 'jobs', ascending: true })
-      .limit(1);
+    // Photos still on the phone and links for the sent ones, side by side.
+    const [waitingTiles, sentTiles] = await Promise.all([
+      waitingPhotoTiles(),
+      withSignedUrls(photoData || []),
+    ]);
 
     setSavedCopyAt(null);
     setJob(jobData);
     setTasks(taskData || []);
-    setPhotos([
-      ...(await waitingPhotoTiles()),
-      ...(await withSignedUrls(photoData || [])),
-    ]);
+    setPhotos([...waitingTiles, ...sentTiles]);
     setCheckin(checkinData || queuedCheckin(session.user.id));
     // Only a load where the parts that make the page workable all arrived is
     // worth keeping for offline: one that lost signal halfway would replace a

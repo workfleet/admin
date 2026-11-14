@@ -715,18 +715,25 @@ export default function AdminRota() {
     // here who still holds a job gets drawn as a former-staff row by
     // buildCleanerRows(), which is the wrong thing to say about someone who
     // simply isn't a cleaner.
-    const { data: cleanersData } = await supabase
-      .from('profiles').select('id, full_name').in('role', BOOKABLE_ROLES).eq('active', true).order('full_name');
-    const { data: clientsData } = await supabase
-      .from('clients').select('id, name').order('name');
-    const { data: propertiesData } = await supabase
-      .from('properties').select('id, client_id, address, lat, lng');
-    const { data: templatesData } = await supabase
-      .from('job_templates').select('id, name, job_template_items(id, description, sort_order)').order('name');
-    // The office's arrangement of the team. Fetched on its own so that, if
-    // the column isn't there yet, only the arranging is lost, not the rota.
-    const { data: settingsData } = await supabase
-      .from('company_settings').select('id, rota_staff_order').limit(1).maybeSingle();
+    //
+    // All five lists at once - they don't depend on each other, and asking
+    // one after another made the rota wait five round trips before it could
+    // draw a row.
+    const [
+      { data: cleanersData },
+      { data: clientsData },
+      { data: propertiesData },
+      { data: templatesData },
+      // The office's arrangement of the team. Its own query so that, if the
+      // column isn't there yet, only the arranging is lost, not the rota.
+      { data: settingsData },
+    ] = await Promise.all([
+      supabase.from('profiles').select('id, full_name').in('role', BOOKABLE_ROLES).eq('active', true).order('full_name'),
+      supabase.from('clients').select('id, name').order('name'),
+      supabase.from('properties').select('id, client_id, address, lat, lng'),
+      supabase.from('job_templates').select('id, name, job_template_items(id, description, sort_order)').order('name'),
+      supabase.from('company_settings').select('id, rota_staff_order').limit(1).maybeSingle(),
+    ]);
     if (settingsData) {
       const shared = idList(settingsData.rota_staff_order);
       setSettingsId(settingsData.id);
@@ -752,21 +759,23 @@ export default function AdminRota() {
     // jobs nobody has touched since they were due.
     await supabase.rpc('reconcile_job_statuses');
 
-    const { data } = await supabase
-      .from('jobs')
-      .select(JOB_SELECT)
-      .gte('scheduled_at', rangeStart)
-      .lt('scheduled_at', rangeEnd)
-      .order('scheduled_at', { ascending: true });
+    // The week's jobs and who is away, together - one wait, not two.
+    const [{ data }, { data: away }] = await Promise.all([
+      supabase
+        .from('jobs')
+        .select(JOB_SELECT)
+        .gte('scheduled_at', rangeStart)
+        .lt('scheduled_at', rangeEnd)
+        .order('scheduled_at', { ascending: true }),
+      supabase
+        .from('time_off_requests')
+        .select('id, cleaner_id, type, start_date, end_date')
+        .eq('status', 'approved')
+        .lte('start_date', localDateString(addDays(weekStart, 6)))
+        .gte('end_date', localDateString(weekStart)),
+    ]);
 
     setJobs(data || []);
-
-    const { data: away } = await supabase
-      .from('time_off_requests')
-      .select('id, cleaner_id, type, start_date, end_date')
-      .eq('status', 'approved')
-      .lte('start_date', localDateString(addDays(weekStart, 6)))
-      .gte('end_date', localDateString(weekStart));
     setTimeOff(away || []);
   };
 
