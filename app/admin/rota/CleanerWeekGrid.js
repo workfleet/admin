@@ -5,6 +5,7 @@ import { coworkersOf, firstName, formatHours, freeGaps, formatGap, moveId, order
 import { isTraining, jobHeadline, jobSubtitle } from '../../../lib/training';
 import { localDateString } from '../../../lib/localDate';
 import { tintFor, tintsByOrder } from '../../../lib/avatarTint';
+import { clientColour } from '../../../lib/clientColour';
 
 // The rota with a row per cleaner. Across the week, each cell lists that
 // person's jobs for the day in order, so a gap on the sheet is a gap in
@@ -181,6 +182,10 @@ export default function CleanerWeekGrid({ rows: givenRows, weekDays, todayKey, t
       draggable ? 'Drag to another day or cleaner, or click to open' : 'Click to open',
     ].filter(Boolean).join(' · ');
 
+    // Each client's own colour down the chip's edge, the same all week, so
+    // their visits can be picked out across the sheet. Training has none.
+    const colour = training ? null : clientColour(job.properties?.client_id || job.properties?.clients?.name);
+
     const className = [
       'rota-chip',
       job.status,
@@ -188,6 +193,7 @@ export default function CleanerWeekGrid({ rows: givenRows, weekDays, todayKey, t
       training ? 'is-training' : '',
       draggable ? 'draggable' : '',
       single ? 'is-day' : '',
+      colour ? 'has-client' : '',
     ].filter(Boolean).join(' ');
 
     const dragProps = {
@@ -211,7 +217,7 @@ export default function CleanerWeekGrid({ rows: givenRows, weekDays, todayKey, t
     ).filter(Boolean).join(' · ');
 
     return (
-      <button key={`${row.id}-${job.id}`} type="button" className={className} {...dragProps} onClick={() => onOpenJob(job)} title={title}>
+      <button key={`${row.id}-${job.id}`} type="button" className={className} style={colour ? { '--client': colour } : undefined} {...dragProps} onClick={() => onOpenJob(job)} title={title}>
         {/* On a day the row is wide enough for time and place side by side.
             Across a week a column is not, and sharing a line left the place
             as "Swa…" - so there the place gets a line of its own. */}

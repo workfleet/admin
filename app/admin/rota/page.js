@@ -81,7 +81,7 @@ function dayIndexOf(date) {
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => h);
 const MINUTE_OPTIONS = [0, 15, 30, 45];
 
-const JOB_SELECT = `id, scheduled_at, status, duration_minutes, notes, room_refreshes, series_id, property_id, ${TRAINING_JOB_COLUMNS}, properties(address, lat, lng, clients(name)), job_assignments(cleaner_id, paid_minutes, profiles(full_name))`;
+const JOB_SELECT = `id, scheduled_at, status, duration_minutes, notes, room_refreshes, series_id, property_id, ${TRAINING_JOB_COLUMNS}, properties(address, lat, lng, client_id, clients(name)), job_assignments(cleaner_id, paid_minutes, profiles(full_name))`;
 
 function formatHour12(h) {
   const period = h < 12 ? 'AM' : 'PM';
@@ -2370,6 +2370,8 @@ export default function AdminRota() {
             <span><i className="rota-key-dot is-onsite" />On site</span>
             <span><i className="rota-key-dot is-alert" />Needs attention</span>
             <span><i className="rota-key-away" />Away</span>
+            {dayMode && <span><i className="rota-key-free" />Free to book</span>}
+            <span title="Each client has its own colour down the edge of their jobs, the same all week"><i className="rota-key-client" />Colour = client</span>
           </span>
         )}
       </div>
@@ -2435,7 +2437,7 @@ export default function AdminRota() {
                     i > 4 ? 'weekend' : '',
                   ].filter(Boolean).join(' ')}
                 >
-                  <div className="calendar-day-name">{DAY_NAMES[i]}{isToday ? ' · today' : ''}</div>
+                  <div className="calendar-day-name">{DAY_NAMES[i]}{isToday ? ' · Today' : ''}</div>
                   <div className="calendar-day-date">{day.getDate()}</div>
                 </div>
               );
@@ -2496,23 +2498,30 @@ export default function AdminRota() {
       </div>
       )}
 
-      <div className="calendar-legend">
-        {[
-          ['completed', 'Completed'],
-          ['in_progress', 'On site'],
-          ['scheduled', 'Scheduled'],
-          ['unassigned', 'Needs a cleaner'],
-          ['clash', 'Double-booked or missed'],
-          ...(dayMode ? [['free', 'Free to book']] : []),
-        ].map(([key, label]) => (
-          <span key={key} className="calendar-legend-item">
-            <span className={`calendar-legend-swatch ${key}`} />
-            {label}
-          </span>
-        ))}
-      </div>
+      {/* By cleaner, the key sits beside the figures at the top; this one is
+          for the By time calendar, whose blocks are coloured differently. */}
+      {view !== 'cleaners' && (
+        <div className="calendar-legend">
+          {[
+            ['completed', 'Completed'],
+            ['in_progress', 'On site'],
+            ['scheduled', 'Scheduled'],
+            ['unassigned', 'Needs a cleaner'],
+            ['clash', 'Double-booked or missed'],
+          ].map(([key, label]) => (
+            <span key={key} className="calendar-legend-item">
+              <span className={`calendar-legend-swatch ${key}`} />
+              {label}
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="calendar-foot">
+        {/* The instructions fold away: useful the first time, a wall of text
+            under the rota every day after. */}
+        <details className="calendar-help">
+          <summary>How the rota works</summary>
         <span className="calendar-foot-hint">
           {dayMode ? (
             <>
@@ -2541,6 +2550,7 @@ export default function AdminRota() {
             </>
           )}
         </span>
+        </details>
         <span style={{ display: 'inline-flex', gap: 14 }}>
           <Link href="/admin/audit" className="calendar-foot-link">Change log &rarr;</Link>
           <Link href="/admin/rota/history" className="calendar-foot-link">Job history &rarr;</Link>

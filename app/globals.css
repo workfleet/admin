@@ -2434,14 +2434,12 @@ a.rota-figure:hover b { text-decoration: underline; text-underline-offset: 3px; 
 }
 
 .calendar-day-head.weekend { background: #F6F7F8; }
-.calendar-day-head.today   { background: rgba(255, 107, 91, 0.05); }
+.calendar-day-head.today   { background: #F2F6FD; }
 
 .calendar-day-name {
   font-family: var(--wf-data);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
@@ -2508,7 +2506,7 @@ a.rota-figure:hover b { text-decoration: underline; text-underline-offset: 3px; 
 }
 
 .calendar-day-col.weekend { background: #F6F7F8; }
-.calendar-day-col.today   { background: rgba(255, 107, 91, 0.05); }
+.calendar-day-col.today   { background: #F2F6FD; }
 
 /* A solid line on the hour, a faint one on the half hour - enough to read a
    block's start time off the grid without counting. */
@@ -2921,6 +2919,31 @@ a.rota-figure:hover b { text-decoration: underline; text-underline-offset: 3px; 
   color: var(--muted);
   line-height: 1.5;
 }
+
+.calendar-help { flex: 1; min-width: 0; }
+.calendar-help summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  cursor: pointer;
+  list-style: none;
+}
+.calendar-help summary::-webkit-details-marker { display: none; }
+.calendar-help summary::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+.calendar-help[open] summary::before { transform: rotate(45deg); }
+.calendar-help summary:hover { color: var(--ink); }
+.calendar-help .calendar-foot-hint { display: block; margin-top: 8px; max-width: 760px; }
 
 .calendar-foot-link {
   margin-left: auto;
@@ -3941,6 +3964,20 @@ body.has-install-bar .emergency-fab {
   border-radius: 3px;
   background: repeating-linear-gradient(-45deg, rgba(31, 111, 239, 0.35) 0 3px, rgba(31, 111, 239, 0.1) 3px 6px);
 }
+.rota-key-free {
+  display: block;
+  width: 14px;
+  height: 9px;
+  border-radius: 3px;
+  border: 1px dashed var(--wf-steel);
+}
+/* Three sample stripes from the client palette. */
+.rota-key-client {
+  display: block;
+  width: 14px;
+  height: 11px;
+  background: linear-gradient(90deg, #2F6FDF 0 3px, transparent 3px 5.5px, #C27C0E 5.5px 8.5px, transparent 8.5px 11px, #7357D6 11px 14px);
+}
 
 @media (max-width: 720px) {
   .rota-actions { margin-left: 0; }
@@ -4589,12 +4626,20 @@ a.btn-compact {
 }
 
 @media (max-width: 720px) {
+  /* Tighter on a phone: each pair of controls missed sharing a line by a
+     few pixels, so the header ran to six rows before the first job. This
+     brings it to three. */
   .rota-header {
     align-items: flex-start;
+    gap: 6px 4px;
   }
+  .rota-title { margin-right: 2px; }
+  .rota-nav-label { padding: 0 4px; }
   .rota-actions {
     width: 100%;
+    gap: 6px;
   }
+  .rota-actions .rota-seg-btn { padding: 0 10px; }
   .rota-actions .btn-compact {
     flex: 1;
     justify-content: center;
@@ -4809,10 +4854,8 @@ a.btn-compact {
   align-items: center;
   padding: 9px 12px 9px 16px;
   font-family: var(--wf-data);
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: 12.5px;
+  font-weight: 500;
   color: var(--muted);
 }
 
@@ -4834,10 +4877,8 @@ a.btn-compact {
 
 .rota-grid-dayname {
   font-family: var(--wf-data);
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: 12.5px;
+  font-weight: 500;
   color: var(--muted);
 }
 
@@ -4853,7 +4894,7 @@ a.btn-compact {
    heading to the last row. The heading is opaque so rows scrolling under
    the sticky header don't show through it. */
 .rota-grid-dayhead.today {
-  background: #FFF6F5;
+  background: #F2F6FD;
   border-radius: 10px 10px 0 0;
 }
 .rota-grid-dayhead.today .rota-grid-dayname,
@@ -4862,15 +4903,13 @@ a.btn-compact {
 
 .rota-grid-todaypill {
   align-self: center;
-  padding: 1px 6px;
+  padding: 1px 7px;
   border-radius: 999px;
-  background: var(--wf-coral-dark);
+  background: var(--wf-graphite);
   color: var(--wf-white);
   font-family: var(--wf-data);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 500;
 }
 
 /* The name column stays put while the week scrolls sideways on a narrow
@@ -4913,14 +4952,19 @@ a.btn-compact {
   min-width: 0;
 }
 
+/* Two lines before it gives up, so "Christopher Carter" reads in full
+   rather than as "Christopher Ca...". */
 .rota-grid-name {
   font-family: var(--wf-display);
   font-size: 13px;
   font-weight: 500;
   line-height: 1.25;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .rota-grid-meta {
@@ -4982,7 +5026,8 @@ a.btn-compact {
   border-top: 1px solid rgba(32, 35, 39, 0.06);
 }
 
-.rota-grid-cell.today { background: #FFF6F5; }
+/* A cool wash for today - the old pink sat too close to a missed job's red. */
+.rota-grid-cell.today { background: #F2F6FD; }
 
 .rota-grid-row.is-unassigned .rota-grid-who,
 .rota-grid-row.is-unassigned .rota-grid-hours,
@@ -5089,6 +5134,21 @@ a.btn-compact {
 .rota-chip.draggable { cursor: grab; }
 .rota-chip.draggable:active { cursor: grabbing; }
 
+/* The client's colour (lib/clientColour.js) as a stripe down the left edge
+   and the faintest wash of it behind, so one client's visits can be traced
+   across the week. Status still owns the dot and the red / on-site looks,
+   which are declared after this and win. */
+.rota-chip.has-client {
+  padding-left: 10px;
+  background: #F3F4F6;
+  background: color-mix(in srgb, var(--client) 7%, #F5F6F7);
+  box-shadow: inset 3px 0 0 var(--client);
+}
+.rota-chip.has-client:hover:not(:disabled) {
+  background: var(--wf-white);
+  box-shadow: inset 3px 0 0 var(--client), 0 2px 10px rgba(32, 35, 39, 0.10);
+}
+
 .rota-chip-line {
   display: flex;
   align-items: center;
@@ -5135,7 +5195,15 @@ a.btn-compact {
   line-height: 1.2;
 }
 
-.rota-chip:not(.is-day) .rota-chip-sub { padding-left: 0; }
+.rota-chip:not(.is-day) .rota-chip-sub {
+  padding-left: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 
 .rota-chip-sub {
   padding-left: 13px;
@@ -5160,6 +5228,7 @@ a.btn-compact {
   box-shadow: 0 0 0 3px rgba(52, 199, 123, 0.25);
 }
 .rota-chip.in_progress .rota-chip-sub { color: var(--wf-verified-ink); font-weight: 500; }
+.rota-chip.in_progress.has-client { box-shadow: inset 3px 0 0 var(--client), 0 0 0 1.5px var(--wf-graphite); }
 
 .rota-chip.missed,
 .rota-chip.unassigned { background: #FDEEF0; }
