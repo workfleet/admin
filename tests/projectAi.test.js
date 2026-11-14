@@ -14,12 +14,12 @@ describe('readableKind', () => {
     expect(readableKind('Tender pack.PDF')).toBe('pdf');
     expect(readableKind('questions.csv')).toBe('text');
     expect(readableKind('site.jpeg')).toBe('image');
-    expect(readableKind('Annex 1.docx')).toBeNull();
+    expect(readableKind('Annex 1.doc')).toBeNull();
     expect(readableKind('no-extension')).toBeNull();
   });
 
-  it('tells the office to save Word files as PDF', () => {
-    expect(unreadableReason('Annex 1.docx')).toMatch(/PDF/);
+  it('tells the office to re-save old Word files', () => {
+    expect(unreadableReason('Annex 1.doc')).toMatch(/docx/);
   });
 });
 
@@ -35,7 +35,7 @@ describe('contentBlockFor', () => {
   });
 
   it('gives nothing for a file it cannot read', () => {
-    expect(contentBlockFor('a.docx', Buffer.from('x'))).toBeNull();
+    expect(contentBlockFor('a.doc', Buffer.from('x'))).toBeNull();
   });
 });
 

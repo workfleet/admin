@@ -207,7 +207,7 @@ export default function ProjectAiTools({ project, files, onToggleAi, onAddSugges
       {mode === 'tasks' && !suggestions && (
         <div>
           {readable.length === 0 ? (
-            <p className="pj-muted" style={{ margin: 0 }}>Upload the document to Files first (PDF, text or an image). {files.length > 0 ? unreadableReason(files[0].file_name) : ''}</p>
+            <p className="pj-muted" style={{ margin: 0 }}>Upload the document to Files first (PDF, Word, Excel, text or an image). {files.length > 0 ? unreadableReason(files[0].file_name) : ''}</p>
           ) : (
             <>
               <label className="field-label" htmlFor="pj-ai-file">Which file should it read?</label>
@@ -215,7 +215,7 @@ export default function ProjectAiTools({ project, files, onToggleAi, onAddSugges
                 <option value="">Choose a file...</option>
                 {readable.map((f) => <option key={f.id} value={f.id}>{f.file_name}</option>)}
               </select>
-              {files.length > readable.length && <p className="pj-muted" style={{ margin: '6px 0 0' }}>Word and Excel files aren't listed - save them as PDF to use them here.</p>}
+              {files.length > readable.length && <p className="pj-muted" style={{ margin: '6px 0 0' }}>Some files aren't listed because they can't be read (old .doc or .xls, or other types) - save them as .docx, .xlsx or PDF.</p>}
               <button type="button" className="btn-primary" style={{ marginTop: 10 }} onClick={runTasks} disabled={!fileId || busy}>
                 {busy ? 'Reading... (up to a minute)' : 'Suggest tasks'}
               </button>

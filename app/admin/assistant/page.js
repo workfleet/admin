@@ -358,7 +358,7 @@ export default function AiAssistant() {
                       </li>
                     ))}
                   </ul>
-                  <p className="pj-muted ai-hint">PDF, text and image files only - save Word files as PDF first.</p>
+                  <p className="pj-muted ai-hint">PDF, Word, Excel, text and image files. Pictures inside Word files aren't read.</p>
                 </div>
               )}
 
