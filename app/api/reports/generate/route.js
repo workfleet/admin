@@ -8,6 +8,19 @@ import { generateDetailedReport } from '../../../../lib/generateDetailedReport';
 // ten-second function limit; sixty is the most the current plan allows.
 export const maxDuration = 60;
 
+const REPORT_MODEL = 'claude-opus-5-5';
+
+const REPORT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['summary', 'issues', 'suggestions'],
+  properties: {
+    summary: { type: 'string' },
+    issues: { type: 'string' },
+    suggestions: { type: 'string' },
+  },
+};
+
 const IMAGE_MEDIA_TYPES = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp' };
 
 async function requireAdmin(request) {
@@ -132,9 +145,18 @@ Respond with ONLY valid JSON, no other text, in exactly this shape:
 
   let reportJson;
   try {
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5',
-      max_tokens: 1024,
+    // Claude Opus 5.5 (Sonnet 4.5, used before, retires 30 Nov 2026). It
+    // always thinks a little before answering, so max_tokens has room for
+    // that; low effort keeps an eight-photo report inside the 60s limit.
+    // The schema makes the three sections come back as valid JSON, and
+    // fallbacks: "default" re-runs a declined request on the API's
+    // recommended fallback model instead of failing.
+    const message = await anthropic.beta.messages.create({
+      model: REPORT_MODEL,
+      max_tokens: 16000,
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: REPORT_SCHEMA } },
       messages: [
         {
           role: 'user',
@@ -143,6 +165,8 @@ Respond with ONLY valid JSON, no other text, in exactly this shape:
       ],
     });
 
+    if (message.stop_reason === 'refusal') throw new Error('The report request was declined.');
+    if (message.stop_reason === 'max_tokens') throw new Error('The report was cut off before it finished.');
     const rawText = message.content.find((block) => block.type === 'text')?.text || '{}';
     // Claude sometimes wraps JSON in a ```json ... ``` fence despite being asked not to.
     const text = rawText.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
