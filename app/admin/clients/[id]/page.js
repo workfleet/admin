@@ -21,6 +21,7 @@ import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 import { claimFor, describeClockRecord, indexClaims, lateMinutes } from '../../../../lib/clockIn';
 import BackButton from '../../../components/BackButton';
+import ClientProjects from '../../../components/ClientProjects';
 
 export default function ClientDetail() {
   const router = useRouter();
@@ -785,6 +786,8 @@ export default function ClientDetail() {
           )
         )}
       </div>
+
+      <ClientProjects clientId={id} />
 
       <div className="page-tabs">
         <button className={`page-tab${tab === 'properties' ? ' is-active' : ''}`} aria-pressed={tab === 'properties'} onClick={() => setTab('properties')}>

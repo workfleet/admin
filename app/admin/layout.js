@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Download, Folder, Package, KeyRound, LifeBuoy, Banknote, Video, Bell, HardHat, Menu, X, Receipt, Megaphone, Search, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Download, Folder, Package, KeyRound, LifeBuoy, Banknote, Video, Bell, HardHat, Menu, X, Receipt, Megaphone, Search, BarChart3, FolderKanban } from 'lucide-react';
 import { signOutAndClearPresence } from '../../lib/signOut';
 import { getSessionAndProfile } from '../../lib/authGate';
 import { canSeeInvoices } from '../../lib/invoiceAccess';
@@ -54,6 +54,7 @@ const NAV_ITEMS = [
   { href: '/admin/rota', label: 'Rota', icon: Calendar, group: 'Work' },
   { href: '/admin/cover', label: 'Shift cover', icon: LifeBuoy, group: 'Work' },
   { href: '/admin/tasks', label: 'Team tasks', icon: ListTodo, group: 'Work' },
+  { href: '/admin/projects', label: 'Projects', icon: FolderKanban, group: 'Work' },
   { href: '/admin/requests', label: 'Requests', icon: MessageSquareWarning, group: 'Work' },
 
   { href: '/admin/clients', label: 'Clients', icon: Building2, group: 'Clients' },
