@@ -96,7 +96,12 @@ export async function POST(request) {
               note: 'Shown as cards. Nothing has changed - the person must press Confirm.',
             });
           } else {
-            content = JSON.stringify(await runRotaTool(call.name, call.input || {}, { lookups }));
+            const result = await runRotaTool(call.name, call.input || {}, { lookups, role: user.officeRole });
+            // A document read comes back as its text, or as the PDF or
+            // picture itself; everything else as JSON.
+            if (call.name === 'read_document' && result.blocks) content = result.blocks;
+            else if (call.name === 'read_document' && result.text) content = result.text;
+            else content = JSON.stringify(result);
           }
         } catch {
           content = JSON.stringify({ error: 'That lookup failed.' });
