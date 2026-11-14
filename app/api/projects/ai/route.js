@@ -14,9 +14,10 @@ import {
 } from '../../../../lib/projectAi';
 import { draftSystem, companyContext, clientContext, draftRequestText, draftMessages, splitDraft, draftTitle } from '../../../../lib/aiDrafting';
 import {
-  FALLBACK_BETA, requireOffice, fail, loadCompany, londonToday, loadClientFacts,
+  FALLBACK_BETA, requireOffice, fail, loadCompany, loadFacts, londonToday, loadClientFacts,
   loadProjectFile, anthropicClient, textOf, aiErrorResponse,
 } from '../../../../lib/aiServer';
+import { factsContext } from '../../../../lib/companyFacts';
 
 // AI tools for one project:
 //  - tasks: suggest tasks and key dates from one project file
@@ -53,7 +54,7 @@ export async function POST(request) {
   if (!project) return fail('not_found', 'That project no longer exists.', 404);
   if (!project.ai_enabled) return fail('ai_off', 'AI tools are switched off for this project.', 403);
 
-  const [{ data: tasks }, { data: dates }, { data: notes }, { data: owner }, company, facts] = await Promise.all([
+  const [{ data: tasks }, { data: dates }, { data: notes }, { data: owner }, company, facts, companyFacts] = await Promise.all([
     supabaseAdmin.from('project_tasks').select('title, status, due_date').eq('project_id', projectId).order('position'),
     supabaseAdmin.from('project_dates').select('label, date, done').eq('project_id', projectId).order('date'),
     supabaseAdmin.from('project_notes').select('kind, body, created_at').eq('project_id', projectId).order('created_at', { ascending: false }).limit(40),
@@ -62,7 +63,9 @@ export async function POST(request) {
       : Promise.resolve({ data: null }),
     loadCompany(),
     loadClientFacts(project.client_id),
+    loadFacts(),
   ]);
+  const factsText = factsContext(companyFacts);
 
   const today = londonToday();
   const context = projectContext({
@@ -133,7 +136,7 @@ export async function POST(request) {
         system: ASK_SYSTEM,
         messages: [{
           role: 'user',
-          content: [...files.blocks, { type: 'text', text: `Project details:\n${context}${clientText ? `\n\n${clientText}` : ''}\n\nQuestion: ${question}` }],
+          content: [...files.blocks, { type: 'text', text: `${factsText ? `${factsText}\n\n` : ''}Project details:\n${context}${clientText ? `\n\n${clientText}` : ''}\n\nQuestion: ${question}` }],
         }],
       });
       if (message.stop_reason === 'refusal') return fail('refused', 'The AI declined to answer this.', 422);
@@ -155,7 +158,7 @@ export async function POST(request) {
     const firstRequest = draftRequestText({
       docType: 'free',
       instruction: `${draftType === 'free' ? '' : `${draftTypeLabel(draftType)}. `}${instruction}`.trim(),
-      sections: [`Today's date: ${today}`, `Company details:\n${companyContext(company)}`, `Project details:\n${context}`, clientText ? `Client details from the company's records:\n${clientText}` : null],
+      sections: [`Today's date: ${today}`, `Company details:\n${companyContext(company)}`, factsText, `Project details:\n${context}`, clientText ? `Client details from the company's records:\n${clientText}` : null],
     });
 
     const message = await client.beta.messages.create({
@@ -164,7 +167,7 @@ export async function POST(request) {
       betas: [FALLBACK_BETA],
       fallbacks: 'default',
       output_config: { effort: 'low' },
-      system: draftSystem(company),
+      system: draftSystem(company, companyFacts),
       messages: draftMessages({ firstRequest, blocks: files.blocks, previousDraft, changeRequest }),
     });
 

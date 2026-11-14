@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '../../../../lib/supabaseAdmin';
 import { kindLabel } from '../../../../lib/projects';
 import { projectContext } from '../../../../lib/projectAi';
+import { factsContext } from '../../../../lib/companyFacts';
 import {
   AI_MODEL,
   draftSystem,
@@ -13,12 +14,19 @@ import {
   draftTitle,
   docTypeLabel,
   isDocType,
+  planSystem,
+  PLAN_SCHEMA,
+  planRequestText,
+  cleanPlan,
+  answersText,
+  MAX_QUESTIONS,
 } from '../../../../lib/aiDrafting';
 import {
   FALLBACK_BETA,
   requireOffice,
   fail,
   loadCompany,
+  loadFacts,
   londonToday,
   loadClientFacts,
   loadProjectFile,
@@ -28,11 +36,16 @@ import {
   aiErrorResponse,
 } from '../../../../lib/aiServer';
 
-// The site-wide AI assistant: a draft of any document, from the office's
-// request plus whatever it chooses to include - a client, a site, a
-// project, files from the Documents library or the project, pasted text.
-// Also revises a draft ("make it shorter"). Office only. Each draft is
-// kept in ai_drafts (0139) when that table exists.
+// The site-wide AI assistant.
+//
+//  mode "plan":  read a one-line request, work out the document type and
+//                client, and ask up to four questions it needs answered.
+//  mode "draft": write the draft (or rewrite one with a change), using the
+//                Company facts (0140), the answers, and whatever the office
+//                chose to include - a client, site, project, files, text.
+//
+// Office only. Projects with AI switched off are refused. Drafts are kept
+// in ai_drafts (0139).
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -48,16 +61,17 @@ export async function POST(request) {
   let body;
   try { body = await request.json(); } catch { return fail('bad_request', 'Bad request.'); }
 
+  const mode = body?.mode === 'plan' ? 'plan' : 'draft';
   const docType = isDocType(body?.doc_type) ? body.doc_type : 'free';
   const instruction = String(body?.instruction || '').trim().slice(0, 6000);
   const sourceText = String(body?.source_text || '').trim().slice(0, MAX_SOURCE_CHARS);
   const previousDraft = String(body?.previous_draft || '').trim().slice(0, 60000);
   const changeRequest = String(body?.change_request || '').trim().slice(0, 2000);
-  if (docType === 'free' && !instruction) return fail('bad_request', 'Say what you\'d like written.');
+  if ((mode === 'plan' || docType === 'free') && !instruction) return fail('bad_request', 'Say what you\'d like written.');
 
-  const company = await loadCompany();
+  const [company, facts] = await Promise.all([loadCompany(), loadFacts()]);
   const today = londonToday();
-  const sections = [`Today's date: ${today}`, `Company details:\n${companyContext(company)}`];
+  const sections = [`Today's date: ${today}`, `Company details:\n${companyContext(company)}`, factsContext(facts)];
 
   // A project brings its own details and notes, but only if its AI switch
   // is on - a tender can forbid AI, and the assistant mustn't be a way round
@@ -83,39 +97,64 @@ export async function POST(request) {
 
   let clientId = null;
   if (body?.client_id) {
-    const facts = await loadClientFacts(body.client_id);
-    if (!facts) return fail('not_found', 'That client no longer exists.', 404);
-    clientId = facts.client.id;
-    const properties = body.property_id ? facts.properties.filter((p) => p.id === body.property_id) : facts.properties;
-    sections.push(`Client details from the company's records:\n${clientContext({ ...facts, properties })}`);
+    const clientFacts = await loadClientFacts(body.client_id);
+    if (!clientFacts) return fail('not_found', 'That client no longer exists.', 404);
+    clientId = clientFacts.client.id;
+    const properties = body.property_id ? clientFacts.properties.filter((p) => p.id === body.property_id) : clientFacts.properties;
+    sections.push(`Client details from the company's records:\n${clientContext({ ...clientFacts, properties })}`);
   }
 
-  const blocks = [];
-  const used = [];
-  const libraryIds = Array.isArray(body?.document_ids) ? body.document_ids : [];
-  const projectFileIds = projectId && Array.isArray(body?.project_file_ids) ? body.project_file_ids : [];
-  if (libraryIds.length + projectFileIds.length > MAX_FILES) return fail('too_many', `Pick up to ${MAX_FILES} files.`);
-  for (const id of libraryIds) {
-    const f = await loadLibraryFile(id);
-    if (f.error) return fail('unreadable', f.error);
-    blocks.push(f.block); used.push(f.name);
-  }
-  for (const id of projectFileIds) {
-    const f = await loadProjectFile(projectId, id);
-    if (f.error) return fail('unreadable', f.error);
-    blocks.push(f.block); used.push(f.name);
-  }
-
-  const firstRequest = draftRequestText({ docType, instruction, sections, sourceText });
+  const client = anthropicClient();
 
   try {
-    const message = await anthropicClient().beta.messages.create({
+    if (mode === 'plan') {
+      // Client names so it can tell who "Sam's complaint" is about. Names
+      // only - nothing else about clients not chosen.
+      const { data: clientRows } = clientId ? { data: [] } : await supabaseAdmin.from('clients').select('id, name').order('name');
+      const message = await client.beta.messages.create({
+        model: AI_MODEL,
+        max_tokens: 4000,
+        betas: [FALLBACK_BETA],
+        fallbacks: 'default',
+        output_config: { effort: 'low', format: { type: 'json_schema', schema: PLAN_SCHEMA } },
+        system: planSystem(facts),
+        messages: [{ role: 'user', content: planRequestText({ request: instruction, clientNames: (clientRows || []).map((c) => c.name), sections, sourceText }) }],
+      });
+      if (message.stop_reason === 'refusal') return fail('refused', 'The AI declined this request.', 422);
+      let raw;
+      try { raw = JSON.parse(textOf(message)); } catch { return fail('bad_output', 'The AI\'s answer couldn\'t be read. Please try again.', 502); }
+      const plan = cleanPlan(raw, clientRows || []);
+      if (clientId) { plan.client_id = clientId; plan.client_name = null; }
+      return NextResponse.json({ ok: true, ...plan });
+    }
+
+    const blocks = [];
+    const used = [];
+    const libraryIds = Array.isArray(body?.document_ids) ? body.document_ids : [];
+    const projectFileIds = projectId && Array.isArray(body?.project_file_ids) ? body.project_file_ids : [];
+    if (libraryIds.length + projectFileIds.length > MAX_FILES) return fail('too_many', `Pick up to ${MAX_FILES} files.`);
+    for (const id of libraryIds) {
+      const f = await loadLibraryFile(id);
+      if (f.error) return fail('unreadable', f.error);
+      blocks.push(f.block); used.push(f.name);
+    }
+    for (const id of projectFileIds) {
+      const f = await loadProjectFile(projectId, id);
+      if (f.error) return fail('unreadable', f.error);
+      blocks.push(f.block); used.push(f.name);
+    }
+
+    const questions = Array.isArray(body?.questions) ? body.questions.slice(0, MAX_QUESTIONS).map((q) => ({ question: String(q?.question || '').slice(0, 200) })) : [];
+    const answers = Array.isArray(body?.answers) ? body.answers.slice(0, MAX_QUESTIONS).map((a) => String(a || '').slice(0, 1000)) : [];
+    const firstRequest = draftRequestText({ docType, instruction, sections: [...sections, answersText(questions, answers)], sourceText });
+
+    const message = await client.beta.messages.create({
       model: AI_MODEL,
       max_tokens: 16000,
       betas: [FALLBACK_BETA],
       fallbacks: 'default',
       output_config: { effort: 'low' },
-      system: draftSystem(company),
+      system: draftSystem(company, facts),
       messages: draftMessages({ firstRequest, blocks, previousDraft, changeRequest }),
     });
 
@@ -131,8 +170,8 @@ export async function POST(request) {
       used.length ? `Files: ${used.join(', ')}` : null,
     ].filter(Boolean).join(' | ').slice(0, 2000);
 
-    // Kept for reopening and as a record of AI use. Missing table (0139 not
-    // run) or any other failure here doesn't lose the draft.
+    // Kept for reopening and as a record of AI use. A failure here doesn't
+    // lose the draft.
     const { data: saved } = await supabaseAdmin.from('ai_drafts').insert({
       doc_type: docType, title, request: requestSummary, draft, placeholders,
       client_id: clientId, project_id: projectId,
