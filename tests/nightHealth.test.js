@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   QUESTIONS, COLUMNS, emptyAnswers, formProblems, rowFromForm, yesAnswers,
-  latestReviewDate, standing, shouldPrompt, latestByPerson,
+  latestReviewDate, standing, shouldPrompt, latestByPerson, requestOutstanding,
 } from '../lib/nightHealth';
 
 const allNo = () => Object.fromEntries(QUESTIONS.map((q) => [q.key, false]));
@@ -65,6 +65,15 @@ describe('night worker questionnaire', () => {
     expect(shouldPrompt(true, null, today)).toBe(true);
     expect(shouldPrompt(true, { outcome: null }, today)).toBe(false);
     expect(shouldPrompt(true, { outcome: 'fit', next_review_due: '2026-11-01' }, today)).toBe(true);
+  });
+
+  it('prompts anyone the office sent it to until they answer', () => {
+    const today = '2026-11-15';
+    const sent = '2026-11-15T09:00:00Z';
+    expect(shouldPrompt(false, null, today, sent)).toBe(true);
+    expect(shouldPrompt(false, { submitted_at: '2026-11-14T09:00:00Z', outcome: 'fit', next_review_due: '2027-11-14' }, today, sent)).toBe(true);
+    expect(shouldPrompt(false, { submitted_at: '2026-11-15T10:00:00Z', outcome: null }, today, sent)).toBe(false);
+    expect(requestOutstanding(null, null)).toBe(false);
   });
 
   it('keeps the newest per person', () => {

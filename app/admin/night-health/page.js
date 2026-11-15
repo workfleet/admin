@@ -12,7 +12,7 @@ import { useToast } from '../../components/ToastProvider';
 import { Answers, ReviewForm } from '../../components/NightHealthReview';
 import {
   QUESTIONS, OUTCOME_LABELS, RETENTION_NOTE, COLUMNS,
-  yesAnswers, latestByPerson, standing, formatDay,
+  yesAnswers, latestByPerson, standing, formatDay, requestOutstanding,
 } from '../../../lib/nightHealth';
 
 // Night worker health questionnaires (0143). Admins only: the database
@@ -20,6 +20,7 @@ import {
 // hinted so a second FK to profiles later can't break them (0094/0095).
 const Q_SELECT = `${COLUMNS}, person:profiles!night_health_questionnaires_profile_id_fkey(full_name)`;
 const W_SELECT = 'profile_id, added_at, person:profiles!night_workers_profile_id_fkey(full_name)';
+const R_SELECT = 'profile_id, requested_at, person:profiles!night_health_requests_profile_id_fkey(full_name)';
 
 const STANDING = {
   none: { label: 'Not sent yet', badge: 'missed' },
@@ -39,6 +40,10 @@ export default function AdminNightHealth() {
   const [staff, setStaff] = useState([]);
   const [openId, setOpenId] = useState(null);
   const [adding, setAdding] = useState('');
+  // Sent to anyone by the office (0144). null = that table isn't there yet.
+  const [requests, setRequests] = useState(null);
+  const [sendTo, setSendTo] = useState('');
+  const [sending, setSending] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -46,12 +51,14 @@ export default function AdminNightHealth() {
     const { session, profile } = await getSessionAndProfile();
     if (!session) { router.push('/'); return; }
     if (profile?.role !== 'admin') { router.push('/admin'); return; }
-    const [{ data: qs, error: qError }, { data: ws, error: wError }, { data: people }] = await Promise.all([
+    const [{ data: qs, error: qError }, { data: ws, error: wError }, { data: people }, { data: reqs, error: rError }] = await Promise.all([
       supabase.from('night_health_questionnaires').select(Q_SELECT).order('submitted_at', { ascending: false }),
       supabase.from('night_workers').select(W_SELECT),
       supabase.from('profiles').select('id, full_name, role, active').neq('role', 'client').order('full_name'),
+      supabase.from('night_health_requests').select(R_SELECT).order('requested_at', { ascending: false }),
     ]);
     if (qError || wError) { setLoadError(true); setLoading(false); return; }
+    setRequests(rError ? null : reqs || []);
     setRows(qs || []);
     setWorkers(ws || []);
     setStaff(people || []);
@@ -64,7 +71,8 @@ export default function AdminNightHealth() {
   const latest = useMemo(() => latestByPerson(rows), [rows]);
   const today = localDateString(new Date());
   const workerIds = new Set(workers.map((w) => w.profile_id));
-  const addable = staff.filter((p) => p.active !== false && !workerIds.has(p.id));
+  const activeStaff = staff.filter((p) => p.active !== false);
+  const addable = activeStaff.filter((p) => !workerIds.has(p.id));
   const toReview = rows.filter((r) => !r.outcome).length;
 
   const addWorker = async () => {
@@ -74,6 +82,35 @@ export default function AdminNightHealth() {
     setWorkers((prev) => [...prev, data]);
     setAdding('');
     toast.success(`${data.person?.full_name || 'They'} will be asked to fill it in on their Home tab.`);
+  };
+
+  // Sending again to someone already asked moves the date on and tells them
+  // again (0144's trigger writes the notification).
+  const sendRequest = async (profileId) => {
+    if (!profileId) return;
+    setSending(true);
+    const { data, error } = await supabase.from('night_health_requests')
+      .upsert({ profile_id: profileId }, { onConflict: 'profile_id' }).select(R_SELECT).single();
+    setSending(false);
+    if (error || !data) { toast.error("Couldn't send it. Try again in a moment."); return; }
+    setRequests((prev) => [data, ...(prev || []).filter((r) => r.profile_id !== profileId)]);
+    setSendTo('');
+    // Push the new notification to their phone now rather than on the next sweep.
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      fetch('/api/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ type: 'flush' }),
+      }).catch(() => {});
+    } catch { /* the sweep will send it */ }
+    toast.success(`Sent to ${data.person?.full_name || 'them'}. It's in their notifications and on their Home tab until they fill it in.`);
+  };
+
+  const cancelRequest = async (r) => {
+    const { error } = await supabase.from('night_health_requests').delete().eq('profile_id', r.profile_id);
+    if (error) { toast.error("Couldn't cancel it. Try again in a moment."); return; }
+    setRequests((prev) => (prev || []).filter((x) => x.profile_id !== r.profile_id));
   };
 
   const removeWorker = async (w) => {
@@ -140,6 +177,48 @@ export default function AdminNightHealth() {
           </select>
           <button type="button" onClick={addWorker} disabled={!adding}>Add</button>
         </div>
+      </div>
+
+      <div className="card">
+        <h2 style={{ margin: '0 0 8px', fontSize: 17 }}>Send it to someone</h2>
+        {requests === null ? (
+          <p style={{ fontSize: 14, margin: 0 }}>Needs the 0144 database update before it can be used.</p>
+        ) : (
+          <>
+            <p style={{ fontSize: 13.5, color: 'var(--muted)', margin: '0 0 10px' }}>
+              Ask any member of staff to fill it in - someone about to start nights, or covering a night shift. They get a
+              notification and it stays on their Home tab until they send it.
+            </p>
+            {requests.map((r) => {
+              const waiting = requestOutstanding(r.requested_at, latest[r.profile_id]);
+              return (
+                <div key={r.profile_id} className="task-row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ flex: '1 1 180px', fontSize: 14 }}>
+                    <strong>{r.person?.full_name || 'Unknown'}</strong>
+                    <span style={{ color: 'var(--muted)' }}> · sent {formatDay(r.requested_at)}</span>
+                  </span>
+                  <span className={`badge ${waiting ? 'in_progress' : 'completed'}`}>{waiting ? 'Waiting' : 'Answered'}</span>
+                  {waiting ? (
+                    <button type="button" className="btn-secondary" onClick={() => cancelRequest(r)} style={{ padding: '6px 10px', fontSize: 13 }}>
+                      Cancel
+                    </button>
+                  ) : (
+                    <button type="button" className="btn-secondary" disabled={sending} onClick={() => sendRequest(r.profile_id)} style={{ padding: '6px 10px', fontSize: 13 }}>
+                      Send again
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+            <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'flex-start' }}>
+              <select value={sendTo} onChange={(e) => setSendTo(e.target.value)} aria-label="Send the questionnaire to" style={{ flex: 1 }}>
+                <option value="">Choose a member of staff…</option>
+                {activeStaff.map((p) => <option key={p.id} value={p.id}>{p.full_name || 'Unnamed'}</option>)}
+              </select>
+              <button type="button" onClick={() => sendRequest(sendTo)} disabled={!sendTo || sending}>{sending ? 'Sending…' : 'Send'}</button>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="card">
