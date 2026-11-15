@@ -5756,3 +5756,19 @@ a.btn-compact {
 .docs-suggest-list select { margin: 0; }
 .docs-suggest-title { overflow-wrap: anywhere; }
 @media (max-width: 640px) { .docs-suggest-list li { grid-template-columns: auto minmax(0, 1fr); } .docs-suggest-list li > .pj-task-meta, .docs-suggest-list li > select { grid-column: 2; } }
+
+/* Project chat. */
+.pj-chat-list { display: flex; flex-direction: column; gap: 10px; max-height: 520px; overflow-y: auto; padding: 4px 2px 10px; }
+.pj-chat-input { border-top: 1px solid var(--hairline); margin: 0 -2px; padding: 10px 0 0; background: none; }
+.pj-chat .help-msg { max-width: 96%; }
+.pj-chat-changes { margin-top: 8px; padding: 10px 11px; border: 1px solid var(--control-border); border-radius: 10px; background: var(--surface); }
+.pj-chat-changes ul { list-style: none; margin: 0 0 10px; padding: 0; }
+.pj-chat-changes li { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; border-bottom: 1px solid var(--hairline); font-size: 13px; }
+.pj-chat-changes li:last-child { border-bottom: none; }
+.pj-chat-changes li > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.pj-chat-changes li.is-error { opacity: 0.75; }
+.pj-chat-changes li.is-error svg { color: var(--wf-overdue); flex: none; margin-top: 2px; }
+.pj-chat-changes li.is-done svg { color: var(--wf-verified-text); flex: none; margin-top: 2px; }
+.pj-chat-detail { color: var(--ink-soft); font-size: 12.5px; }
+.pj-chat-warning { color: #7A5300; font-size: 12.5px; }
+.pj-chat-ok { color: var(--wf-verified-text); font-size: 12.5px; }

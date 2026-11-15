@@ -30,6 +30,7 @@ import { useToast } from '../../../components/ToastProvider';
 import BackButton from '../../../components/BackButton';
 import ProjectAiTools from '../../../components/ProjectAiTools';
 import ProjectPackage from '../../../components/ProjectPackage';
+import ProjectChat from '../../../components/ProjectChat';
 
 const BUCKET = 'project-files';
 const PROJECT_SELECT = 'id, name, kind, status, outcome, description, client_id, property_id, owner_id, start_date, due_date, created_at, completed_at, clients(name), properties(address)';
@@ -579,6 +580,16 @@ export default function ProjectPage() {
 
       <div className="pj-columns">
         <div className="pj-main">
+          {aiEnabled !== null && (
+            <ProjectChat
+              projectId={project.id}
+              aiEnabled={aiEnabled}
+              userId={ownId}
+              onApplied={load}
+              onToggleAi={toggleAi}
+            />
+          )}
+
           {/* Tasks */}
           <div className="card" style={{ marginBottom: 16 }}>
             <div className="pj-section-head">
