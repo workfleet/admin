@@ -12,6 +12,7 @@ import { getWorkAnniversaryYears } from '../../lib/workAnniversary';
 import WorkAnniversaryPopup from '../components/WorkAnniversaryPopup';
 import ShiftCoverCard, { fetchOpenOffers, fetchMyResponses, responsesByKind } from '../components/ShiftCoverCard';
 import EnablePushCard from '../components/EnablePushCard';
+import NightHealthPrompt from '../components/NightHealthPrompt';
 import KeyHoldingsCard from '../components/KeyHoldingsCard';
 import BackButton from '../components/BackButton';
 import Logo from '../components/Logo';
@@ -343,6 +344,7 @@ export default function CleanerDashboard() {
       )}
 
       <EnablePushCard />
+      <NightHealthPrompt userId={userId} />
 
       {/* The job they are on right now goes ahead of everything, in the
           verified green the rest of the app uses for "clocked in". */}

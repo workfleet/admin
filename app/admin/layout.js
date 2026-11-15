@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Download, Folder, Package, KeyRound, LifeBuoy, Banknote, Video, Bell, HardHat, Menu, X, Receipt, Megaphone, Search, BarChart3, FolderKanban, Sparkles } from 'lucide-react';
+import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Download, Folder, Package, KeyRound, LifeBuoy, Banknote, Video, Bell, HardHat, Menu, X, Receipt, Megaphone, Search, BarChart3, FolderKanban, Sparkles, Moon } from 'lucide-react';
 import { signOutAndClearPresence } from '../../lib/signOut';
 import { getSessionAndProfile } from '../../lib/authGate';
 import { canSeeInvoices } from '../../lib/invoiceAccess';
@@ -76,6 +76,8 @@ const NAV_ITEMS = [
   { href: '/admin/keys', label: 'Key register', icon: KeyRound, group: 'Records' },
   // Injury details are health data: admins only since 0131.
   { href: '/admin/incidents', label: 'Accidents and incidents', icon: HardHat, adminOnly: true, group: 'Records' },
+  // Health data: admins only (0143), and the page checks again.
+  { href: '/admin/night-health', label: 'Night worker health', icon: Moon, adminOnly: true, group: 'Records' },
   // Built from everyone's hours, so admin-only like Payroll.
   { href: '/admin/insights', label: 'Insights', icon: BarChart3, adminOnly: true, group: 'Records' },
   { href: '/admin/reports', label: 'Reports', icon: FileText, group: 'Records' },

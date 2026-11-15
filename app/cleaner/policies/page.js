@@ -150,6 +150,22 @@ export default function CleanerHelp() {
         </button>
       </div>
 
+      {section === 'policies' && (
+        <Link
+          href="/cleaner/night-health"
+          className="card"
+          style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', color: 'inherit' }}
+        >
+          <span style={{ flex: 1 }}>
+            <span style={{ display: 'block', fontWeight: 600, fontSize: 15 }}>Work nights? Free health assessment</span>
+            <span style={{ display: 'block', fontSize: 13.5, color: 'var(--muted)' }}>
+              Fill in the confidential night worker health questionnaire.
+            </span>
+          </span>
+          <ChevronRight size={20} style={{ color: 'var(--muted)', flexShrink: 0 }} />
+        </Link>
+      )}
+
       {section === 'guide' && videoCount > 0 && (
         <Link
           href="/cleaner/training"
