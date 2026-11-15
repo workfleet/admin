@@ -17,6 +17,11 @@ describe('packageEntries', () => {
     expect(packageEntries(files).map((e) => e.zipName)).toEqual(['01 - ITT pack.pdf', '02 - Annex 2 pricing.xlsx', '03 - Annex 2 pricing.xlsx']);
   });
 
+  it('puts each folder\'s files in a folder of the same name', () => {
+    const e = packageEntries([{ ...files[0], folder: 'Pricing' }, files[1]]);
+    expect(e.map((x) => x.path)).toEqual(['01 - ITT pack.pdf', 'Pricing/02 - Annex 2 pricing.xlsx']);
+  });
+
   it('makes names safe for Windows', () => {
     expect(safePart('Bus: Station / "night"?')).toBe('Bus Station night');
     expect(zipFileName('Swansea Bus Station tender', '2026-11-14')).toBe('Swansea Bus Station tender - documents 2026-11-14.zip');

@@ -31,6 +31,7 @@ import BackButton from '../../../components/BackButton';
 import ProjectAiTools from '../../../components/ProjectAiTools';
 import ProjectPackage from '../../../components/ProjectPackage';
 import ProjectChat from '../../../components/ProjectChat';
+import { groupProjectFiles, allFolders, withFolder, withoutFolder, renamedFolder, cleanFolderName, UNFILED } from '../../../../lib/projectFolders';
 
 const BUCKET = 'project-files';
 const PROJECT_SELECT = 'id, name, kind, status, outcome, description, client_id, property_id, owner_id, start_date, due_date, created_at, completed_at, clients(name), properties(address)';
@@ -99,6 +100,11 @@ export default function ProjectPage() {
   // null = the AI switch column isn't there yet (0138 not run).
   const [aiEnabled, setAiEnabled] = useState(null);
   const [packaging, setPackaging] = useState(false);
+  // null = file folders not switched on yet (0142).
+  const [fileFolders, setFileFolders] = useState(null);
+  const [uploadFolder, setUploadFolder] = useState('');
+  const [newFolder, setNewFolder] = useState('');
+  const [addingFolder, setAddingFolder] = useState(false);
 
   const today = localDateString(new Date());
   useDocumentTitle(project?.name || 'Project');
@@ -118,7 +124,11 @@ export default function ProjectPage() {
       return;
     }
 
-    const [aiRes, tasksRes, datesRes, notesRes, filesRes, staffRes, clientsRes, propertiesRes] = await Promise.all([
+    const [folderListRes, fileFolderRes, aiRes, tasksRes, datesRes, notesRes, filesRes, staffRes, clientsRes, propertiesRes] = await Promise.all([
+      // File folders (0142), asked for on their own so the page still loads
+      // before that is run.
+      supabase.from('projects').select('file_folders').eq('id', id).maybeSingle(),
+      supabase.from('project_files').select('id, folder').eq('project_id', id),
       // Asked for on its own so the page still loads before 0138 is run:
       // then the AI card just doesn't show.
       supabase.from('projects').select('ai_enabled').eq('id', id).maybeSingle(),
@@ -137,7 +147,9 @@ export default function ProjectPage() {
     setTasks(tasksRes.data || []);
     setDates(datesRes.data || []);
     setNotes(notesRes.data || []);
-    setFiles(filesRes.data || []);
+    const folderOf = new Map((fileFolderRes.error ? [] : fileFolderRes.data || []).map((f) => [f.id, f.folder]));
+    setFiles((filesRes.data || []).map((f) => ({ ...f, folder: folderOf.get(f.id) || null })));
+    setFileFolders(folderListRes.error || fileFolderRes.error ? null : folderListRes.data?.file_folders || []);
     setStaff(staffRes.data || []);
     setClients(clientsRes.data || []);
     setProperties(propertiesRes.data || []);
@@ -328,8 +340,8 @@ export default function ProjectPage() {
       if (uploadError) { failed += 1; continue; }
       const { data, error } = await supabase
         .from('project_files')
-        .insert({ project_id: id, file_name: file.name, storage_path: storagePath, file_size: file.size, uploaded_by: ownId })
-        .select('id, file_name, storage_path, file_size, uploaded_by, created_at')
+        .insert({ project_id: id, file_name: file.name, storage_path: storagePath, file_size: file.size, uploaded_by: ownId, ...(fileFolders !== null && uploadFolder ? { folder: uploadFolder } : {}) })
+        .select(fileFolders !== null ? 'id, file_name, storage_path, file_size, uploaded_by, created_at, folder' : 'id, file_name, storage_path, file_size, uploaded_by, created_at')
         .single();
       if (error || !data) {
         // Don't leave an orphan in the bucket that nothing points at.
@@ -358,6 +370,48 @@ export default function ProjectPage() {
     const { error } = await supabase.from('project_files').delete().eq('id', f.id);
     if (error) { toast.error("Couldn't delete the file record."); return; }
     setFiles((prev) => prev.filter((x) => x.id !== f.id));
+  };
+
+  // --- File folders (0142) ----------------------------------------------
+
+  const saveFolderList = async (list) => {
+    const { error } = await supabase.from('projects').update({ file_folders: list }).eq('id', id);
+    if (error) { toast.error("Couldn't save the folders."); return false; }
+    setFileFolders(list);
+    return true;
+  };
+
+  const addFolder = async (e) => {
+    e.preventDefault();
+    const name = cleanFolderName(newFolder);
+    if (!name) return;
+    if (await saveFolderList(withFolder(fileFolders, name))) { setNewFolder(''); setAddingFolder(false); }
+  };
+
+  const moveFile = async (f, folder) => {
+    const { error } = await supabase.from('project_files').update({ folder: folder || null }).eq('id', f.id);
+    if (error) { toast.error("Couldn't move the file."); return; }
+    setFiles((prev) => prev.map((x) => (x.id === f.id ? { ...x, folder: folder || null } : x)));
+  };
+
+  const renameFolderPrompt = async (name) => {
+    const next = cleanFolderName(window.prompt('New name for the folder', name) || '');
+    if (!next || next === name) return;
+    if (!(await saveFolderList(renamedFolder(allFolders(fileFolders, files), name, next)))) return;
+    const { error } = await supabase.from('project_files').update({ folder: next }).eq('project_id', id).eq('folder', name);
+    if (error) toast.error("The folder was renamed but some files didn't move with it.");
+    setFiles((prev) => prev.map((x) => (x.folder === name ? { ...x, folder: next } : x)));
+  };
+
+  const removeFolder = async (name) => {
+    const inside = files.filter((f) => f.folder === name).length;
+    if (!(await confirm(inside ? `Remove the folder "${name}"? Its ${inside} file${inside === 1 ? '' : 's'} won't be deleted - they move to "Not in a folder".` : `Remove the empty folder "${name}"?`, { title: 'Remove folder', confirmLabel: 'Remove folder' }))) return;
+    if (inside) {
+      const { error } = await supabase.from('project_files').update({ folder: null }).eq('project_id', id).eq('folder', name);
+      if (error) { toast.error("Couldn't move the files out."); return; }
+      setFiles((prev) => prev.map((x) => (x.folder === name ? { ...x, folder: null } : x)));
+    }
+    await saveFolderList(withoutFolder(fileFolders, name));
   };
 
   // --- AI tools --------------------------------------------------------
@@ -780,20 +834,60 @@ export default function ProjectPage() {
                 onClose={() => setPackaging(false)}
               />
             )}
+            {fileFolders !== null && (
+              <div className="pj-folder-bar">
+                <label className="pj-task-meta" htmlFor="pj-upload-folder">Upload into</label>
+                <select id="pj-upload-folder" value={uploadFolder} onChange={(e) => setUploadFolder(e.target.value)}>
+                  <option value="">Not in a folder</option>
+                  {allFolders(fileFolders, files).map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+                {addingFolder ? (
+                  <form onSubmit={addFolder} className="pj-folder-add">
+                    <input value={newFolder} onChange={(e) => setNewFolder(e.target.value)} placeholder="Folder name" aria-label="New folder name" autoFocus />
+                    <button type="submit" className="btn-secondary" disabled={!cleanFolderName(newFolder)}>Add</button>
+                    <button type="button" className="pj-text-btn" onClick={() => { setAddingFolder(false); setNewFolder(''); }}>Cancel</button>
+                  </form>
+                ) : (
+                  <button type="button" className="pj-text-btn" onClick={() => setAddingFolder(true)}>+ New folder</button>
+                )}
+              </div>
+            )}
             {files.length === 0 && <p className="pj-muted" style={{ margin: 0 }}>Drafts, the tender pack, pricing, photos - anything for this project.</p>}
-            <ul className="pj-files">
-              {files.map((f) => (
-                <li key={f.id}>
-                  <FileText size={16} className="pj-file-icon" aria-hidden />
-                  <button type="button" className="pj-file-name" onClick={() => openFile(f)} title="Open this file">
-                    <span>{f.file_name}</span>
-                    <span className="pj-task-meta">{[formatSize(f.file_size), nameOf(f.uploaded_by), formatWhen(f.created_at)].filter(Boolean).join(' · ')}</span>
-                  </button>
-                  <button type="button" className="pj-icon-btn" onClick={() => openFile(f)} aria-label={`Download ${f.file_name}`} title="Download"><Download size={14} /></button>
-                  <button type="button" className="pj-icon-btn" onClick={() => deleteFile(f)} aria-label={`Delete ${f.file_name}`} title="Delete"><Trash2 size={14} /></button>
-                </li>
-              ))}
-            </ul>
+            {(fileFolders !== null ? groupProjectFiles(fileFolders, files) : [{ folder: UNFILED, files }]).map((group) => (
+              <div key={group.folder || '__loose__'} className="pj-file-group">
+                {fileFolders !== null && (group.folder || files.length > 0) && (
+                  <div className="pj-file-group-head">
+                    <span className="pj-file-group-name">{group.folder || 'Not in a folder'} <span className="pj-task-meta">({group.files.length})</span></span>
+                    {group.folder && (
+                      <span>
+                        <button type="button" className="pj-text-btn" onClick={() => renameFolderPrompt(group.folder)}>Rename</button>
+                        <button type="button" className="pj-icon-btn" onClick={() => removeFolder(group.folder)} aria-label={`Remove the folder ${group.folder}`} title="Remove folder (files are kept)"><Trash2 size={13} /></button>
+                      </span>
+                    )}
+                  </div>
+                )}
+                <ul className="pj-files">
+                  {group.files.map((f) => (
+                    <li key={f.id}>
+                      <FileText size={16} className="pj-file-icon" aria-hidden />
+                      <button type="button" className="pj-file-name" onClick={() => openFile(f)} title="Open this file">
+                        <span>{f.file_name}</span>
+                        <span className="pj-task-meta">{[formatSize(f.file_size), nameOf(f.uploaded_by), formatWhen(f.created_at)].filter(Boolean).join(' · ')}</span>
+                      </button>
+                      {fileFolders !== null && (
+                        <select className="pj-file-move" value={f.folder || ''} onChange={(e) => moveFile(f, e.target.value)} aria-label={`Move ${f.file_name} to a folder`} title="Move to a folder">
+                          <option value="">Not in a folder</option>
+                          {allFolders(fileFolders, files).map((n) => <option key={n} value={n}>{n}</option>)}
+                        </select>
+                      )}
+                      <button type="button" className="pj-icon-btn" onClick={() => openFile(f)} aria-label={`Download ${f.file_name}`} title="Download"><Download size={14} /></button>
+                      <button type="button" className="pj-icon-btn" onClick={() => deleteFile(f)} aria-label={`Delete ${f.file_name}`} title="Delete"><Trash2 size={14} /></button>
+                    </li>
+                  ))}
+                  {fileFolders !== null && group.folder && group.files.length === 0 && <li className="pj-muted" style={{ fontSize: 12.5 }}>Empty</li>}
+                </ul>
+              </div>
+            ))}
           </div>
         </div>
       </div>

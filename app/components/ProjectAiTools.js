@@ -191,7 +191,7 @@ export default function ProjectAiTools({ project, files, onToggleAi, onAddSugges
 
       {!mode && (
         <>
-          <p className="pj-muted" style={{ margin: '0 0 10px' }}>Suggestions only - nothing is added until you choose it. Every use is noted in the history.</p>
+          <p className="pj-muted" style={{ margin: '0 0 10px' }}>Suggestions only - nothing is added until you choose it. They can read every file on the project. To change documents or tasks, tell the Project chat.</p>
           <div className="pj-ai-choices">
             <button type="button" className="btn-secondary" onClick={() => setMode('tasks')}>Suggest tasks from a file</button>
             <button type="button" className="btn-secondary" onClick={() => setMode('ask')}>Ask a question</button>

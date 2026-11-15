@@ -100,7 +100,7 @@ describe('project chat changes', () => {
     });
     expect(text).toContain('- t1 | to_do | 2026-11-20 | Pricing');
     expect(text).toContain('- d1 | 2026-11-26 | open | Submit');
-    expect(text).toContain('- f1 | Pricing.xlsx');
+    expect(text).toContain('- f1 | - | Pricing.xlsx');
   });
 
   it('lets the tool propose every supported change', () => {

@@ -63,7 +63,7 @@ export default function ProjectPackage({ project, files, aiEnabled, nameOf, onUs
         const { data: signed } = await supabase.storage.from('project-files').createSignedUrl(e.storage_path, 600);
         const res = signed?.signedUrl ? await fetch(signed.signedUrl).catch(() => null) : null;
         if (!res || !res.ok) { failed.push(e.file_name); continue; }
-        zip.file(e.zipName, await res.blob());
+        zip.file(e.path || e.zipName, await res.blob());
       }
       setProgress('Writing the contents sheet...');
       const today = new Date();

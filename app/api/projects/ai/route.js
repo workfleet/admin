@@ -20,6 +20,7 @@ import {
   FALLBACK_BETA, requireOffice, fail, loadCompany, loadFacts, londonToday, loadClientFacts,
   loadProjectFile, anthropicClient, textOf, aiErrorResponse,
 } from '../../../../lib/aiServer';
+import { projectFilesFor, filesListText, READ_FILE_NOTE, runWithFileReads } from '../../../../lib/projectChatServer';
 import { factsContext } from '../../../../lib/companyFacts';
 
 // AI tools for one project:
@@ -166,22 +167,24 @@ export async function POST(request) {
       const files = await loadFiles(body.file_ids);
       if (files.error) return fail('unreadable', files.error);
 
-      const message = await client.beta.messages.create({
+      const projectFiles = await projectFilesFor(projectId);
+      const { message, read } = await runWithFileReads(client, {
         model: AI_MODEL,
         max_tokens: 4000,
         betas: [FALLBACK_BETA],
         fallbacks: 'default',
         output_config: { effort: 'low' },
-        system: ASK_SYSTEM,
+        system: ASK_SYSTEM + READ_FILE_NOTE,
         messages: [{
           role: 'user',
-          content: [...files.blocks, { type: 'text', text: `${factsText ? `${factsText}\n\n` : ''}Project details:\n${context}${clientText ? `\n\n${clientText}` : ''}\n\nQuestion: ${question}` }],
+          content: [...files.blocks, { type: 'text', text: `${factsText ? `${factsText}\n\n` : ''}Project details:\n${context}${clientText ? `\n\n${clientText}` : ''}\n\n${filesListText(projectFiles)}\n\nQuestion: ${question}` }],
         }],
-      });
+      }, { projectId, files: projectFiles });
       if (message.stop_reason === 'refusal') return fail('refused', 'The AI declined to answer this.', 422);
       const answer = textOf(message).trim();
       if (!answer) return fail('bad_output', 'Nothing came back. Please try again.', 502);
-      await log(`AI answered: ${question.slice(0, 100)}${files.names.length ? ` (read ${files.names.join(', ')})` : ''}`);
+      const readNames = [...new Set([...files.names, ...read])];
+      await log(`AI answered: ${question.slice(0, 100)}${readNames.length ? ` (read ${readNames.join(', ')})` : ''}`);
       return NextResponse.json({ ok: true, answer });
     }
 
@@ -193,22 +196,24 @@ export async function POST(request) {
     if (draftType === 'free' && !instruction) return fail('bad_request', 'Say what you\'d like written.');
     const files = await loadFiles(body.file_ids);
     if (files.error) return fail('unreadable', files.error);
+    const projectFiles = await projectFilesFor(projectId);
 
     const firstRequest = draftRequestText({
       docType: 'free',
       instruction: `${draftType === 'free' ? '' : `${draftTypeLabel(draftType)}. `}${instruction}`.trim(),
-      sections: [`Today's date: ${today}`, `Company details:\n${companyContext(company)}`, factsText, `Project details:\n${context}`, clientText ? `Client details from the company's records:\n${clientText}` : null],
+      sections: [`Today's date: ${today}`, `Company details:\n${companyContext(company)}`, factsText, `Project details:\n${context}`, clientText ? `Client details from the company's records:\n${clientText}` : null, filesListText(projectFiles)],
     });
 
-    const message = await client.beta.messages.create({
+    const { message, read } = await runWithFileReads(client, {
       model: AI_MODEL,
       max_tokens: 16000,
       betas: [FALLBACK_BETA],
       fallbacks: 'default',
       output_config: { effort: 'low' },
-      system: draftSystem(company, companyFacts),
+      system: draftSystem(company, companyFacts) + READ_FILE_NOTE,
       messages: draftMessages({ firstRequest, blocks: files.blocks, previousDraft, changeRequest }),
-    });
+    }, { projectId, files: projectFiles });
+    files.names = [...new Set([...files.names, ...read])];
 
     if (message.stop_reason === 'refusal') return fail('refused', 'The AI declined to write this.', 422);
     const { body: draft, placeholders } = splitDraft(textOf(message));

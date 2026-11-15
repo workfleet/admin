@@ -4,7 +4,7 @@ import { AI_MODEL } from '../../../../lib/aiDrafting';
 import { cleanHelpMessages } from '../../../../lib/helpChat';
 import { factsContext } from '../../../../lib/companyFacts';
 import { projectChatSystem, projectChatContext, PROJECT_TOOLS } from '../../../../lib/projectChat';
-import { loadProjectBundle, readProjectFile, checkProjectChange } from '../../../../lib/projectChatServer';
+import { loadProjectBundle, readProjectFile, checkProjectChange, STOP_READING } from '../../../../lib/projectChatServer';
 import { FALLBACK_BETA, requireOffice, fail, loadFacts, londonToday, anthropicClient, textOf, aiErrorResponse } from '../../../../lib/aiServer';
 
 // The chat on a project page. It reads the project (tasks, dates, notes,
@@ -16,6 +16,10 @@ export const maxDuration = 60;
 
 const MAX_STEPS = 10;
 const TIME_BUDGET_MS = 50000;
+// Files one message may open, and when to stop opening more, so a big
+// project answers inside the 60 seconds instead of being cut off.
+const MAX_READS = 6;
+const READ_BUDGET_MS = 32000;
 
 export async function POST(request) {
   const startedAt = Date.now();
@@ -42,6 +46,7 @@ export async function POST(request) {
   const system = [{ type: 'text', text: projectChatSystem(bundle.project.name), cache_control: { type: 'ephemeral' } }];
   const client = anthropicClient();
   const changes = [];
+  let reads = 0;
   let answer = '';
 
   try {
@@ -71,8 +76,13 @@ export async function POST(request) {
         let content;
         try {
           if (call.name === 'read_file') {
-            const r = await readProjectFile(bundle, call.input?.file_id);
-            content = r.blocks || r.text || JSON.stringify(r);
+            if (reads >= MAX_READS || Date.now() - startedAt > READ_BUDGET_MS) {
+              content = STOP_READING;
+            } else {
+              reads += 1;
+              const r = await readProjectFile(bundle, call.input?.file_id);
+              content = r.blocks || r.text || JSON.stringify(r);
+            }
           } else if (call.name === 'propose_project_changes') {
             const checked = [];
             for (const c of (call.input?.changes || []).slice(0, 40)) checked.push(await checkProjectChange(c, bundle));

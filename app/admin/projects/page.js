@@ -158,6 +158,9 @@ export default function AdminProjects() {
       ]);
       partial = Boolean(tasksRes.error || datesRes.error);
     }
+    // Starter file folders for the type (0142). Ignored if that isn't run yet.
+    const starterFolders = templateFor(form.kind).fileFolders || [];
+    if (starterFolders.length) await supabase.from('projects').update({ file_folders: starterFolders }).eq('id', project.id);
     await supabase.from('project_notes').insert({ project_id: project.id, kind: 'event', body: 'Project created', created_by: ownId });
 
     setCreating(false);
