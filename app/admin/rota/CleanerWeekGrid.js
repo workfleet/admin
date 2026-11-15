@@ -154,8 +154,7 @@ export default function CleanerWeekGrid({ rows: givenRows, weekDays, todayKey, t
     // Training has no client, so the chip names the training and its venue
     // where a clean names the client and the address.
     const training = isTraining(job);
-    // A client with several sites leads with the street and names itself
-    // underneath; anyone else is just their name.
+    // A clean leads with the client's name and gives the street underneath.
     const { place: client, client: owner } = training
       ? { place: jobHeadline(job), client: null }
       : placeParts
@@ -212,7 +211,7 @@ export default function CleanerWeekGrid({ rows: givenRows, weekDays, todayKey, t
     // place is never squeezed out by a note about who else is on the job.
     const problem = unassigned ? (training ? 'Nobody booked on' : 'No cleaner yet') : null;
     const sub = (single
-      ? [owner, where && where !== client ? where : null, withNote, problem, word]
+      ? [where && where !== client ? where : owner, withNote, problem, word]
       : [owner, withNote, problem, job.status === 'missed' ? 'missed' : job.status === 'in_progress' ? 'on site' : null]
     ).filter(Boolean).join(' · ');
 

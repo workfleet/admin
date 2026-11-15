@@ -2024,17 +2024,18 @@ export default function AdminRota() {
     [jobs, cleaners, weekDays]
   );
 
-  // Where a job is: every card leads with the street and names the client
-  // underneath. Showing the street only for clients with several sites
-  // left most of the rota as a list of names with no address on it, which
-  // is not what the office reads a rota for. When the address starts with
-  // the client's own name ("The Eagle Inn" for The Eagle) it is said once.
+  // Who and where a job is: every card leads with the client's name and
+  // gives the street after it. Leading with the street left the name as
+  // the part that got cut off on a narrow card, so the rota read as a list
+  // of addresses. `place` is the line a card leads with and `client` the
+  // detail under it. When the address only repeats the client's own name
+  // ("The Eagle Inn" for The Eagle) the name is said once.
   const placeParts = (job) => {
     const name = job.properties?.clients?.name;
     const street = shortAddress(job.properties?.address);
-    if (!street) return { place: name || 'Unknown client', client: null };
-    if (!name || nameRepeatsStreet(name, street)) return { place: street, client: null };
-    return { place: street, client: name };
+    if (!name) return { place: street || 'Unknown client', client: null };
+    if (!street || nameRepeatsStreet(name, street)) return { place: name, client: null };
+    return { place: name, client: street };
   };
 
   const jobPlaceLabel = (job) => {

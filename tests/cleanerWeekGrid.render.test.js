@@ -82,20 +82,20 @@ describe('CleanerWeekGrid', () => {
     expect(html).toContain('rota-grid-todaypill');
   });
 
-  it('leads with the street for a client with several sites, and names them underneath', () => {
+  it('leads with the client name and gives the street underneath', () => {
     const html = renderToStaticMarkup(createElement(CleanerWeekGrid, {
       rows: buildCleanerRows(jobs, cleaners, weekDays),
       weekDays,
       todayKey: weekDays[1].toDateString(),
       placeParts: (job) => (job.id === 'j1'
-        ? { place: '14 Bridge St', client: 'Riverside Dental' }
+        ? { place: 'Riverside Dental', client: '14 Bridge St' }
         : { place: job.properties?.clients?.name || job.properties?.address || 'Unknown client', client: null }),
       onOpenJob: () => {},
       onNewJob: () => {},
       onDropJob: () => {},
     }));
-    expect(html).toContain('rota-chip-client is-own-line">14 Bridge St<');
-    expect(html).toContain('rota-chip-sub">Riverside Dental<');
+    expect(html).toContain('rota-chip-client is-own-line">Riverside Dental<');
+    expect(html).toContain('rota-chip-sub">14 Bridge St<');
   });
 
   it('marks approved time off, and says so when the person is booked anyway', () => {
