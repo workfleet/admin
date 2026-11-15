@@ -9,6 +9,7 @@ import { FileText, Download, PlayCircle, ChevronRight } from 'lucide-react';
 import { POLICY_SECTIONS } from '../../../lib/companyPolicies';
 import { supabase } from '../../../lib/supabaseClient';
 import BackButton from '../../components/BackButton';
+import { groupByFolder } from '../../../lib/documentFolders';
 
 const CATEGORY_LABELS = { policy: 'Policy', contract: 'Contract', other: 'Other' };
 const CATEGORY_ORDER = ['policy', 'contract', 'other'];
@@ -66,6 +67,7 @@ const HELP_SECTIONS = [
 export default function CleanerHelp() {
   const [section, setSection] = useState('guide');
   const [documents, setDocuments] = useState(null);
+  const [docFolders, setDocFolders] = useState(null);
   // The videos answer the same questions as the prose below them, so the
   // link only appears once there is actually something to watch - an empty
   // training page reads as a broken feature rather than as one not filmed yet.
@@ -88,12 +90,27 @@ export default function CleanerHelp() {
     setVideoCount(count || 0);
   };
 
+  // Grouped by the office's folders (0141); before those exist, by the
+  // old three categories.
   const loadDocuments = async () => {
-    const { data } = await supabase
-      .from('company_documents')
-      .select('id, title, category, storage_path, file_name, file_size, created_at')
-      .order('created_at', { ascending: false });
-    setDocuments(data || []);
+    const [docsRes, foldersRes] = await Promise.all([
+      supabase
+        .from('company_documents')
+        .select('id, title, category, storage_path, file_name, file_size, created_at, folder_id')
+        .order('created_at', { ascending: false }),
+      supabase.from('document_folders').select('id, name, category, position').order('position'),
+    ]);
+    if (docsRes.error) {
+      const { data } = await supabase
+        .from('company_documents')
+        .select('id, title, category, storage_path, file_name, file_size, created_at')
+        .order('created_at', { ascending: false });
+      setDocuments(data || []);
+      setDocFolders(null);
+      return;
+    }
+    setDocuments(docsRes.data || []);
+    setDocFolders(foldersRes.error ? null : foldersRes.data || []);
   };
 
   const handleDownload = async (doc) => {
@@ -178,12 +195,14 @@ export default function CleanerHelp() {
         <>
           {documents === null && <SkeletonLines />}
           {documents?.length === 0 && <EmptyState compact icon={EmptyIconFolder} title="No documents shared yet" />}
-          {CATEGORY_ORDER.map((cat) => {
-            const docsInCategory = (documents || []).filter((d) => d.category === cat);
+          {(docFolders
+            ? groupByFolder(docFolders, documents || [], { keepEmpty: false }).map((g) => ({ key: g.folder.id, label: g.folder.name, docs: g.docs }))
+            : CATEGORY_ORDER.map((cat) => ({ key: cat, label: CATEGORY_LABELS[cat], docs: (documents || []).filter((d) => d.category === cat) }))
+          ).map(({ key, label, docs: docsInCategory }) => {
             if (docsInCategory.length === 0) return null;
             return (
-              <div key={cat} className="card" style={{ marginBottom: 12 }}>
-                <h2>{CATEGORY_LABELS[cat]}</h2>
+              <div key={key} className="card" style={{ marginBottom: 12 }}>
+                <h2>{label}</h2>
                 {docsInCategory.map((doc) => (
                   <div
                     key={doc.id}

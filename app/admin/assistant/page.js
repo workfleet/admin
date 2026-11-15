@@ -101,7 +101,7 @@ export default function AiAssistant() {
       supabase.from('clients').select('id, name').order('name'),
       supabase.from('properties').select('id, client_id, address').order('address'),
       supabase.from('projects').select('id, name, status, client_id, ai_enabled').order('updated_at', { ascending: false }),
-      supabase.from('company_documents').select('id, title, file_name').order('title'),
+      supabase.from('company_documents').select('id, title, file_name').is('client_id', null).order('title'),
       supabase.from('ai_drafts').select('id, doc_type, title, created_at, client_id, project_id').order('created_at', { ascending: false }).limit(30),
     ]);
 

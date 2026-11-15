@@ -5736,3 +5736,23 @@ a.btn-compact {
 .pj-package-items li.is-present svg { color: var(--wf-verified-text); }
 .pj-package-items li.is-missing svg { color: var(--wf-overdue); }
 .pj-package-items li.is-unclear svg { color: #7A5300; }
+
+/* Documents: folders, search, move, AI sort. */
+.docs-btn { width: auto; display: inline-flex; align-items: center; gap: 6px; }
+.docs-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.docs-search { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 200px; max-width: 420px; padding: 0 10px; border: 1px solid var(--control-border); border-radius: var(--radius-sm); background: var(--surface); color: var(--muted); }
+.docs-search input { border: none; margin: 0; padding: 9px 0; background: none; box-shadow: none; }
+.docs-move-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.docs-move-bar select { width: auto; margin: 0; }
+.docs-folder-head { display: flex; align-items: center; gap: 6px; width: 100%; background: none; border: none; padding: 0; text-align: left; cursor: pointer; color: inherit; }
+.docs-folder-list { list-style: none; margin: 0 0 10px; padding: 0; }
+.docs-folder-list li { display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid var(--hairline); }
+.docs-folder-list li input { flex: 1; margin: 0; min-width: 0; }
+.docs-add-folder { display: flex; gap: 8px; flex-wrap: wrap; }
+.docs-add-folder input { flex: 1; min-width: 160px; margin: 0; }
+.docs-add-folder select { width: auto; margin: 0; }
+.docs-suggest-list { list-style: none; margin: 0; padding: 0; max-height: 420px; overflow-y: auto; }
+.docs-suggest-list li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto minmax(140px, 200px); gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--hairline); font-size: 13.5px; }
+.docs-suggest-list select { margin: 0; }
+.docs-suggest-title { overflow-wrap: anywhere; }
+@media (max-width: 640px) { .docs-suggest-list li { grid-template-columns: auto minmax(0, 1fr); } .docs-suggest-list li > .pj-task-meta, .docs-suggest-list li > select { grid-column: 2; } }
