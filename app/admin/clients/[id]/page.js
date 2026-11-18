@@ -22,6 +22,7 @@ import { useToast } from '../../../components/ToastProvider';
 import { claimFor, describeClockRecord, indexClaims, lateMinutes } from '../../../../lib/clockIn';
 import BackButton from '../../../components/BackButton';
 import ClientProjects from '../../../components/ClientProjects';
+import ClientPortalLogins from '../../../components/ClientPortalLogins';
 
 export default function ClientDetail() {
   const router = useRouter();
@@ -33,7 +34,7 @@ export default function ClientDetail() {
   useDocumentTitle(client?.name);
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('properties'); // properties | calls | hours | reviews | clockins | documents
+  const [tab, setTab] = useState('properties'); // properties | calls | hours | reviews | clockins | documents | portal
 
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState(null);
@@ -809,6 +810,9 @@ export default function ClientDetail() {
         <button className={`page-tab${tab === 'documents' ? ' is-active' : ''}`} aria-pressed={tab === 'documents'} onClick={() => setTab('documents')}>
           Documents{clientDocs ? ` (${clientDocs.length})` : ''}
         </button>
+        <button className={`page-tab${tab === 'portal' ? ' is-active' : ''}`} aria-pressed={tab === 'portal'} onClick={() => setTab('portal')}>
+          Portal logins
+        </button>
       </div>
 
       {tab === 'properties' && (
@@ -1252,6 +1256,8 @@ export default function ClientDetail() {
           )}
         </>
       )}
+
+      {tab === 'portal' && <ClientPortalLogins clientId={id} clientName={client.name} />}
     </div>
   );
 }
