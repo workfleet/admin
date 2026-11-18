@@ -91,6 +91,9 @@ export default function AdminRequests() {
   const [clientRequestFilter, setClientRequestFilter] = useState('open'); // open | resolved | all
   const [resolvingClientRequestId, setResolvingClientRequestId] = useState(null);
   const [clientRequestNote, setClientRequestNote] = useState('');
+  // Problem reports from the client portal (0147): signed photo links,
+  // fetched when the office opens them.
+  const [problemPhotoUrls, setProblemPhotoUrls] = useState({});
 
   // client pause requests
   const [pauses, setPauses] = useState([]);
@@ -257,7 +260,7 @@ export default function AdminRequests() {
         .order('created_at', { ascending: false }),
       supabase
         .from('client_requests')
-        .select('id, description, status, resolution_note, resolved_by, created_at, client_id, clients(name), resolver:profiles!client_requests_resolved_by_fkey(full_name)')
+        .select('id, kind, job_id, photo_paths, description, status, resolution_note, resolved_by, created_at, client_id, clients(name), resolver:profiles!client_requests_resolved_by_fkey(full_name), jobs(scheduled_at, properties(address), job_assignments(cleaner_id, profiles(full_name)))')
         .order('created_at', { ascending: false }),
       supabase
         .from('client_pause_requests')
@@ -1180,6 +1183,14 @@ export default function AdminRequests() {
 
   const filteredRequests = requests.filter((r) => filter === 'all' || r.status === filter);
   const openCount = requests.filter((r) => r.status === 'open').length;
+
+  const showProblemPhotos = async (r) => {
+    const urls = await Promise.all((r.photo_paths || []).map(async (path) => {
+      const { data } = await supabase.storage.from('client-problem-photos').createSignedUrl(path, 3600);
+      return data?.signedUrl || null;
+    }));
+    setProblemPhotoUrls((prev) => ({ ...prev, [r.id]: urls.filter(Boolean) }));
+  };
 
   const filteredClientRequests = clientRequests.filter((r) => clientRequestFilter === 'all' || r.status === clientRequestFilter);
   const openClientRequestCount = clientRequests.filter((r) => r.status === 'open').length;
@@ -2328,7 +2339,34 @@ export default function AdminRequests() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                   <div>
                     <h2>{r.clients?.name || 'Unknown client'}</h2>
+                    {r.kind === 'problem' && (
+                      <p style={{ fontSize: 13, margin: '4px 0', color: 'var(--wf-overdue)', fontWeight: 600 }}>
+                        Problem with a visit
+                        {r.jobs && (
+                          <span style={{ color: 'var(--muted)', fontWeight: 400 }}>
+                            {' '}· {r.jobs.properties?.address || 'Property removed'} · {new Date(r.jobs.scheduled_at).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+                            {(() => {
+                              const who = (r.jobs.job_assignments || []).map((a) => a.profiles?.full_name).filter(Boolean);
+                              return who.length ? ` · ${who.join(', ')}` : '';
+                            })()}
+                          </span>
+                        )}
+                      </p>
+                    )}
                     <p style={{ fontSize: 14, margin: '4px 0' }}>{r.description}</p>
+                    {r.photo_paths?.length > 0 && (
+                      problemPhotoUrls[r.id] ? (
+                        <div className="photo-grid" style={{ margin: '6px 0' }}>
+                          {problemPhotoUrls[r.id].map((url) => (
+                            <a key={url} href={url} target="_blank" rel="noopener noreferrer"><img src={url} alt="From the client" /></a>
+                          ))}
+                        </div>
+                      ) : (
+                        <button type="button" className="btn-secondary" style={{ margin: '4px 0' }} onClick={() => showProblemPhotos(r)}>
+                          Show {r.photo_paths.length} photo{r.photo_paths.length === 1 ? '' : 's'}
+                        </button>
+                      )
+                    )}
                     <p className="job-time">{new Date(r.created_at).toLocaleString()}</p>
                     <span className={`badge ${r.status === 'resolved' ? 'completed' : 'scheduled'}`}>{r.status}</span>
                     {r.status === 'resolved' && (

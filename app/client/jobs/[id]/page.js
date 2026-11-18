@@ -10,6 +10,7 @@ import { getSessionWithRetry } from '../../../../lib/authGate';
 import { COMPANY } from '../../../../lib/companyBranding';
 import BackButton from '../../../components/BackButton';
 import ReportRooms from '../../../components/ReportRooms';
+import VisitProblemReport from '../../../components/VisitProblemReport';
 import { downloadReportPdf } from '../../../../lib/downloadReportPdf';
 import { REPORT_TEMPLATES, DEFAULT_TEMPLATE } from '../../../../lib/reportTemplates';
 
@@ -271,6 +272,10 @@ export default function ClientJobDetail() {
             </button>
           )}
         </div>
+      )}
+
+      {(job.status === 'completed' || job.status === 'missed') && clientId && (
+        <VisitProblemReport jobId={job.id} clientId={clientId} />
       )}
 
       {job.status === 'completed' && (
