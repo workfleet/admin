@@ -118,12 +118,19 @@ async function runNudgeSweep(request) {
 
     // In-app too, since push needs an opted-in subscription and not everyone
     // has one. This is the copy that survives a phone with notifications off.
-    await supabaseAdmin.from('notifications').insert(
-      cleanerIds.map((id) => ({
-        user_id: id,
-        message: `You haven't clocked in at ${address} (${formatShiftTime(job.scheduled_at)}). Check in now, or tell the office if you've already finished.`,
-      }))
-    );
+    // job_id lets 0145 take the reminder down again once they clock in, so
+    // it doesn't sit on their home screen reading like a missed shift.
+    const bellRows = cleanerIds.map((id) => ({
+      user_id: id,
+      job_id: job.id,
+      message: `You haven't clocked in at ${address} (${formatShiftTime(job.scheduled_at)}). Check in now, or tell the office if you've already finished.`,
+    }));
+    const { error: bellError } = await supabaseAdmin.from('notifications').insert(bellRows);
+    // Before 0145 is run the column doesn't exist; a reminder that can't
+    // clear itself still beats no reminder at all.
+    if (bellError?.code === '42703' || bellError?.code === 'PGRST204') {
+      await supabaseAdmin.from('notifications').insert(bellRows.map(({ job_id, ...row }) => row));
+    }
 
     // Stamped last and unconditionally: a push that failed to deliver is not
     // a reason to send the same alert again on the next run, and this column
