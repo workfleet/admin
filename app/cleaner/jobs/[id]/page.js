@@ -657,6 +657,30 @@ export default function JobDetailPage() {
   const canCheckPhotos = photos.some((p) => !p.pendingSync) && (checklistItems.length > 0 || tasks.length > 0);
 
   const handleCheckOut = async () => {
+    // Clients see the checklist on their portal and in the monthly service
+    // record. Visits closed with "0 of 28" ticked read to a client as
+    // nothing done, even when the clean was fine (TKR, Nov 2026). Asked
+    // while the cleaner is still on site and can tick what they did.
+    const unticked = tasks.filter((t) => !t.completed).length;
+    if (tasks.length > 0 && unticked > 0) {
+      const ticked = tasks.length - unticked;
+      const proceed = await confirm(
+        ticked === 0
+          ? `Nothing on the checklist is ticked yet (0 of ${tasks.length}). The client sees this list, so it will look like nothing was done. Tick off what you've done before you go.`
+          : `You've ticked ${ticked} of ${tasks.length} on the checklist. The client sees this list - tick anything else you've done, or check out if the rest wasn't done today.`,
+        {
+          title: ticked === 0 ? 'Checklist not ticked' : `${unticked} item${unticked === 1 ? '' : 's'} not ticked`,
+          danger: ticked === 0,
+          confirmLabel: 'Check out anyway',
+          cancelLabel: 'Go to the checklist',
+        }
+      );
+      if (!proceed) {
+        document.querySelector('.visit-progress')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+    }
+
     if (photos.length === 0) {
       const proceed = await confirm(
         "You haven't added any photos for this job. Once you check out you won't be able to add any later. Check out anyway?",
