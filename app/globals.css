@@ -5788,3 +5788,11 @@ a.btn-compact {
 /* Client portal: which site the pages are showing (ClientSitePicker). */
 .client-site-picker { display: flex; align-items: center; gap: 8px; margin: 0 0 16px; color: var(--muted); }
 .client-site-picker select { flex: 1; min-width: 0; max-width: 520px; margin: 0; }
+
+/* Client portal: first-visit welcome card on the dashboard. */
+.client-welcome { position: relative; }
+.client-welcome p { font-size: 14px; color: var(--muted); margin: 4px 0 8px; }
+.client-welcome ul { margin: 0 0 14px; padding-left: 20px; font-size: 14px; line-height: 1.6; }
+.client-welcome-close { position: absolute; top: 12px; right: 12px; background: none; border: 0; color: var(--muted); padding: 6px; min-height: 0; cursor: pointer; }
+.client-welcome li a { color: var(--wf-coral-dark); font-weight: 600; text-decoration: none; }
+.client-welcome li a:hover { text-decoration: underline; }
