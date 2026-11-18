@@ -5800,3 +5800,32 @@ a.btn-compact {
 /* Client portal: unread office replies on the Messages link and the phone menu button. */
 .client-nav-count { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--wf-coral, #e8603c); color: #fff; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
 .client-menu-dot { position: absolute; top: 6px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: var(--wf-coral, #e8603c); box-shadow: 0 0 0 2px var(--wf-ink, #1f2328); }
+
+/* Client portal: service record (proof of service) prints as a clean page. */
+.print-only { display: none; }
+.service-record-table td, .service-record-table th { font-size: 13px; }
+@media print {
+  .client-topbar, .client-sidebar, .client-drawer-overlay, .no-print { display: none !important; }
+  .print-only { display: block; }
+  .client-main { margin: 0 !important; padding: 0 !important; }
+  .service-record .card { box-shadow: none; border: 1px solid #ccc; break-inside: auto; }
+  .service-record .stat-card { box-shadow: none; border: 1px solid #ccc; }
+  .service-record-table tr { break-inside: avoid; }
+}
+.service-record-table td.nowrap { white-space: nowrap; }
+
+/* Client portal: supplies running low - tickable items. */
+.supply-items { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.supply-item { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border: 1px solid var(--hairline); border-radius: 999px; font-size: 13.5px; cursor: pointer; background: #fff; }
+.supply-item input { width: auto; margin: 0; }
+.supply-item.is-on { border-color: var(--wf-verified-ink, #1a7f4b); background: rgba(52, 199, 123, 0.12); }
+
+.client-quote-nudge { display: flex; flex-direction: column; gap: 4px; text-decoration: none; color: inherit; border-left: 4px solid var(--wf-coral, #e8603c); }
+.client-quote-nudge span { font-size: 13.5px; color: var(--wf-coral-dark, #c44a2a); font-weight: 600; }
+
+/* Client portal: your cleaner on a visit. */
+.visit-cleaners { display: flex; flex-wrap: wrap; gap: 16px; }
+.visit-cleaner { display: flex; align-items: center; gap: 12px; }
+.visit-cleaner-photo { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.visit-cleaner-photo-empty { display: flex; align-items: center; justify-content: center; background: var(--wf-ash); color: var(--muted); }
+.visit-cleaner-dbs { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--wf-verified-ink); font-weight: 600; margin-top: 2px; }

@@ -12,6 +12,7 @@ import BackButton from '../../../components/BackButton';
 import ReportRooms from '../../../components/ReportRooms';
 import VisitProblemReport from '../../../components/VisitProblemReport';
 import SiteAccessNotes from '../../../components/SiteAccessNotes';
+import VisitCleaners from '../../../components/VisitCleaners';
 import { downloadReportPdf } from '../../../../lib/downloadReportPdf';
 import { REPORT_TEMPLATES, DEFAULT_TEMPLATE } from '../../../../lib/reportTemplates';
 import { minutesOnSite, formatDuration } from '../../../../lib/detailedReport';
@@ -172,6 +173,8 @@ export default function ClientJobDetail() {
           );
         })()}
       </div>
+
+      <VisitCleaners jobId={job.id} status={job.status} />
 
       {(job.status === 'scheduled' || job.status === 'in_progress') && job.property_id && (
         <SiteAccessNotes propertyId={job.property_id} />

@@ -17,7 +17,7 @@ import BackButton from '../../components/BackButton';
 const CATEGORY_LABELS = { policy: 'Policy', contract: 'Contract', other: 'Other' };
 const CATEGORY_ORDER = ['policy', 'contract', 'other'];
 
-const DOC_COLUMNS = 'id, title, category, storage_path, file_name, file_size, created_at, profiles!company_documents_uploaded_by_fkey(full_name)';
+const DOC_COLUMNS = 'id, title, category, storage_path, file_name, file_size, created_at, for_all_clients, profiles!company_documents_uploaded_by_fkey(full_name)';
 
 function formatBytes(bytes) {
   if (!bytes) return '';
@@ -298,6 +298,17 @@ export default function AdminDocuments() {
     ? groupByFolder(folders, visibleDocs, { keepEmpty: !search })
     : CATEGORY_ORDER.map((cat) => ({ folder: { id: cat, name: CATEGORY_LABELS[cat] }, docs: visibleDocs.filter((d) => d.category === cat) })).filter((g) => g.docs.length);
 
+  // The client compliance pack (0148): a document here can also be shown to
+  // every client in their portal - insurance, risk assessments, COSHH.
+  const toggleForClients = async (doc) => {
+    const next = !doc.for_all_clients;
+    if (next && !(await confirm(`Show "${doc.title}" to every client in their portal? Only do this for documents like your insurance certificate, risk assessments or COSHH sheets.`, { title: 'Share with all clients' }))) return;
+    const { error } = await supabase.from('company_documents').update({ for_all_clients: next }).eq('id', doc.id);
+    if (error) { toast.error("Couldn't change who can see it."); return; }
+    setDocuments((prev) => prev.map((d) => (d.id === doc.id ? { ...d, for_all_clients: next } : d)));
+    toast.success(next ? 'Every client can now see it under Documents.' : 'Clients can no longer see it.');
+  };
+
   const docRow = (doc) => (
     <div key={doc.id} className="task-row" style={{ justifyContent: 'space-between' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
@@ -313,10 +324,14 @@ export default function AdminDocuments() {
           </div>
           <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
             Shared with: {recipientsByDoc[doc.id] ? recipientsByDoc[doc.id].join(', ') : 'Everyone'}
+            {doc.for_all_clients && <strong style={{ color: 'var(--wf-verified-ink)' }}> · and every client</strong>}
           </div>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+        <button type="button" className={doc.for_all_clients ? 'btn-primary' : 'btn-secondary'} onClick={() => toggleForClients(doc)} aria-pressed={!!doc.for_all_clients} title={doc.for_all_clients ? 'Every client can see this in their portal - click to stop' : 'Show this to every client in their portal (compliance pack)'} style={{ padding: '8px 10px', fontSize: 12.5 }}>
+          Clients
+        </button>
         <button type="button" className="btn-secondary" onClick={() => handleDownload(doc)} aria-label="Download" title="Download this document" style={{ padding: '8px 10px' }}>
           <Download size={16} />
         </button>

@@ -260,7 +260,7 @@ export default function AdminRequests() {
         .order('created_at', { ascending: false }),
       supabase
         .from('client_requests')
-        .select('id, kind, job_id, photo_paths, description, status, resolution_note, resolved_by, created_at, client_id, clients(name), resolver:profiles!client_requests_resolved_by_fkey(full_name), jobs(scheduled_at, properties(address), job_assignments(cleaner_id, profiles(full_name)))')
+        .select('id, kind, job_id, photo_paths, property_id, items, preferred_date, properties(address), description, status, resolution_note, resolved_by, created_at, client_id, clients(name), resolver:profiles!client_requests_resolved_by_fkey(full_name), jobs(scheduled_at, properties(address), job_assignments(cleaner_id, profiles(full_name)))')
         .order('created_at', { ascending: false }),
       supabase
         .from('client_pause_requests')
@@ -2353,7 +2353,21 @@ export default function AdminRequests() {
                         )}
                       </p>
                     )}
+                    {(r.kind === 'supplies' || r.kind === 'extra_work') && (
+                      <p style={{ fontSize: 13, margin: '4px 0', fontWeight: 600, color: r.kind === 'supplies' ? 'var(--wf-steel)' : 'var(--wf-coral-dark)' }}>
+                        {r.kind === 'supplies' ? 'Supplies running low' : 'Extra work - needs a price'}
+                        <span style={{ color: 'var(--muted)', fontWeight: 400 }}>
+                          {r.properties?.address ? ` · ${r.properties.address}` : ''}
+                          {r.preferred_date ? ` · ideally by ${new Date(r.preferred_date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}` : ''}
+                        </span>
+                      </p>
+                    )}
                     <p style={{ fontSize: 14, margin: '4px 0' }}>{r.description}</p>
+                    {r.kind === 'extra_work' && r.status === 'open' && (
+                      <button type="button" className="btn-primary" style={{ margin: '4px 0' }} onClick={() => router.push(`/admin/quotes?request=${r.id}`)} title="Open a new quote for this client with their request filled in - sending it closes this request">
+                        Make a quote
+                      </button>
+                    )}
                     {r.photo_paths?.length > 0 && (
                       problemPhotoUrls[r.id] ? (
                         <div className="photo-grid" style={{ margin: '6px 0' }}>

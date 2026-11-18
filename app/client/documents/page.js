@@ -35,7 +35,7 @@ export default function ClientDocuments() {
 
     const { data } = await supabase
       .from('company_documents')
-      .select('id, title, category, storage_path, file_name, file_size, created_at')
+      .select('id, title, category, storage_path, file_name, file_size, created_at, client_id')
       .order('created_at', { ascending: false });
 
     setDocuments(data || []);
@@ -49,6 +49,29 @@ export default function ClientDocuments() {
 
   if (loading) return <PageSkeleton className="" rows={3} />;
 
+  // Our compliance pack (0148): office documents shared with every client
+  // have no client_id. Everything else was shared with this client only.
+  const pack = documents.filter((d) => !d.client_id);
+  const own = documents.filter((d) => d.client_id);
+
+  const row = (doc) => (
+    <div
+      key={doc.id}
+      className="task-row"
+      style={{ justifyContent: 'space-between', cursor: 'pointer' }}
+      onClick={() => handleDownload(doc)}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <FileText size={18} color="var(--muted)" style={{ flexShrink: 0 }} />
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>{doc.title}</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{formatBytes(doc.file_size)}</div>
+        </div>
+      </div>
+      <Download size={18} color="var(--brand-primary)" style={{ flexShrink: 0 }} />
+    </div>
+  );
+
   return (
     <div>
       <BackButton />
@@ -61,29 +84,23 @@ export default function ClientDocuments() {
 
       {documents.length === 0 && <EmptyState icon={EmptyIconFolder} title="Nothing shared with you yet" body="Reports and documents we send you will appear here." />}
 
+      {pack.length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h2>Our insurance, policies and safety documents</h2>
+          <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 8px' }}>
+            Kept up to date by us - download them any time you need them for your own records or an audit.
+          </p>
+          {pack.map(row)}
+        </div>
+      )}
+
       {CATEGORY_ORDER.map((cat) => {
-        const docsInCategory = documents.filter((d) => d.category === cat);
+        const docsInCategory = own.filter((d) => d.category === cat);
         if (docsInCategory.length === 0) return null;
         return (
           <div key={cat} className="card" style={{ marginBottom: 16 }}>
-            <h2>{CATEGORY_LABELS[cat]}</h2>
-            {docsInCategory.map((doc) => (
-              <div
-                key={doc.id}
-                className="task-row"
-                style={{ justifyContent: 'space-between', cursor: 'pointer' }}
-                onClick={() => handleDownload(doc)}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <FileText size={18} color="var(--muted)" style={{ flexShrink: 0 }} />
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 600 }}>{doc.title}</div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>{formatBytes(doc.file_size)}</div>
-                  </div>
-                </div>
-                <Download size={18} color="var(--brand-primary)" style={{ flexShrink: 0 }} />
-              </div>
-            ))}
+            <h2>{CATEGORY_LABELS[cat]}{pack.length > 0 ? ' - for you' : ''}</h2>
+            {docsInCategory.map(row)}
           </div>
         );
       })}

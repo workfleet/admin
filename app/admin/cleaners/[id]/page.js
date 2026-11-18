@@ -19,6 +19,7 @@ import { countsAgainstCleaner, outcomeLabel } from '../../../../lib/missedShiftO
 import { formatHours } from '../../../../lib/hoursWorked';
 import { jobHeadline, TRAINING_JOB_COLUMNS } from '../../../../lib/training';
 import BackButton from '../../../components/BackButton';
+import StaffPhotoCard from '../../../components/StaffPhotoCard';
 
 const HOLIDAY_ACCRUAL_RATE = 0.1207; // UK statutory: 5.6 weeks / 46.4 working weeks
 
@@ -857,6 +858,8 @@ export default function CleanerProfile() {
           </div>
         )}
       </div>
+
+      {cleaner.role !== 'client' && <StaffPhotoCard staffId={cleaner.id} fullName={cleaner.full_name} />}
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="page-header-row" style={{ marginBottom: 8 }}>

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, History, MessageCircle, FileText, HelpCircle, Settings, Phone, LogOut, Menu, X, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, History, MessageCircle, FileText, HelpCircle, Settings, Phone, LogOut, Menu, X, ClipboardList, ClipboardCheck, Receipt } from 'lucide-react';
 import EnablePush from '../components/EnablePush';
 import { getSessionAndProfile } from '../../lib/authGate';
 import { supabase } from '../../lib/supabaseClient';
@@ -16,6 +16,9 @@ const NAV_ITEMS = [
   { href: '/client/history', label: 'History', icon: History },
   // Only for clients with detailed reports switched on (0122).
   { href: '/client/reports', label: 'Reports', icon: ClipboardList, detailedOnly: true },
+  // Proof of service for every client, and quotes to accept (0148).
+  { href: '/client/service-record', label: 'Service record', icon: ClipboardCheck },
+  { href: '/client/quotes', label: 'Quotes', icon: Receipt },
   { href: '/client/documents', label: 'Documents', icon: FileText },
   { href: '/client/messages', label: 'Messages', icon: MessageCircle },
   { href: '/client/contacts', label: 'Contacts', icon: Phone },
@@ -127,7 +130,7 @@ export default function ClientLayout({ children }) {
               <div className="sidebar-brand-sub">Client Portal</div>
             </div>
           </div>
-          <SkeletonNav rows={7} />
+          <SkeletonNav rows={9} />
         </aside>
         <main className="client-main">
           <PageSkeleton className="" variant={pathname === '/client' ? 'dashboard' : 'list'} rows={3} />

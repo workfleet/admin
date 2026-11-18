@@ -11,6 +11,7 @@ import { supabase } from '../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../lib/authGate';
 import BackButton from '../components/BackButton';
 import SiteAccessNotes from '../components/SiteAccessNotes';
+import ClientSiteRequestForm from '../components/ClientSiteRequestForm';
 
 // "Wed 25 Nov, 14:00" - the year only when it isn't this one, no seconds.
 function visitTime(iso) {
@@ -79,6 +80,10 @@ export default function ClientDashboard() {
   const [pauseEnd, setPauseEnd] = useState('');
   const [pauseReason, setPauseReason] = useState('');
   const [submittingPause, setSubmittingPause] = useState(false);
+  // 'extra_work' | 'supplies' while one of those forms is open (0148).
+  const [siteForm, setSiteForm] = useState(null);
+  const [sentNote, setSentNote] = useState('');
+  const [quotesWaiting, setQuotesWaiting] = useState(0);
 
   useEffect(() => {
     load();
@@ -156,6 +161,11 @@ export default function ClientDashboard() {
     const msg = (messages || [])[0];
     setLastMessage(msg || null);
     setUnreadCount(msg && msg.sender === 'admin' && !msg.read_by_client ? 1 : 0);
+
+    // Quotes we've sent that still need an answer (0148). Quiet if the
+    // function isn't there yet.
+    const { data: myQuotes } = await supabase.rpc('client_quotes');
+    setQuotesWaiting((myQuotes || []).filter((q) => q.status === 'sent').length);
 
     if ((ratings || []).length > 0) {
       setAvgRating(ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length);
@@ -253,6 +263,13 @@ export default function ClientDashboard() {
           </ul>
           <button type="button" onClick={dismissWelcome}>Got it</button>
         </div>
+      )}
+
+      {quotesWaiting > 0 && (
+        <Link href="/client/quotes" className="card client-quote-nudge">
+          <strong>{quotesWaiting === 1 ? 'A quote is waiting for you' : `${quotesWaiting} quotes are waiting for you`}</strong>
+          <span>Have a look and accept or decline &rarr;</span>
+        </Link>
       )}
 
       {/* Live, from the cleaner's own check-in: on site since when, finished
@@ -370,13 +387,42 @@ export default function ClientDashboard() {
           An extra job, a change to your clean, or a break while you&rsquo;re away. To move a single visit, open it from Coming up.
         </p>
 
-        {!showRequestForm && !showPauseForm && (
+        {sentNote && !showRequestForm && !showPauseForm && !siteForm && (
+          <p style={{ fontSize: 13.5, color: 'var(--wf-verified-ink)', margin: '0 0 10px' }}>{sentNote}</p>
+        )}
+
+        {!showRequestForm && !showPauseForm && !siteForm && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button type="button" onClick={() => setShowRequestForm(true)}>Send a request</button>
-            <button type="button" className="btn-secondary" onClick={() => setShowPauseForm(true)} title="Ask us to pause your cleans for a period">
+            <button type="button" onClick={() => { setSentNote(''); setShowRequestForm(true); }}>Send a request</button>
+            <button type="button" className="btn-secondary" onClick={() => { setSentNote(''); setSiteForm('extra_work'); }} title="Ask for a deep clean, windows or other extra work - we'll send you a price">
+              Ask for extra work
+            </button>
+            <button type="button" className="btn-secondary" onClick={() => { setSentNote(''); setSiteForm('supplies'); }} title="Tell us what's running low at a site">
+              Supplies running low
+            </button>
+            <button type="button" className="btn-secondary" onClick={() => { setSentNote(''); setShowPauseForm(true); }} title="Ask us to pause your cleans for a period">
               Pause my cleans
             </button>
           </div>
+        )}
+
+        {siteForm && (
+          <ClientSiteRequestForm
+            key={siteForm}
+            kind={siteForm}
+            clientId={clientId}
+            sites={sites}
+            defaultSite={site !== ALL_SITES ? site : ''}
+            onCancel={() => setSiteForm(null)}
+            onSent={(row) => {
+              setMyRequests((prev) => [row, ...prev]);
+              setOpenReschedules((prev) => prev + 1);
+              setSentNote(siteForm === 'supplies'
+                ? "Thanks - we've got your supplies list and will bring them on the next visit."
+                : "Thanks - we'll price that up and send you a quote to accept under Quotes.");
+              setSiteForm(null);
+            }}
+          />
         )}
 
         {showRequestForm && (

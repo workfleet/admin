@@ -269,6 +269,9 @@ export default function AdminQuotes() {
   };
 
   const [expandedQuoteId, setExpandedQuoteId] = useState(null);
+  // A client's "extra work" request this new quote answers (0148). Sending
+  // the quote closes the request and the client sees it under Quotes.
+  const [sourceRequest, setSourceRequest] = useState(null);
 
   useEffect(() => {
     load();
@@ -282,7 +285,7 @@ export default function AdminQuotes() {
       supabase.from('profiles').select('role').eq('id', session.user.id).single(),
       supabase
         .from('quotes')
-        .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, price_period, status, valid_until, notes, created_at, archived_at, calculator_input, calculator_breakdown, shift_schedule, clients(name)')
+        .select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, price_period, status, valid_until, notes, created_at, archived_at, calculator_input, calculator_breakdown, shift_schedule, client_request_id, clients(name)')
         .order('created_at', { ascending: false }),
       supabase.from('clients').select('id, name').order('name'),
       supabase.from('properties').select('id, client_id, address'),
@@ -297,6 +300,25 @@ export default function AdminQuotes() {
     setPricingSettings(pricingData || null);
     setCompanySettings(companyData || null);
     setLoading(false);
+
+    // Opened from Requests > Make a quote.
+    const requestId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('request') : null;
+    if (requestId) {
+      const { data: req } = await supabase
+        .from('client_requests')
+        .select('id, client_id, description, preferred_date, clients(name), properties(address)')
+        .eq('id', requestId)
+        .single();
+      if (req) {
+        resetForm();
+        setSourceRequest(req);
+        setRecipientType('client');
+        setClientId(req.client_id);
+        setSiteAddress(req.properties?.address || '');
+        setDescription(req.description || '');
+        setShowForm(true);
+      }
+    }
   };
 
   const startEditPricing = () => {
@@ -351,6 +373,7 @@ export default function AdminQuotes() {
 
   const resetForm = () => {
     setEditingQuoteId(null);
+    setSourceRequest(null);
     setRecipientType('client');
     setClientId('');
     setProspectName('');
@@ -524,6 +547,7 @@ export default function AdminQuotes() {
       notes: notes.trim() || null,
       // Set on creation only - editing a quote doesn't make you its author.
       ...(editingQuoteId ? {} : { created_by: session.user.id }),
+      ...(!editingQuoteId && sourceRequest ? { client_request_id: sourceRequest.id } : {}),
       calculator_input: useCalculator ? { ...calcInput, propertyAddress: siteAddress } : null,
       // Stored against the price actually being quoted, not the one the
       // calculator arrived at - the two differ whenever the price was
@@ -539,7 +563,7 @@ export default function AdminQuotes() {
       ? supabase.from('quotes').update(payload).eq('id', editingQuoteId)
       : supabase.from('quotes').insert(payload);
 
-    const { data, error } = await query.select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, price_period, status, valid_until, notes, created_at, archived_at, calculator_input, calculator_breakdown, shift_schedule, clients(name)').single();
+    const { data, error } = await query.select('id, client_id, prospect_name, prospect_email, prospect_phone, description, price, price_period, status, valid_until, notes, created_at, archived_at, calculator_input, calculator_breakdown, shift_schedule, client_request_id, clients(name)').single();
 
     setCreating(false);
     if (error || !data) { toast.error('Could not save the quote.'); return; }
@@ -562,6 +586,19 @@ export default function AdminQuotes() {
 
     if (data) {
       setQuotes((prev) => prev.map((q) => (q.id === quote.id ? { ...q, status: data.status, decided_at: data.decided_at } : q)));
+      // Sending a quote that answers a client's request closes the request;
+      // the client sees this note and the quote is in their portal.
+      if (status === 'sent' && quote.client_request_id) {
+        const { data: { session } } = await supabase.auth.getSession();
+        const { error: closeError } = await supabase.from('client_requests').update({
+          status: 'resolved',
+          resolved_at: new Date().toISOString(),
+          resolved_by: session?.user?.id,
+          resolution_note: "We've sent you a quote for this - see Quotes to accept it.",
+        }).eq('id', quote.client_request_id).eq('status', 'open');
+        if (closeError) toast.error("Quote marked sent, but its request couldn't be closed - close it on Requests.");
+        else toast.success('Quote sent - the client can accept it in their portal.');
+      }
     }
   };
 
@@ -726,6 +763,13 @@ export default function AdminQuotes() {
             <h2>{editingQuoteId ? 'Edit quote' : 'New quote'}</h2>
             <button className="job-form-close" type="button" onClick={() => { resetForm(); setShowForm(false); }}>×</button>
           </div>
+          {sourceRequest && (
+            <p style={{ fontSize: 13.5, margin: '0 0 12px', padding: '10px 12px', borderRadius: 10, background: 'var(--wf-ash)' }}>
+              Answering {sourceRequest.clients?.name || 'the client'}&rsquo;s request{sourceRequest.properties?.address ? ` for ${sourceRequest.properties.address}` : ''}
+              {sourceRequest.preferred_date ? `, ideally by ${new Date(sourceRequest.preferred_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}.
+              {' '}Save it, then mark it <strong>Sent</strong> - they can accept it in their portal, and the request closes.
+            </p>
+          )}
           <form onSubmit={saveQuote}>
             <div className="job-form-body">
               <div className="field">
