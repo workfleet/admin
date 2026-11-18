@@ -50,6 +50,16 @@ describe('serviceRecordRows', () => {
     const rows = serviceRecordRows([job({ id: 'b', scheduled_at: '2026-11-20T10:00:00Z' }), job({ id: 'a', scheduled_at: '2026-11-02T10:00:00Z' })]);
     expect(rows.map((r) => r.id)).toEqual(['a', 'b']);
   });
+
+  it('leaves out booked visits still to come, keeps past ones', () => {
+    const now = new Date('2026-11-18T12:00:00Z');
+    const rows = serviceRecordRows([
+      job({ id: 'past' }),
+      job({ id: 'future', status: 'scheduled', scheduled_at: '2026-11-23T14:00:00Z', checkins: [] }),
+      job({ id: 'earlier-booked', status: 'scheduled', scheduled_at: '2026-11-18T09:00:00Z', checkins: [] }),
+    ], now);
+    expect(rows.map((r) => r.id)).toEqual(['past', 'earlier-booked']);
+  });
 });
 
 describe('serviceRecordTotals', () => {
