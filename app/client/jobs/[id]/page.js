@@ -13,6 +13,13 @@ import ReportRooms from '../../../components/ReportRooms';
 import VisitProblemReport from '../../../components/VisitProblemReport';
 import { downloadReportPdf } from '../../../../lib/downloadReportPdf';
 import { REPORT_TEMPLATES, DEFAULT_TEMPLATE } from '../../../../lib/reportTemplates';
+import { minutesOnSite, formatDuration } from '../../../../lib/detailedReport';
+
+// "Wednesday 11 November 2026, 12:00" - no seconds.
+const longWhen = (iso) => new Date(iso).toLocaleString('en-GB', {
+  weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
+});
+const clock = (iso) => (iso ? new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : null);
 
 export default function ClientJobDetail() {
   const { id } = useParams();
@@ -147,7 +154,7 @@ export default function ClientJobDetail() {
       <div className="card" style={{ marginBottom: 16 }}>
         <h1 style={{ margin: 0 }}>{job.properties?.address}</h1>
         <p style={{ margin: '4px 0', fontSize: 14 }}>
-          {new Date(job.scheduled_at).toLocaleString()} — {staffNames.length > 0 ? staffNames.join(', ') : 'Unassigned'}
+          {longWhen(job.scheduled_at)} · {staffNames.length > 0 ? staffNames.join(', ') : 'Cleaner to be confirmed'}
         </p>
         <span className={`badge ${job.status}`}>{job.status.replace('_', ' ')}</span>
         {(() => {
@@ -196,48 +203,68 @@ export default function ClientJobDetail() {
 
       {checkins.length > 0 && (
         <div className="card" style={{ marginBottom: 16 }}>
-          <h2>Visit log</h2>
+          <div className="dash-panel-header">
+            <h2>Time on site</h2>
+            {minutesOnSite(checkins) > 0 && <strong style={{ fontSize: 15 }}>{formatDuration(minutesOnSite(checkins))}</strong>}
+          </div>
           {checkins.map((c) => (
-            <p key={c.id} style={{ fontSize: 13, color: 'var(--muted)' }}>
-              {c.profiles?.full_name ? `${c.profiles.full_name} — ` : ''}
-              Checked in: {c.checked_in_at ? new Date(c.checked_in_at).toLocaleTimeString() : '—'}{' '}
-              · Checked out: {c.checked_out_at ? new Date(c.checked_out_at).toLocaleTimeString() : '—'}
-            </p>
+            <div key={c.id} className="dash-row dash-row-quiet">
+              <div>
+                <div className="dash-row-title">{c.profiles?.full_name || 'Cleaner'}</div>
+                <div className="dash-row-subtitle">
+                  Arrived {clock(c.checked_in_at) || '-'}
+                  {' · '}
+                  {c.checked_out_at ? `left ${clock(c.checked_out_at)}` : job.status === 'in_progress' ? 'still on site' : 'leaving time not recorded'}
+                </div>
+              </div>
+            </div>
           ))}
         </div>
       )}
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <h2>Tasks</h2>
-        {tasks.length === 0 && <p className="empty-state">No tasks recorded.</p>}
-        {tasks.map((t) => (
-          <div key={t.id} className={`task-row ${t.completed ? 'done' : ''}`}>
-            {t.completed ? (
-              <CheckCircle2 size={16} color="var(--brand-primary)" style={{ flexShrink: 0 }} />
-            ) : (
-              <Circle size={16} color="var(--muted)" style={{ flexShrink: 0 }} />
-            )}
-            <span>{t.description}</span>
+      {/* Ticked items read as done, not crossed out: a line through a task
+          looked like it had been dropped. */}
+      {tasks.length > 0 && (() => {
+        const done = tasks.filter((t) => t.completed).length;
+        const finished = job.status === 'completed';
+        return (
+          <div className="card" style={{ marginBottom: 16 }}>
+            <div className="dash-panel-header">
+              <h2>Checklist</h2>
+              <span style={{ fontSize: 13, color: 'var(--muted)' }}>{done} of {tasks.length} done</span>
+            </div>
+            {[...tasks].sort((a, b) => Number(!!b.completed) - Number(!!a.completed)).map((t) => (
+              <div key={t.id} className="task-row">
+                {t.completed ? (
+                  <CheckCircle2 size={18} color="var(--wf-verified-ink)" style={{ flexShrink: 0 }} aria-label="Done" />
+                ) : (
+                  <Circle size={18} color="var(--muted)" style={{ flexShrink: 0 }} aria-label="Not ticked" />
+                )}
+                <span style={{ flex: 1 }}>{t.description}</span>
+                {!t.completed && finished && <span style={{ fontSize: 12, color: 'var(--muted)', flexShrink: 0 }}>not ticked</span>}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        );
+      })()}
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <h2>Photos</h2>
-        {photos.length === 0 && <p className="empty-state">No photos for this clean.</p>}
-        <div className="photo-grid">
-          {photos.map((p) => (
-            <img key={p.id} src={p.signedUrl} alt="job" />
-          ))}
+      {photos.length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h2>Photos</h2>
+          <div className="photo-grid">
+            {photos.map((p) => (
+              <a key={p.id} href={p.signedUrl} target="_blank" rel="noopener noreferrer"><img src={p.signedUrl} alt="From the clean" /></a>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {job.status === 'scheduled' && (
         <div className="card" style={{ marginBottom: 16 }}>
           <h2>Reschedule</h2>
           {myReschedule ? (
             <p style={{ fontSize: 13.5, color: 'var(--muted)' }}>
-              {myReschedule.status === 'pending' && `Requested new time: ${new Date(myReschedule.requested_scheduled_at).toLocaleString()} - waiting for us to confirm.`}
+              {myReschedule.status === 'pending' && `Requested new time: ${longWhen(myReschedule.requested_scheduled_at)} - waiting for us to confirm.`}
               {myReschedule.status === 'approved' && 'Your reschedule request was approved.'}
               {myReschedule.status === 'declined' && "Your reschedule request was declined - message us if you'd like to try a different time."}
             </p>
