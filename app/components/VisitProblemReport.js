@@ -91,7 +91,7 @@ export default function VisitProblemReport({ jobId, clientId }) {
         <div key={r.id} className="task-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
             <span style={{ fontSize: 13.5 }}>{r.description}</span>
-            <span className={`badge ${r.status === 'resolved' ? 'completed' : 'scheduled'}`}>
+            <span className={`badge ${r.status === 'resolved' ? 'completed' : 'scheduled'}`} style={{ alignSelf: 'flex-start', whiteSpace: 'nowrap', flexShrink: 0 }}>
               {r.status === 'resolved' ? 'sorted' : 'with us'}
             </span>
           </div>
