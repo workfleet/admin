@@ -479,6 +479,29 @@ export default function AdminRota() {
     return () => window.removeEventListener('wf-rota-changed', onChanged);
   }, []);
 
+  // Keep the week current without a reload, the same way the dashboard
+  // does: every two minutes while the tab is in front, and straight away on
+  // coming back to it. Before this the rota loaded once, so a cleaner who
+  // checked out at 9 still showed "on site" on an office screen opened at 8
+  // (Hayley, 2026-11-18). Held off while a job is open, the form is up or a
+  // chip is being dragged, so nothing shifts under someone mid-edit.
+  const busyRef = useRef(false);
+  busyRef.current = Boolean(selectedJob || showForm || drag || savingJob || savingHours);
+  useEffect(() => {
+    const REFRESH_MS = 2 * 60 * 1000;
+    let last = Date.now();
+    const refreshIfIdle = (minAge) => {
+      if (document.visibilityState !== 'visible' || busyRef.current) return;
+      if (Date.now() - last < minAge) return;
+      last = Date.now();
+      loadJobsRef.current?.();
+    };
+    const timer = setInterval(() => refreshIfIdle(REFRESH_MS), 30 * 1000);
+    const onVisible = () => refreshIfIdle(60 * 1000);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
+  }, []);
+
   // The dashboard's "+ New job" links here with the form already open, and
   // its "Assign cleaner" button links to a single job's modal. Read on mount
   // rather than via useSearchParams, which would need the page wrapped in a
