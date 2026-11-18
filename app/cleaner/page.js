@@ -18,7 +18,7 @@ import BackButton from '../components/BackButton';
 import Logo from '../components/Logo';
 import { COMPANY, companyFromSettings } from '../../lib/companyBranding';
 import { KIT_PRODUCTS } from '../../lib/kitProducts';
-import { HOLIDAY_ACCRUAL_RATE, assignedJob, fetchAssigneeCounts, hoursWorked, formatHours } from '../../lib/hoursWorked';
+import { HOLIDAY_ACCRUAL_RATE, assignedJob, fetchAssigneeCounts, hoursWorked, formatHours, jobShareHours } from '../../lib/hoursWorked';
 import { fetchEmploymentTypes, isSubcontractor } from '../../lib/profilePrivate';
 import { jobHeadline, TRAINING_JOB_COLUMNS } from '../../lib/training';
 import { warmPageWithAssets } from '../../lib/jobSnapshot';
@@ -386,7 +386,7 @@ export default function CleanerDashboard() {
               <p style={{ fontSize: 17, fontWeight: 600, margin: 0 }}>{jobHeadline(day.upNext)}</p>
               <p style={{ fontSize: 14, color: 'var(--muted)', margin: '2px 0 0' }}>
                 {clock(day.upNext.scheduled_at)}
-                {day.upNext.duration_minutes ? ` · ${formatHours(day.upNext.duration_minutes / 60)}` : ''}
+                {day.upNext.duration_minutes ? ` · ${formatHours(jobShareHours(day.upNext, assigneeCounts))}` : ''}
               </p>
             </div>
           </div>

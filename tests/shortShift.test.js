@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { shareMinutes } from '../lib/rotaGrid';
 import {
   SHORT_SHIFT_RATIO,
   clockedMinutes,
@@ -93,5 +94,35 @@ describe('describeShortfall', () => {
 
   it('reads minutes back on an hour', () => {
     expect(describeShortfall({ clocked: 95, booked: 150 })).toBe('1h 35m clocked of 2h 30m booked');
+  });
+});
+
+// Dyfatty Flats, Nov 2026: a 4-hour job split between two cleaners at 2
+// hours each. Chris checked out after his 2 hours and the office was told he
+// had left early, because his time was measured against the whole job.
+describe('a shift shared between two cleaners', () => {
+  const job = {
+    duration_minutes: 240,
+    job_assignments: [
+      { cleaner_id: 'chris', paid_minutes: 120 },
+      { cleaner_id: 'katey', paid_minutes: 120 },
+    ],
+  };
+  const twoHours = [{ checked_in_at: '2026-11-18T06:00:00Z', checked_out_at: '2026-11-18T08:00:00Z' }];
+
+  it('is not short when one of them works their own share', () => {
+    const result = shiftShortfall({ duration_minutes: shareMinutes(job, 'chris') }, twoHours);
+    expect(result.booked).toBe(120);
+    expect(result.isShort).toBe(false);
+  });
+
+  it('splits evenly when the office has not set anyone\'s minutes', () => {
+    const even = { duration_minutes: 240, job_assignments: [{ cleaner_id: 'chris' }, { cleaner_id: 'katey' }] };
+    expect(shareMinutes(even, 'chris')).toBe(120);
+  });
+
+  it('is still short when they leave well before their share', () => {
+    const half = [{ checked_in_at: '2026-11-18T06:00:00Z', checked_out_at: '2026-11-18T07:00:00Z' }];
+    expect(shiftShortfall({ duration_minutes: shareMinutes(job, 'chris') }, half).isShort).toBe(true);
   });
 });

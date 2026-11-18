@@ -29,6 +29,7 @@ import {
 } from '../../../../lib/missedClockin';
 import { tooEarlyMessage, tooEarlyToCheckIn } from '../../../../lib/clockIn';
 import { shiftShortfall } from '../../../../lib/shortShift';
+import { shareMinutes } from '../../../../lib/rotaGrid';
 import { enqueue, isCheckinPending, isTransientError, makeId, pendingCheckinFor, readQueue } from '../../../../lib/clockQueue';
 import { makePhotoPath, pendingPhotos, queuePhoto, withTimeout } from '../../../../lib/photoQueue';
 import { loadJobSnapshot, saveJobSnapshot, warmPageShell } from '../../../../lib/jobSnapshot';
@@ -288,7 +289,7 @@ export default function JobDetailPage() {
     // rather than failing, and a hang never reaches the saved copy below.
     const { data: jobData, error: jobError } = await withTimeout(supabase
       .from('jobs')
-      .select(`id, scheduled_at, status, duration_minutes, start_window_minutes, notes, room_refreshes, property_id, ${TRAINING_JOB_COLUMNS}, properties(address, notes, access_details, client_access_notes, lat, lng, geofence_radius_m, clients(name))`)
+      .select(`id, scheduled_at, status, duration_minutes, start_window_minutes, notes, room_refreshes, property_id, ${TRAINING_JOB_COLUMNS}, properties(address, notes, access_details, client_access_notes, lat, lng, geofence_radius_m, clients(name)), job_assignments(cleaner_id, paid_minutes)`)
       .eq('id', id)
       .maybeSingle(), 15 * 1000);
 
@@ -366,7 +367,7 @@ export default function JobDetailPage() {
     // Prefilled from the booked times, which is the right answer on nearly
     // every claim - they still have to look at it and can change it.
     if (jobData) {
-      const { from, to } = defaultClaimWindow(jobData);
+      const { from, to } = defaultClaimWindow({ ...jobData, duration_minutes: shareMinutes(jobData, me) });
       setClaimFrom(timeValue(from));
       setClaimTo(timeValue(to));
     }
@@ -689,7 +690,13 @@ export default function JobDetailPage() {
     // not surfaced to the cleaner - checking out early behaves exactly as it
     // always has from their side, and the office is told separately. Per
     // Jess: no warning to staff.
-    const shortfall = shiftShortfall(job, [{ ...checkin, checked_out_at: at }]);
+    // Measured against this person's own share of the job, not the whole
+    // booking: on a 4-hour job split between two, 2 hours is a full shift.
+    // Measuring against the whole job flagged every split shift as early.
+    const shortfall = shiftShortfall(
+      { duration_minutes: shareMinutes(job, userId) },
+      [{ ...checkin, checked_out_at: at }],
+    );
 
     setCheckingOut(true);
 
@@ -956,7 +963,7 @@ export default function JobDetailPage() {
       releasedByCleanerId: userId,
       address: job.properties?.address,
       scheduledAt: job.scheduled_at,
-      durationMinutes: job.duration_minutes,
+      durationMinutes: shareMinutes(job, userId),
       reason: coverReason.trim() || null,
     });
   };
@@ -1096,7 +1103,10 @@ export default function JobDetailPage() {
     ? jobHeadline(job)
     : job.properties?.clients?.name || job.properties?.address || 'This job';
   const scheduled = new Date(job.scheduled_at);
-  const duration = job.duration_minutes || 120;
+  // This person's time on the job: their half of a job shared by two, or
+  // whatever the office set for them. The rota books the whole job, but
+  // that is not how long any one of them is there for.
+  const duration = shareMinutes(job, userId);
   const approvedExtra = extensionRequests
     .filter((r) => r.status === 'approved')
     .reduce((sum, r) => sum + (r.requested_minutes || 0), 0);
