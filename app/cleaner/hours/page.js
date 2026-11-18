@@ -129,7 +129,7 @@ export default function CleanerHours() {
 
     const { data: assignmentRows } = await supabase
       .from('job_assignments')
-      .select('paid_minutes, jobs(id, scheduled_at, status, duration_minutes, properties(address))')
+      .select('paid_minutes, jobs(id, scheduled_at, status, duration_minutes, start_window_minutes, properties(address))')
       .eq('cleaner_id', session.user.id);
 
     const jobs = (assignmentRows || []).map(assignedJob).filter(Boolean);

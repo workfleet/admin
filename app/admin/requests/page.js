@@ -278,7 +278,7 @@ export default function AdminRequests() {
       // this bounded; anything older is history, not a pay run.
       supabase
         .from('jobs')
-        .select('id, scheduled_at, duration_minutes, status, properties(address, clients(name)), job_assignments(cleaner_id, profiles(full_name))')
+        .select('id, scheduled_at, duration_minutes, start_window_minutes, status, properties(address, clients(name)), job_assignments(cleaner_id, profiles(full_name))')
         .in('status', ['missed', 'scheduled'])
         .lt('scheduled_at', new Date().toISOString())
         .gt('scheduled_at', new Date(Date.now() - 90 * 86400000).toISOString())

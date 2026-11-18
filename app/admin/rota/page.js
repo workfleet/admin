@@ -81,7 +81,18 @@ function dayIndexOf(date) {
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => h);
 const MINUTE_OPTIONS = [0, 15, 30, 45];
 
-const JOB_SELECT = `id, scheduled_at, status, duration_minutes, notes, room_refreshes, series_id, property_id, ${TRAINING_JOB_COLUMNS}, properties(address, lat, lng, client_id, clients(name)), job_assignments(cleaner_id, paid_minutes, profiles(full_name))`;
+// Latest-start choices for a flexible shift (0146), in minutes after the
+// booked time.
+const START_WINDOW_OPTIONS = [30, 60, 120, 180, 240, 300, 360];
+
+// "03:00" for a 23:00 booking with a 4-hour window.
+function latestStartLabel(date, hour, minute, mins) {
+  const d = new Date(`${date}T${hour}:${minute}`);
+  if (Number.isNaN(d.getTime())) return `${formatDuration(mins)} later`;
+  return new Date(d.getTime() + mins * 60000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+const JOB_SELECT = `id, scheduled_at, status, duration_minutes, start_window_minutes, notes, room_refreshes, series_id, property_id, ${TRAINING_JOB_COLUMNS}, properties(address, lat, lng, client_id, clients(name)), job_assignments(cleaner_id, paid_minutes, profiles(full_name))`;
 
 function formatHour12(h) {
   const period = h < 12 ? 'AM' : 'PM';
@@ -291,6 +302,9 @@ export default function AdminRota() {
   const [editMinute, setEditMinute] = useState('00');
   const [editDuration, setEditDuration] = useState(120);
   const [editUseCustomDuration, setEditUseCustomDuration] = useState(false);
+  // Flexible start (0146): how long after the booked time they may begin.
+  const [editStartWindow, setEditStartWindow] = useState('');
+  const [editStartWindowSeries, setEditStartWindowSeries] = useState(true);
   // The recurring series behind the open job, loaded when the office asks
   // to edit it: { series, futureJobs } - null while the editor is closed.
   const [seriesEdit, setSeriesEdit] = useState(null);
@@ -532,6 +546,8 @@ export default function AdminRota() {
     setEditMinute(String(d.getMinutes() - (d.getMinutes() % 15)).padStart(2, '0'));
     setEditDuration(selectedJob.duration_minutes || 120);
     setEditUseCustomDuration(!QUICK_DURATIONS.includes(selectedJob.duration_minutes));
+    setEditStartWindow(selectedJob.start_window_minutes ? String(selectedJob.start_window_minutes) : '');
+    setEditStartWindowSeries(true);
     setEditNotes(selectedJob.notes || '');
     setEditRefreshes(refreshesOf(selectedJob));
     setEditAddress(selectedJob.properties?.address || '');
@@ -598,6 +614,7 @@ export default function AdminRota() {
       .update({
         scheduled_at: scheduledAtDate.toISOString(),
         duration_minutes: editDuration,
+        start_window_minutes: editStartWindow ? Number(editStartWindow) : null,
         notes: editNotes.trim() || null,
         ...(isTraining(selectedJob) ? {} : { room_refreshes: refreshes }),
       })
@@ -605,10 +622,31 @@ export default function AdminRota() {
       .select(JOB_SELECT)
       .single();
 
-    setSavingJob(false);
-    if (error) { setJobSaveError('Something went wrong saving those changes.'); return; }
+    if (error) { setSavingJob(false); setJobSaveError('Something went wrong saving those changes.'); return; }
 
-    setJobs((prev) => prev.map((j) => (j.id === data.id ? { ...j, ...data } : j)));
+    // A night clean that can start late is the same every night, so a
+    // change to the window carries on to the visits still to come in the
+    // series unless the office says otherwise.
+    const windowValue = editStartWindow ? Number(editStartWindow) : null;
+    const windowChanged = (selectedJob.start_window_minutes || null) !== windowValue;
+    let laterUpdated = [];
+    if (windowChanged && selectedJob.series_id && editStartWindowSeries) {
+      const { data: later, error: laterError } = await supabase
+        .from('jobs')
+        .update({ start_window_minutes: windowValue })
+        .eq('series_id', selectedJob.series_id)
+        .eq('status', 'scheduled')
+        .gt('scheduled_at', data.scheduled_at)
+        .select('id');
+      if (laterError) toast.error('Saved this visit, but the later visits in the series could not be changed.');
+      laterUpdated = (later || []).map((r) => r.id);
+    }
+    setSavingJob(false);
+
+    const laterSet = new Set(laterUpdated);
+    setJobs((prev) => prev.map((j) => (
+      j.id === data.id ? { ...j, ...data } : laterSet.has(j.id) ? { ...j, start_window_minutes: windowValue } : j
+    )));
     setSelectedJob(data);
 
     // Only when the time actually moved - editing just the notes or the
@@ -1271,6 +1309,7 @@ export default function AdminRota() {
             : { property_id: job.property_id }),
           scheduled_at: d.toISOString(),
           duration_minutes: form.duration,
+          start_window_minutes: job.start_window_minutes ?? null,
           series_id: job.series_id,
         })))
         .select('id, scheduled_at');
@@ -2685,6 +2724,40 @@ export default function AdminRota() {
                 </div>
               )}
             </div>
+
+            {!isTraining(selectedJob) && (
+              <div className="field" style={{ marginTop: 10 }}>
+                <label className="field-label">Latest start</label>
+                <select
+                  value={editStartWindow}
+                  onChange={(e) => setEditStartWindow(e.target.value)}
+                  title="For shifts like a night clean that can be started any time within a window. No clock-in reminder or missed shift until the window has closed."
+                >
+                  <option value="">At the booked time</option>
+                  {START_WINDOW_OPTIONS.map((mins) => (
+                    <option key={mins} value={String(mins)}>
+                      Up to {latestStartLabel(editDate, editHour, editMinute, mins)} ({formatDuration(mins)} later)
+                    </option>
+                  ))}
+                </select>
+                {editStartWindow && (
+                  <p style={{ fontSize: 12, color: 'var(--muted)', margin: '4px 0 0' }}>
+                    Staff can start any time up to {latestStartLabel(editDate, editHour, editMinute, Number(editStartWindow))}. No reminder to clock in, and it isn't counted as missed, until then.
+                  </p>
+                )}
+                {selectedJob.series_id && (selectedJob.start_window_minutes || null) !== (editStartWindow ? Number(editStartWindow) : null) && (
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, marginTop: 6 }}>
+                    <input
+                      type="checkbox"
+                      checked={editStartWindowSeries}
+                      onChange={(e) => setEditStartWindowSeries(e.target.checked)}
+                      style={{ width: 'auto', marginBottom: 0 }}
+                    />
+                    Also for the later visits in this series
+                  </label>
+                )}
+              </div>
+            )}
 
             <div className="field" style={{ marginTop: 10 }}>
               <label className="field-label">Notes</label>

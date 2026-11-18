@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '../../../../lib/supabaseAdmin';
 import { sendPushToSubscriptions } from '../../../../lib/webPush';
-import { NUDGE_AFTER_MINUTES } from '../../../../lib/missedClockin';
+import { NUDGE_AFTER_MINUTES, latestStart } from '../../../../lib/missedClockin';
 
 export const runtime = 'nodejs';
 
@@ -82,7 +82,7 @@ async function runNudgeSweep(request) {
   // notification.
   const { data: jobs } = await supabaseAdmin
     .from('jobs')
-    .select('id, scheduled_at, status, clockin_nudge_sent_at, properties(address), job_assignments(cleaner_id)')
+    .select('id, scheduled_at, start_window_minutes, status, clockin_nudge_sent_at, properties(address), job_assignments(cleaner_id)')
     .eq('status', 'scheduled')
     .is('clockin_nudge_sent_at', null)
     .lt('scheduled_at', startedBefore)
@@ -92,6 +92,13 @@ async function runNudgeSweep(request) {
   const skipped = [];
 
   for (const job of jobs || []) {
+    // A flexible start (0146): the Bus Station night clean is booked at
+    // 23:00 but can be begun any time up to 03:00, so nobody is late until
+    // the window has closed. The query above only knows the booked start.
+    if (latestStart(job).getTime() + NUDGE_AFTER_MINUTES * 60000 > now.getTime()) {
+      skipped.push({ id: job.id, why: 'start_window_open' });
+      continue;
+    }
     const cleanerIds = (job.job_assignments || []).map((a) => a.cleaner_id).filter(Boolean);
 
     // Nobody assigned is a rota problem, not a clock-in problem - there is

@@ -4,6 +4,8 @@ import {
   defaultClaimWindow,
   isClaimableMissedJob,
   jobEnd,
+  latestStart,
+  missedAfter,
   unpaidMissedJobs,
 } from '../lib/missedClockin';
 
@@ -151,5 +153,34 @@ describe('unpaidMissedJobs', () => {
     // are missing while they are looking at them in the total above.
     const claims = [{ job_id: 'a', status: 'approved' }];
     expect(unpaidMissedJobs([missedA], claims, now)).toEqual([]);
+  });
+});
+
+// A night clean booked at 23:00 that can be started any time up to 03:00
+// (start_window_minutes 240, 0146). It is not lost at 02:00 just because
+// nobody is in yet - only once three hours from 03:00 have run out.
+describe('flexible start window', () => {
+  const night = (overrides = {}) => job({
+    scheduled_at: '2026-11-17T23:00:00.000Z',
+    duration_minutes: 180,
+    start_window_minutes: 240,
+    ...overrides,
+  });
+
+  it('puts the latest start at the end of the window', () => {
+    expect(latestStart(night()).toISOString()).toBe('2026-11-18T03:00:00.000Z');
+  });
+
+  it('is not missed at the booked end while the window is open', () => {
+    expect(isClaimableMissedJob(night(), at('2026-11-18T02:30:00.000Z'))).toBe(false);
+  });
+
+  it('is missed once the full shift from the latest start has run out', () => {
+    expect(missedAfter(night()).toISOString()).toBe('2026-11-18T06:00:00.000Z');
+    expect(isClaimableMissedJob(night(), at('2026-11-18T06:01:00.000Z'))).toBe(true);
+  });
+
+  it('behaves exactly as before with no window', () => {
+    expect(missedAfter(night({ start_window_minutes: null })).toISOString()).toBe('2026-11-18T02:00:00.000Z');
   });
 });

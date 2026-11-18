@@ -25,6 +25,7 @@ import {
   claimWindowError,
   defaultClaimWindow,
   isClaimableMissedJob,
+  latestStart,
 } from '../../../../lib/missedClockin';
 import { tooEarlyMessage, tooEarlyToCheckIn } from '../../../../lib/clockIn';
 import { shiftShortfall } from '../../../../lib/shortShift';
@@ -287,7 +288,7 @@ export default function JobDetailPage() {
     // rather than failing, and a hang never reaches the saved copy below.
     const { data: jobData, error: jobError } = await withTimeout(supabase
       .from('jobs')
-      .select(`id, scheduled_at, status, duration_minutes, notes, room_refreshes, property_id, ${TRAINING_JOB_COLUMNS}, properties(address, notes, access_details, client_access_notes, lat, lng, geofence_radius_m, clients(name))`)
+      .select(`id, scheduled_at, status, duration_minutes, start_window_minutes, notes, room_refreshes, property_id, ${TRAINING_JOB_COLUMNS}, properties(address, notes, access_details, client_access_notes, lat, lng, geofence_radius_m, clients(name))`)
       .eq('id', id)
       .maybeSingle(), 15 * 1000);
 
@@ -1204,6 +1205,11 @@ export default function JobDetailPage() {
               <div className="visit-when">
                 {clock(scheduled)} – {clock(new Date(scheduled.getTime() + duration * 60000))} · {formatSpan(duration)}
               </div>
+              {job.start_window_minutes > 0 && (
+                <div className="visit-when" style={{ fontWeight: 400 }}>
+                  Start any time up to {clock(latestStart(job))}
+                </div>
+              )}
               <h1 className="visit-place">{placeName}</h1>
               <p className="visit-address">{isTraining(job) ? jobSubtitle(job) : job.properties?.address}</p>
               {trainerLine(job) && <p className="visit-address">{trainerLine(job)}</p>}
