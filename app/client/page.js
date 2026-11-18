@@ -10,6 +10,7 @@ import { CalendarClock, CheckCircle2, MessageSquareWarning, Star, X } from 'luci
 import { supabase } from '../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../lib/authGate';
 import BackButton from '../components/BackButton';
+import SiteAccessNotes from '../components/SiteAccessNotes';
 
 // "Wed 25 Nov, 14:00" - the year only when it isn't this one, no seconds.
 function visitTime(iso) {
@@ -360,6 +361,8 @@ export default function ClientDashboard() {
           ))}
         </div>
       </div>
+
+      {site !== ALL_SITES && <SiteAccessNotes propertyId={site} />}
 
       <div className="card">
         <h2>Need anything?</h2>

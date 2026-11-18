@@ -11,6 +11,7 @@ import { COMPANY } from '../../../../lib/companyBranding';
 import BackButton from '../../../components/BackButton';
 import ReportRooms from '../../../components/ReportRooms';
 import VisitProblemReport from '../../../components/VisitProblemReport';
+import SiteAccessNotes from '../../../components/SiteAccessNotes';
 import { downloadReportPdf } from '../../../../lib/downloadReportPdf';
 import { REPORT_TEMPLATES, DEFAULT_TEMPLATE } from '../../../../lib/reportTemplates';
 import { minutesOnSite, formatDuration } from '../../../../lib/detailedReport';
@@ -65,7 +66,7 @@ export default function ClientJobDetail() {
     setClientId(profile?.client_id || null);
 
     const [{ data: jobData }, { data: taskData }, { data: photoData }, { data: checkinData }, { data: ratingData }, { data: rescheduleData }] = await Promise.all([
-      supabase.from('jobs').select('id, scheduled_at, status, duration_minutes, properties(address), job_assignments(profiles(full_name))').eq('id', id).single(),
+      supabase.from('jobs').select('id, property_id, scheduled_at, status, duration_minutes, properties(address), job_assignments(profiles(full_name))').eq('id', id).single(),
       supabase.from('tasks').select('*').eq('job_id', id),
       supabase.from('photos').select('*').eq('job_id', id).order('created_at', { ascending: false }),
       supabase.from('checkins').select('*, profiles(full_name)').eq('job_id', id),
@@ -171,6 +172,10 @@ export default function ClientJobDetail() {
           );
         })()}
       </div>
+
+      {(job.status === 'scheduled' || job.status === 'in_progress') && job.property_id && (
+        <SiteAccessNotes propertyId={job.property_id} />
+      )}
 
       {report && (
         <div className="card" style={{ marginBottom: 16 }}>

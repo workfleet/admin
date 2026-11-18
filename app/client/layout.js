@@ -32,6 +32,10 @@ export default function ClientLayout({ children }) {
   const [loadError, setLoadError] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [detailedReports, setDetailedReports] = useState(false);
+  // Replies from the office the client hasn't opened yet, shown on the
+  // Messages link and as a dot on the phone menu button.
+  const [myClientId, setMyClientId] = useState(null);
+  const [unread, setUnread] = useState(0);
 
   useEffect(() => {
     checkAccess();
@@ -63,10 +67,32 @@ export default function ClientLayout({ children }) {
     // goes without the Reports link.
     const { data: own } = await supabase.from('profiles').select('client_id').eq('id', session.user.id).single();
     if (own?.client_id) {
+      setMyClientId(own.client_id);
       const { data: client } = await supabase.from('clients').select('detailed_reports').eq('id', own.client_id).single();
       setDetailedReports(!!client?.detailed_reports);
     }
   };
+
+  const countUnread = async () => {
+    if (!myClientId) return;
+    // Opening Messages marks them read; don't show a count there.
+    if (pathname === '/client/messages') { setUnread(0); return; }
+    const { count } = await supabase
+      .from('client_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('client_id', myClientId)
+      .eq('sender', 'admin')
+      .eq('read_by_client', false);
+    setUnread(count || 0);
+  };
+
+  useEffect(() => {
+    countUnread();
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') countUnread();
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [myClientId, pathname]);
 
   const logout = async () => {
     await signOutAndClearPresence();
@@ -121,8 +147,9 @@ export default function ClientLayout({ children }) {
           {/* Arrival and departure alerts reach the phone only once the
               client has enabled notifications here (0090). */}
           <EnablePush iconColor="white" describe="your cleaner arriving and finishing" />
-          <button type="button" className="client-topbar-menu-btn" onClick={() => setDrawerOpen(true)} aria-label="Open menu" title="Open the menu">
+          <button type="button" className="client-topbar-menu-btn" onClick={() => setDrawerOpen(true)} aria-label={unread > 0 ? `Open menu - ${unread} unread message${unread === 1 ? '' : 's'}` : 'Open menu'} title="Open the menu" style={{ position: 'relative' }}>
             <Menu size={20} />
+            {unread > 0 && <span className="client-menu-dot" aria-hidden="true" />}
           </button>
         </div>
       </div>
@@ -149,6 +176,9 @@ export default function ClientLayout({ children }) {
               <Link key={item.href} href={item.href} className={`sidebar-link ${active ? 'active' : ''}`}>
                 <Icon className="sidebar-icon" size={18} strokeWidth={2} />
                 {item.label}
+                {item.href === '/client/messages' && unread > 0 && (
+                  <span className="client-nav-count" aria-label={`${unread} unread`}>{unread}</span>
+                )}
               </Link>
             );
           })}

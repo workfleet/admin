@@ -5796,3 +5796,7 @@ a.btn-compact {
 .client-welcome-close { position: absolute; top: 12px; right: 12px; background: none; border: 0; color: var(--muted); padding: 6px; min-height: 0; cursor: pointer; }
 .client-welcome li a { color: var(--wf-coral-dark); font-weight: 600; text-decoration: none; }
 .client-welcome li a:hover { text-decoration: underline; }
+
+/* Client portal: unread office replies on the Messages link and the phone menu button. */
+.client-nav-count { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--wf-coral, #e8603c); color: #fff; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.client-menu-dot { position: absolute; top: 6px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: var(--wf-coral, #e8603c); box-shadow: 0 0 0 2px var(--wf-ink, #1f2328); }

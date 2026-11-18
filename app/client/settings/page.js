@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import BackButton from '../../components/BackButton';
+import ClientSitePicker, { useClientSite, ALL_SITES } from '../../components/ClientSitePicker';
 
 export default function ClientSettings() {
   const router = useRouter();
@@ -25,6 +26,9 @@ export default function ClientSettings() {
   const [accessNotesDraft, setAccessNotesDraft] = useState({});
   const [savingPropertyId, setSavingPropertyId] = useState(null);
   const [savedPropertyId, setSavedPropertyId] = useState(null);
+
+  const { sites, site, setSite } = useClientSite(clientId);
+  const shownProperties = site === ALL_SITES ? properties : properties.filter((p) => p.id === site);
 
   useEffect(() => {
     load();
@@ -165,9 +169,11 @@ export default function ClientSettings() {
           Alarm codes, key safe codes, or anything your cleaner needs to know to get in. This is shared with our office and whoever is assigned to clean each property.
         </p>
 
+        <ClientSitePicker sites={sites} site={site} setSite={setSite} />
+
         {properties.length === 0 && <p className="empty-state">No properties on file yet.</p>}
 
-        {properties.map((p) => (
+        {shownProperties.map((p) => (
           <div key={p.id} style={{ borderTop: '1px solid var(--hairline)', padding: '12px 0' }}>
             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>{p.address}</div>
             <textarea
