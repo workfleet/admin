@@ -795,6 +795,9 @@ export default function ClientDetail() {
         <button className={`page-tab${tab === 'properties' ? ' is-active' : ''}`} aria-pressed={tab === 'properties'} onClick={() => setTab('properties')}>
           Properties ({properties.length})
         </button>
+        <button className={`page-tab${tab === 'portal' ? ' is-active' : ''}`} aria-pressed={tab === 'portal'} onClick={() => setTab('portal')}>
+          Portal logins
+        </button>
         <button className={`page-tab${tab === 'calls' ? ' is-active' : ''}`} aria-pressed={tab === 'calls'} onClick={() => setTab('calls')}>
           Call log{callLogs ? ` (${callLogs.length})` : ''}
         </button>
@@ -809,9 +812,6 @@ export default function ClientDetail() {
         </button>
         <button className={`page-tab${tab === 'documents' ? ' is-active' : ''}`} aria-pressed={tab === 'documents'} onClick={() => setTab('documents')}>
           Documents{clientDocs ? ` (${clientDocs.length})` : ''}
-        </button>
-        <button className={`page-tab${tab === 'portal' ? ' is-active' : ''}`} aria-pressed={tab === 'portal'} onClick={() => setTab('portal')}>
-          Portal logins
         </button>
       </div>
 

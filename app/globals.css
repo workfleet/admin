@@ -5784,3 +5784,7 @@ a.btn-compact {
 .pj-file-group-name { font-weight: 600; font-size: 13.5px; }
 .pj-file-move { width: auto !important; max-width: 120px; margin: 0 !important; font-size: 12px; padding: 3px 6px; }
 @media (max-width: 640px) { .pj-file-move { max-width: 90px; } }
+
+/* Client portal: which site the pages are showing (ClientSitePicker). */
+.client-site-picker { display: flex; align-items: center; gap: 8px; margin: 0 0 16px; color: var(--muted); }
+.client-site-picker select { flex: 1; min-width: 0; max-width: 520px; margin: 0; }

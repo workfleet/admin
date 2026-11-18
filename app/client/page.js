@@ -1,8 +1,9 @@
 'use client';
 
 import { PageSkeleton } from '../components/Skeleton';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { siteStatusFor, visitsToShow } from '../../lib/siteStatus';
+import ClientSitePicker, { useClientSite, atSite } from '../components/ClientSitePicker';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { CalendarClock, CheckCircle2, MessageSquareWarning, Star } from 'lucide-react';
@@ -15,17 +16,37 @@ export default function ClientDashboard() {
   const [loading, setLoading] = useState(true);
   const [clientName, setClientName] = useState('');
 
-  const [upcoming, setUpcoming] = useState([]);
-  const [todayVisits, setTodayVisits] = useState([]);
+  const [allJobs, setAllJobs] = useState([]);
   const [updates, setUpdates] = useState([]);
-  const [recent, setRecent] = useState([]);
   const [lastMessage, setLastMessage] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [openReschedules, setOpenReschedules] = useState(0);
-  const [cleansThisMonth, setCleansThisMonth] = useState(0);
   const [avgRating, setAvgRating] = useState(null);
 
   const [clientId, setClientId] = useState(null);
+  const { sites, site, current: currentSite, setSite } = useClientSite(clientId);
+
+  // Visits, cut down to the site picked (or all of them). Requests, pauses,
+  // messages and ratings belong to the client as a whole, not a site.
+  const { upcoming, recent, todayVisits, cleansThisMonth } = useMemo(() => {
+    const jobs = allJobs.filter((j) => atSite(j, site));
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+    const byJob = {};
+    jobs.forEach((j) => { byJob[j.id] = j.checkins || []; });
+    return {
+      upcoming: jobs
+        .filter((j) => j.status === 'scheduled')
+        .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at))
+        .slice(0, 5),
+      recent: jobs.filter((j) => j.status === 'completed').slice(0, 5),
+      // Today's visits, live. The check-in rows come back on each job, so
+      // the status line is computed from what the cleaner's phone last said.
+      todayVisits: visitsToShow(jobs, byJob).map((j) => ({ job: j, status: siteStatusFor(j, j.checkins || []) })),
+      cleansThisMonth: jobs.filter((j) => j.status === 'completed' && new Date(j.scheduled_at) >= startOfMonth).length,
+    };
+  }, [allJobs, site]);
   const [myRequests, setMyRequests] = useState([]);
   const [requestText, setRequestText] = useState('');
   const [submittingRequest, setSubmittingRequest] = useState(false);
@@ -60,10 +81,6 @@ export default function ClientDashboard() {
     const { data: clientRow } = await supabase.from('clients').select('name').eq('id', clientId).single();
     setClientName(clientRow?.name || 'there');
 
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-
     const [
       { data: jobs },
       { data: messages },
@@ -73,7 +90,7 @@ export default function ClientDashboard() {
       { data: pauses },
     ] = await Promise.all([
       supabase.from('jobs')
-        .select('id, scheduled_at, status, duration_minutes, properties(address), job_assignments(profiles(full_name)), checkins(id, cleaner_id, checked_in_at, checked_out_at, profiles(full_name))')
+        .select('id, property_id, scheduled_at, status, duration_minutes, properties(address), job_assignments(profiles(full_name)), checkins(id, cleaner_id, checked_in_at, checked_out_at, profiles(full_name))')
         .order('scheduled_at', { ascending: false }),
       supabase.from('client_messages')
         .select('id, sender, body, created_at, read_by_client')
@@ -92,22 +109,7 @@ export default function ClientDashboard() {
         .order('created_at', { ascending: false }),
     ]);
 
-    const allJobs = jobs || [];
-    const upcomingJobs = allJobs
-      .filter((j) => j.status === 'scheduled')
-      .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at))
-      .slice(0, 5);
-    const recentJobs = allJobs.filter((j) => j.status === 'completed').slice(0, 5);
-    const completedThisMonth = allJobs.filter((j) => j.status === 'completed' && new Date(j.scheduled_at) >= startOfMonth).length;
-
-    setUpcoming(upcomingJobs);
-    setRecent(recentJobs);
-
-    // Today's visits, live. The check-in rows come back on each job, so
-    // the status line is computed from what the cleaner's phone last said.
-    const byJob = {};
-    allJobs.forEach((j) => { byJob[j.id] = j.checkins || []; });
-    setTodayVisits(visitsToShow(allJobs, byJob).map((j) => ({ job: j, status: siteStatusFor(j, j.checkins || []) })));
+    setAllJobs(jobs || []);
 
     // What the app has told this client lately - arrivals, departures,
     // replies - the same bell entries that reach their phone.
@@ -118,7 +120,6 @@ export default function ClientDashboard() {
       .order('created_at', { ascending: false })
       .limit(5);
     setUpdates(notes || []);
-    setCleansThisMonth(completedThisMonth);
     setMyRequests(requests || []);
     setMyPauses(pauses || []);
     const openRequestCount = (requests || []).filter((r) => r.status === 'open').length;
@@ -192,6 +193,8 @@ export default function ClientDashboard() {
           </p>
         </div>
       </div>
+
+      <ClientSitePicker sites={sites} site={site} setSite={setSite} />
 
       <div className="stat-row">
         <div className="stat-card">

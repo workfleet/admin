@@ -11,8 +11,9 @@ import { downloadReportPdf } from '../../lib/downloadReportPdf';
 // (admin/reports/monthly) and by the client (client/reports); row-level
 // security decides what each sees - a client's read of job_reports only
 // returns the reports shared with them.
-export default function MonthlyReportTable({ clientId, month, staffView = false }) {
-  const [rows, setRows] = useState(null);
+// propertyId narrows it to one site (the client portal's site picker).
+export default function MonthlyReportTable({ clientId, month, staffView = false, propertyId = null }) {
+  const [allRows, setRows] = useState(null);
   const [downloadingId, setDownloadingId] = useState(null);
   const [error, setError] = useState('');
 
@@ -65,8 +66,9 @@ export default function MonthlyReportTable({ clientId, month, staffView = false 
     if (failure) setError(failure);
   };
 
-  if (!rows) return <SkeletonLines />;
-  if (rows.length === 0) return <p className="empty-state">No properties.</p>;
+  if (!allRows) return <SkeletonLines />;
+  if (allRows.length === 0) return <p className="empty-state">No properties.</p>;
+  const rows = propertyId ? allRows.filter((r) => r.id === propertyId) : allRows;
 
   const withVisits = rows.filter((r) => r.visits > 0 || r.missed > 0);
   const quiet = rows.length - withVisits.length;

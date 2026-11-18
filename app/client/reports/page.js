@@ -7,6 +7,7 @@ import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { currentMonth, recentMonths, monthLabel } from '../../../lib/detailedReport';
 import MonthlyReportTable from '../../components/MonthlyReportTable';
+import ClientSitePicker, { useClientSite, ALL_SITES } from '../../components/ClientSitePicker';
 
 // Monthly property reports, for clients with detailed reports switched on
 // (0122). The nav only links here for them; anyone else landing here is
@@ -16,6 +17,7 @@ export default function ClientReports() {
   const [client, setClient] = useState(null);
   const [month, setMonth] = useState(currentMonth());
   const [loading, setLoading] = useState(true);
+  const { sites, site, setSite } = useClientSite(client?.detailed_reports ? client.id : null);
 
   useEffect(() => {
     (async () => {
@@ -48,6 +50,7 @@ export default function ClientReports() {
         <p style={{ fontSize: 14, color: 'var(--muted)', margin: '0 0 12px' }}>
           Each property&rsquo;s month: every visit, who cleaned, time on site, and the room-by-room reports with photos.
         </p>
+        <ClientSitePicker sites={sites} site={site} setSite={setSite} />
         <div className="field" style={{ marginBottom: 0 }}>
           <label className="field-label">Month</label>
           <select value={month} onChange={(e) => setMonth(e.target.value)} style={{ marginBottom: 0 }}>
@@ -56,7 +59,7 @@ export default function ClientReports() {
         </div>
       </div>
 
-      <MonthlyReportTable clientId={client.id} month={month} />
+      <MonthlyReportTable clientId={client.id} month={month} propertyId={site === ALL_SITES ? null : site} />
     </div>
   );
 }
