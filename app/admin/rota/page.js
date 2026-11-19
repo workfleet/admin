@@ -237,6 +237,9 @@ export default function AdminRota() {
   const [clientId, setClientId] = useState('');
   const [propertyAddress, setPropertyAddress] = useState('');
   const [propertyCoords, setPropertyCoords] = useState(null);
+  // ?property=<id> from a client's Rooms tab: fill the new-job form with that
+  // client and address once the properties have loaded.
+  const [pendingPropertyId, setPendingPropertyId] = useState(null);
   const [jobDate, setJobDate] = useState('');
   const [jobHour, setJobHour] = useState('');
   const [jobMinute, setJobMinute] = useState('00');
@@ -431,6 +434,16 @@ export default function AdminRota() {
     setPropertyCoords(p.lat != null && p.lng != null ? { lat: p.lat, lng: p.lng } : null);
   };
 
+  useEffect(() => {
+    if (!pendingPropertyId || properties.length === 0) return;
+    const p = properties.find((x) => x.id === pendingPropertyId);
+    if (p) {
+      setClientId(p.client_id);
+      chooseSavedAddress(p);
+    }
+    setPendingPropertyId(null);
+  }, [pendingPropertyId, properties]);
+
   const chooseClient = (id) => {
     setClientId(id);
     // One address on file means there is nothing to choose between, so fill
@@ -510,6 +523,8 @@ export default function AdminRota() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('new') === '1') setShowForm(true);
+    if (params.get('property')) setPendingPropertyId(params.get('property'));
+    if (/^\d{4}-\d{2}-\d{2}$/.test(params.get('date') || '')) setJobDate(params.get('date'));
 
     const jobId = params.get('job');
     if (jobId) {

@@ -156,10 +156,22 @@ export default function RoomTracker({ clientId, refreshKey }) {
         const { rows, nextVisit } = trackerRows({ property: house, jobs, today });
         const perRoom = roomMinutesFor(house.clients);
         const nextPlanned = nextVisit ? plannedRooms(nextVisit) : new Set();
+        // A new visit on the rota, for the day the first thing falls due (or
+        // today if that has passed), with this house already filled in.
+        const firstDue = rows.filter((r) => r.status !== 'booked').map((r) => r.dueDay).sort()[0];
+        const bookOn = firstDue && firstDue > today ? firstDue : today;
         return (
           <div key={house.id} className="card" style={{ marginBottom: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
               <h2 style={{ margin: 0 }}>{shortAddress(house.address) || house.address}</h2>
+              <a
+                className="btn-secondary"
+                href={`/admin/rota?new=1&property=${house.id}&date=${bookOn}`}
+                title="Open the rota's New job form with this house filled in"
+                style={{ textDecoration: 'none' }}
+              >
+                Book a visit on the rota
+              </a>
             </div>
             <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 10px' }}>
               {nextVisit
