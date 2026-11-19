@@ -204,7 +204,7 @@ export default function CleanerProfile() {
         .order('due_date', { ascending: true }),
       supabase
         .from('staff_certifications')
-        .select('id, name, expiry_date, notes')
+        .select('id, name, expiry_date, notes, storage_path, file_name, created_by')
         .eq('staff_id', id)
         .order('expiry_date', { ascending: true, nullsFirst: false }),
       supabase
@@ -410,10 +410,18 @@ export default function CleanerProfile() {
     setIsAddingCert(false);
   };
 
+  const viewCertificateFile = async (c) => {
+    const { data } = await supabase.storage.from('staff-certificates').createSignedUrl(c.storage_path, 600);
+    if (data?.signedUrl) window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+    else toast.error('Could not open the file.');
+  };
+
   const deleteCertification = async (certId) => {
     if (!(await confirm('Delete this certification?', { danger: true }))) return;
+    const cert = certifications.find((c) => c.id === certId);
     const { error } = await supabase.from('staff_certifications').delete().eq('id', certId);
     if (error) { toast.error('Could not delete the certification.'); return; }
+    if (cert?.storage_path) await supabase.storage.from('staff-certificates').remove([cert.storage_path]);
     setCertifications((prev) => prev.filter((c) => c.id !== certId));
     toast.success('Certification deleted.');
   };
@@ -1080,8 +1088,14 @@ export default function CleanerProfile() {
                   </div>
                 )}
                 {c.notes && <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>{c.notes}</div>}
+                {c.created_by === id && <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>Uploaded by {cleaner?.full_name?.split(' ')[0] || 'them'}</div>}
               </div>
-              <button className="btn-secondary" onClick={() => deleteCertification(c.id)} title="Delete this certification record">Delete</button>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                {c.storage_path && (
+                  <button className="btn-secondary" onClick={() => viewCertificateFile(c)} title={`Open ${c.file_name || 'the certificate'}`}>View</button>
+                )}
+                <button className="btn-secondary" onClick={() => deleteCertification(c.id)} title="Delete this certification record">Delete</button>
+              </div>
             </div>
           );
         })}

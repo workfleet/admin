@@ -10,6 +10,7 @@ import { POLICY_SECTIONS } from '../../../lib/companyPolicies';
 import { supabase } from '../../../lib/supabaseClient';
 import BackButton from '../../components/BackButton';
 import { groupByFolder } from '../../../lib/documentFolders';
+import MyCertificates from '../../components/MyCertificates';
 
 const CATEGORY_LABELS = { policy: 'Policy', contract: 'Contract', other: 'Other' };
 const CATEGORY_ORDER = ['policy', 'contract', 'other'];
@@ -57,6 +58,10 @@ const HELP_SECTIONS = [
   {
     title: 'Keys You’re Holding',
     body: 'Any key, fob or access code signed out to you shows on your Home tab. When one is issued, type your name to confirm you’ve got it — that goes on the record. Hand everything back to the office when you finish with it, or when you leave.',
+  },
+  {
+    title: 'Uploading your certificates',
+    body: 'Go to Help, then the Documents tab, and tap "Upload a certificate". Give it a name (for example DBS check), add the expiry date if it has one, and take a photo of it or pick a PDF. The office sees it on your record straight away. You can remove one you uploaded by mistake.',
   },
   {
     title: 'Notifications',
@@ -209,8 +214,9 @@ export default function CleanerHelp() {
 
       {section === 'documents' && (
         <>
+          <MyCertificates />
           {documents === null && <SkeletonLines />}
-          {documents?.length === 0 && <EmptyState compact icon={EmptyIconFolder} title="No documents shared yet" />}
+          {documents?.length === 0 && <EmptyState compact icon={EmptyIconFolder} title="No documents shared by the office yet" />}
           {(docFolders
             ? groupByFolder(docFolders, documents || [], { keepEmpty: false }).map((g) => ({ key: g.folder.id, label: g.folder.name, docs: g.docs }))
             : CATEGORY_ORDER.map((cat) => ({ key: cat, label: CATEGORY_LABELS[cat], docs: (documents || []).filter((d) => d.category === cat) }))
