@@ -147,7 +147,7 @@ export default function CleanerDashboard() {
 
     const { data: notifData } = await supabase
       .from('notifications')
-      .select('id, message, read, created_at')
+      .select('id, message, read, created_at, job_id')
       .eq('user_id', session.user.id)
       .is('dismissed_at', null)
       .order('created_at', { ascending: false })
@@ -470,7 +470,13 @@ export default function CleanerDashboard() {
           <h2>Notifications</h2>
           {notifications.map((n) => (
             <div key={n.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, margin: '4px 0' }}>
-              <p style={{ fontSize: 14, margin: 0 }}>{n.message}</p>
+              {/* A bell row about a shift (clock-in nudge, "did you work it?")
+                  opens that shift, where the fix is one tap away. */}
+              {n.job_id ? (
+                <Link href={`/cleaner/jobs/${n.job_id}`} style={{ fontSize: 14, margin: 0, color: 'inherit' }}>{n.message}</Link>
+              ) : (
+                <p style={{ fontSize: 14, margin: 0 }}>{n.message}</p>
+              )}
               <button
                 type="button"
                 className="dismiss-btn"
