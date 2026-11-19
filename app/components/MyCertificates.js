@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Award, Upload, Eye } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
+import { notify } from '../../lib/notify';
 import { useConfirm } from './ConfirmProvider';
 import { useToast } from './ToastProvider';
 
@@ -95,6 +96,9 @@ export default function MyCertificates() {
       return;
     }
     setCerts((prev) => [...(prev || []), data].sort((a, b) => (a.expiry_date || '9999').localeCompare(b.expiry_date || '9999')));
+    // The insert trigger (0153) has put an alert on each admin's bell;
+    // sweep now so it reaches their phones without waiting for the timer.
+    notify({ type: 'flush' });
     toast.success('Certificate sent to the office.');
     reset();
   };
