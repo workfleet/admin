@@ -800,7 +800,7 @@ export default function AdminDashboard() {
         <div className="dash-att-main">
           <div className="dash-att-title">Rooms not refreshed for {REFRESH_EVERY_DAYS} days at {roomsOverdue.length} site{roomsOverdue.length === 1 ? '' : 's'}</div>
           <div className="dash-att-sub">
-            {roomsOverdue.reduce((n, site) => n + site.items.length, 0)} rooms or communal areas overdue with nothing booked · open Rooms to book them
+            {roomsOverdue.reduce((n, site) => n + site.items.length, 0)} rooms or communal areas overdue with nothing booked · book them on the client's Rooms tab
           </div>
         </div>
         {showRoomsOverdue ? <ChevronDown size={16} className="dash-att-chevron" aria-hidden /> : <ChevronRight size={16} className="dash-att-chevron" aria-hidden />}
@@ -809,7 +809,7 @@ export default function AdminDashboard() {
         <ul className="dash-att-list">
           {roomsOverdue.map((site) => (
             <li key={site.propertyId}>
-              <Link href="/admin/rooms" title="Open the Rooms tracker to book these">
+              <Link href={`/admin/clients/${site.clientId}?tab=rooms`} title="Open the client's Rooms tab to book these">
                 {shortAddress(site.address) || site.address}
               </Link>
               {' '}<span>

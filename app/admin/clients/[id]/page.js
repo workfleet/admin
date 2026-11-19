@@ -25,6 +25,7 @@ import { parseRoomList, numberedRooms, roomMinutesFor, roomListOf, DEFAULT_ROOM_
 import { localDateString } from '../../../../lib/localDate';
 import ClientProjects from '../../../components/ClientProjects';
 import ClientPortalLogins from '../../../components/ClientPortalLogins';
+import RoomTracker from '../../../components/RoomTracker';
 
 const formatMinutes = (m) => {
   const h = Math.floor(m / 60);
@@ -42,7 +43,15 @@ export default function ClientDetail() {
   useDocumentTitle(client?.name);
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('properties'); // properties | calls | hours | reviews | clockins | documents | portal
+  const [tab, setTab] = useState('properties'); // properties | rooms | calls | hours | reviews | clockins | documents | portal
+  // ?tab=rooms opens straight on a tab (the dashboard and rota link there).
+  // Read once on mount rather than via useSearchParams, which would need a
+  // Suspense boundary round the page.
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get('tab');
+    if (wanted) setTab(wanted);
+  }, []);
+  const [roomsVersion, setRoomsVersion] = useState(0);
 
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState(null);
@@ -557,7 +566,8 @@ export default function ClientDetail() {
     setProperties((prev) => prev.map((p) => (p.id === propertyId ? { ...p, ...data } : p)));
     setRoomsEditId(null);
     setRoomsDraft(null);
-    if (!minutesError) toast.success(rooms.length > 0 ? `${rooms.length} room${rooms.length === 1 ? '' : 's'} saved - book them onto visits on the Rooms page.` : 'Room tracking turned off for this property.');
+    setRoomsVersion((v) => v + 1);
+    if (!minutesError) toast.success(rooms.length > 0 ? `${rooms.length} room${rooms.length === 1 ? '' : 's'} saved - book them onto visits on the Rooms tab.` : 'Room tracking turned off for this property.');
   };
 
   const startEditLocation = (p) => {
@@ -859,6 +869,11 @@ export default function ClientDetail() {
         <button className={`page-tab${tab === 'properties' ? ' is-active' : ''}`} aria-pressed={tab === 'properties'} onClick={() => setTab('properties')}>
           Properties ({properties.length})
         </button>
+        {roomMinutes && (
+          <button className={`page-tab${tab === 'rooms' ? ' is-active' : ''}`} aria-pressed={tab === 'rooms'} onClick={() => setTab('rooms')}>
+            Rooms
+          </button>
+        )}
         <button className={`page-tab${tab === 'portal' ? ' is-active' : ''}`} aria-pressed={tab === 'portal'} onClick={() => setTab('portal')}>
           Portal logins
         </button>
@@ -878,6 +893,8 @@ export default function ClientDetail() {
           Documents{clientDocs ? ` (${clientDocs.length})` : ''}
         </button>
       </div>
+
+      {tab === 'rooms' && <RoomTracker clientId={id} refreshKey={roomsVersion} />}
 
       {tab === 'properties' && (
         <div className="card">
@@ -901,7 +918,7 @@ export default function ClientDetail() {
                   {roomMinutes && roomListOf(p).length > 0 && (
                     <div style={{ fontSize: 12, color: 'var(--ink)', marginTop: 2 }}>
                       Rooms tracked: {roomListOf(p).join(', ')} - each refreshed every {14} days, {formatMinutes(roomMinutesFor({ room_refresh_minutes: roomMinutes.value }))} a room.
-                      {' '}<a href="/admin/rooms">Plan them on the Rooms page</a>.
+                      {' '}<button type="button" className="link-button" onClick={() => setTab('rooms')} style={{ background: 'none', border: 0, padding: 0, color: 'var(--accent, inherit)', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}>Plan them on the Rooms tab</button>.
                     </div>
                   )}
                 </div>
@@ -917,7 +934,7 @@ export default function ClientDetail() {
                     <button
                       className="btn-secondary"
                       onClick={() => startEditRooms(p)}
-                      title="The rooms in this house - the office keeps each one refreshed every fortnight on the Rooms page"
+                      title="The rooms in this house - the office keeps each one refreshed every fortnight on the Rooms tab"
                     >
                       {roomsEditId === p.id ? 'Close' : 'Rooms'}
                     </button>
@@ -1004,7 +1021,7 @@ export default function ClientDetail() {
                     </div>
                   </div>
                   <p style={{ fontSize: 12, color: 'var(--muted)', margin: '6px 0 8px' }}>
-                    From the start date this property appears on the Rooms page, which shows when each room was last refreshed and books rooms onto visits (each adds the minutes above to the visit). The cleaner sees the rooms on their job. Rooms you mark as not done aren't charged. Leave the list empty to stop tracking.
+                    From the start date this property appears on the Rooms tab, which shows when each room was last refreshed and books rooms onto visits (each adds the minutes above to the visit). The cleaner sees the rooms on their job. Rooms you mark as not done aren't charged. Leave the list empty to stop tracking.
                   </p>
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                     <button type="button" className="btn-secondary" onClick={() => { setRoomsEditId(null); setRoomsDraft(null); }}>Cancel</button>

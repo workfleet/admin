@@ -2848,7 +2848,7 @@ export default function AdminRota() {
                 <p style={{ fontSize: 12, color: 'var(--muted)', margin: '6px 0 0' }}>
                   The refresh time is part of this visit&apos;s length, so make the visit long enough to include it.
                   On the invoice breakdown it shows as its own line, with the room and the date.
-                  {(selectedJob.properties?.rooms || []).length > 0 && <> This property&apos;s rooms are tracked on the <a href="/admin/rooms">Rooms</a> page, which can book them for you.</>}
+                  {(selectedJob.properties?.rooms || []).length > 0 && <> This property&apos;s rooms are tracked on the client&apos;s <a href={`/admin/clients/${selectedJob.properties?.client_id}?tab=rooms`}>Rooms tab</a>, which can book them for you.</>}
                 </p>
               </div>
             )}

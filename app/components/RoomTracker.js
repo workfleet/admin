@@ -1,23 +1,20 @@
 'use client';
 
-import EmptyState from '../../components/EmptyState';
+import EmptyState from './EmptyState';
 import { DoorOpen as EmptyIconDoor } from 'lucide-react';
-import { PageSkeleton } from '../../components/Skeleton';
+import { SkeletonLines } from './Skeleton';
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { supabase } from '../../../lib/supabaseClient';
-import { getSessionWithRetry } from '../../../lib/authGate';
-import { localDateString } from '../../../lib/localDate';
-import { shortAddress } from '../../../lib/shortAddress';
-import { trackerRows, roomMinutesFor, REFRESH_EVERY_DAYS, DUE_SOON_DAYS, plannedRooms } from '../../../lib/roomRefresh';
-import { useConfirm } from '../../components/ConfirmProvider';
-import { useToast } from '../../components/ToastProvider';
-import BackButton from '../../components/BackButton';
+import { supabase } from '../../lib/supabaseClient';
+import { localDateString } from '../../lib/localDate';
+import { shortAddress } from '../../lib/shortAddress';
+import { trackerRows, roomMinutesFor, REFRESH_EVERY_DAYS, DUE_SOON_DAYS, plannedRooms } from '../../lib/roomRefresh';
+import { useConfirm } from './ConfirmProvider';
+import { useToast } from './ToastProvider';
 
-// The office's view of fortnightly room refreshes (0150, 0151). Jess, Nov
-// 2026: keeping every room and the communal areas in date is the office's
-// job, not the cleaner's. Each tracked property shows when every room was
+// The office's view of fortnightly room refreshes (0150, 0151), shown as the
+// Rooms tab on a client's page (Jess wanted it under TKR, not a menu page of
+// its own). Keeping every room and the communal areas in date is the
+// office's job, not the cleaner's. Each tracked property shows when every room was
 // last done and the visit it's next booked on; rooms are booked onto a
 // visit here, and a room that wasn't done is marked here after the visit.
 
@@ -42,8 +39,8 @@ const lengthLabel = (m) => {
   return `${h ? `${h}h` : ''}${h && r ? ' ' : ''}${r ? `${r}m` : ''}` || '0m';
 };
 
-export default function AdminRooms() {
-  const router = useRouter();
+// refreshKey changes when the room lists are edited on the Properties tab.
+export default function RoomTracker({ clientId, refreshKey }) {
   const confirm = useConfirm();
   const toast = useToast();
   const [loading, setLoading] = useState(true);
@@ -53,14 +50,15 @@ export default function AdminRooms() {
   const [busy, setBusy] = useState(null);
   const today = localDateString(new Date());
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { if (clientId) load(); }, [clientId, refreshKey]);
 
   const load = async () => {
-    const session = await getSessionWithRetry();
-    if (!session) { router.push('/'); return; }
+    setLoading(true);
+    setError('');
     const { data: houseRows, error: houseError } = await supabase
       .from('properties')
       .select('id, address, client_id, rooms, rooms_tracked_since, clients(name, room_refresh_minutes)')
+      .eq('client_id', clientId)
       .not('rooms_tracked_since', 'is', null)
       .order('address');
     if (houseError) { setError("Couldn't load the room lists."); setLoading(false); return; }
@@ -108,30 +106,24 @@ export default function AdminRooms() {
     if (ok) act(job.id, row.room, 'skip', `${row.label} marked as not done - it won't be invoiced.`);
   };
 
-  if (loading) return <PageSkeleton className="page-inner" variant="detail" rows={4} />;
+  if (loading) return <div className="card"><SkeletonLines lines={4} /></div>;
 
   const jobById = new Map(jobs.map((j) => [j.id, j]));
   const overdueCount = houses.reduce((n, h) => n + trackerRows({ property: h, jobs, today }).rows.filter((r) => r.status === 'overdue').length, 0);
 
   return (
-    <div className="page-inner">
-      <BackButton />
-      <div className="page-header-row">
-        <div>
-          <h1>Rooms</h1>
-          <p className="page-subtitle">
-            Communal areas and every room, kept within {REFRESH_EVERY_DAYS} days. Book rooms onto a visit here; after the visit, mark any that weren&apos;t done.
-          </p>
-        </div>
-      </div>
+    <div>
+      <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
+        Communal areas and every room, kept within {REFRESH_EVERY_DAYS} days. Book rooms onto a visit here; after the visit, mark any that weren&apos;t done.
+      </p>
 
       {error && <div className="card" style={{ color: 'var(--wf-overdue)' }}>{error}</div>}
 
       {!error && houses.length === 0 && (
         <EmptyState
           icon={EmptyIconDoor}
-          title="No properties are tracked yet"
-          body="Open a client, press Rooms on a property and enter its rooms. It will appear here."
+          title="No rooms set up yet"
+          body="On the Properties tab, press Rooms on a property and enter its rooms. It will appear here."
         />
       )}
 
@@ -150,7 +142,6 @@ export default function AdminRooms() {
           <div key={house.id} className="card" style={{ marginBottom: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
               <h2 style={{ margin: 0 }}>{shortAddress(house.address) || house.address}</h2>
-              <Link href={`/admin/clients/${house.client_id}`} style={{ fontSize: 13 }} title="Change the room list">{house.clients?.name || 'Client'} · room list</Link>
             </div>
             <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 10px' }}>
               {nextVisit
