@@ -21,7 +21,7 @@ import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 import { claimFor, describeClockRecord, indexClaims, lateMinutes } from '../../../../lib/clockIn';
 import BackButton from '../../../components/BackButton';
-import { parseRoomList, numberedRooms, roomMinutesFor, plannedMinutes, roomListOf, DEFAULT_ROOM_MINUTES } from '../../../../lib/roomRefresh';
+import { parseRoomList, numberedRooms, roomMinutesFor, roomListOf, DEFAULT_ROOM_MINUTES } from '../../../../lib/roomRefresh';
 import { localDateString } from '../../../../lib/localDate';
 import ClientProjects from '../../../components/ClientProjects';
 import ClientPortalLogins from '../../../components/ClientPortalLogins';
@@ -557,7 +557,7 @@ export default function ClientDetail() {
     setProperties((prev) => prev.map((p) => (p.id === propertyId ? { ...p, ...data } : p)));
     setRoomsEditId(null);
     setRoomsDraft(null);
-    if (!minutesError) toast.success(rooms.length > 0 ? `${rooms.length} room${rooms.length === 1 ? '' : 's'} saved - cleaners tick each one on every visit.` : 'Room tracking turned off for this property.');
+    if (!minutesError) toast.success(rooms.length > 0 ? `${rooms.length} room${rooms.length === 1 ? '' : 's'} saved - book them onto visits on the Rooms page.` : 'Room tracking turned off for this property.');
   };
 
   const startEditLocation = (p) => {
@@ -900,8 +900,8 @@ export default function ClientDetail() {
                   )}
                   {roomMinutes && roomListOf(p).length > 0 && (
                     <div style={{ fontSize: 12, color: 'var(--ink)', marginTop: 2 }}>
-                      {roomListOf(p).length} room{roomListOf(p).length === 1 ? '' : 's'} refreshed every visit ({roomListOf(p).join(', ')}).
-                      {' '}Book each visit for {formatMinutes(plannedMinutes(p, { room_refresh_minutes: roomMinutes.value }))}: 1 hr communal + {roomListOf(p).length} × {roomMinutesFor({ room_refresh_minutes: roomMinutes.value })} min.
+                      Rooms tracked: {roomListOf(p).join(', ')} - each refreshed every {14} days, {formatMinutes(roomMinutesFor({ room_refresh_minutes: roomMinutes.value }))} a room.
+                      {' '}<a href="/admin/rooms">Plan them on the Rooms page</a>.
                     </div>
                   )}
                 </div>
@@ -917,7 +917,7 @@ export default function ClientDetail() {
                     <button
                       className="btn-secondary"
                       onClick={() => startEditRooms(p)}
-                      title="The rooms in this house - cleaners tick each one as refreshed on every visit, and only ticked rooms are invoiced"
+                      title="The rooms in this house - the office keeps each one refreshed every fortnight on the Rooms page"
                     >
                       {roomsEditId === p.id ? 'Close' : 'Rooms'}
                     </button>
@@ -1004,7 +1004,7 @@ export default function ClientDetail() {
                     </div>
                   </div>
                   <p style={{ fontSize: 12, color: 'var(--muted)', margin: '6px 0 8px' }}>
-                    On every visit from the start date, the cleaner ticks each room as refreshed and takes a photo of it. The invoice charges the communal clean plus each ticked room at the minutes above; rooms not ticked aren't charged. Visits before the start date are invoiced as before. Leave the list empty to stop tracking.
+                    From the start date this property appears on the Rooms page, which shows when each room was last refreshed and books rooms onto visits (each adds the minutes above to the visit). The cleaner sees the rooms on their job. Rooms you mark as not done aren't charged. Leave the list empty to stop tracking.
                   </p>
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                     <button type="button" className="btn-secondary" onClick={() => { setRoomsEditId(null); setRoomsDraft(null); }}>Cancel</button>

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Download, Folder, Package, KeyRound, LifeBuoy, Banknote, Video, Bell, HardHat, Menu, X, Receipt, Megaphone, Search, BarChart3, FolderKanban, Sparkles, Moon } from 'lucide-react';
+import { LayoutDashboard, Calendar, Building2, Users, ClipboardList, FileText, MessageSquareWarning, MessageCircle, HelpCircle, ListChecks, ListTodo, PoundSterling, Download, Folder, Package, KeyRound, LifeBuoy, Banknote, Video, Bell, HardHat, Menu, X, Receipt, Megaphone, Search, BarChart3, FolderKanban, Sparkles, Moon, DoorOpen } from 'lucide-react';
 import { signOutAndClearPresence } from '../../lib/signOut';
 import { getSessionAndProfile } from '../../lib/authGate';
 import { canSeeInvoices } from '../../lib/invoiceAccess';
@@ -61,6 +61,7 @@ const NAV_ITEMS = [
 
   { href: '/admin/clients', label: 'Clients', icon: Building2, group: 'Clients' },
   { href: '/admin/quotes', label: 'Quotes', icon: PoundSterling, group: 'Clients' },
+  { href: '/admin/rooms', label: 'Rooms', icon: DoorOpen, group: 'Clients' },
   { href: '/admin/invoices', label: 'Invoices', icon: Receipt, adminOnly: true, invoicesOnly: true, group: 'Clients' },
 
   { href: '/admin/cleaners', label: 'Cleaners', icon: Users, adminOnly: true, group: 'People' },

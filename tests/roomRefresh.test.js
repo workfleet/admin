@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { parseRoomList, numberedRooms, roomsApply, overdueRooms, roomMinutesFor, plannedMinutes } from '../lib/roomRefresh';
-import { buildInvoiceBreakdown } from '../lib/invoiceBreakdown';
+import { parseRoomList, numberedRooms, roomsApply, overdueRooms, roomMinutesFor, trackerRows, ticked } from '../lib/roomRefresh';
+import { buildInvoiceBreakdown, propertyLineText, refreshLineText } from '../lib/invoiceBreakdown';
 
 const slate = { id: 'slate', address: '23 Slate Street, Swansea', rooms: ['Room 1', 'Room 2', 'Room 3'], rooms_tracked_since: '2026-11-20' };
-const job = (over) => ({ id: Math.random().toString(36), property_id: 'slate', status: 'completed', duration_minutes: 105, room_refreshes: [], ...over });
-const tick = (...rooms) => rooms.map((room) => ({ room, minutes: 15, done_at: '2026-11-26T14:30:00Z' }));
+const job = (over) => ({ id: Math.random().toString(36), property_id: 'slate', status: 'completed', duration_minutes: 60, room_refreshes: [], ...over });
+const plan = (...rooms) => rooms.map((room) => ({ room, minutes: 15 }));
 
 describe('room lists', () => {
   it('reads a typed list, one per line or comma separated, without repeats', () => {
@@ -17,68 +17,69 @@ describe('room lists', () => {
   it('applies only from the day tracking started', () => {
     expect(roomsApply(slate, '2026-11-19T23:30:00Z')).toBe(false);
     expect(roomsApply(slate, '2026-11-20T00:30:00Z')).toBe(true);
-    expect(roomsApply({ ...slate, rooms: [] }, '2026-12-01T10:00:00Z')).toBe(false);
   });
-  it('defaults to 15 minutes a room and plans the booking', () => {
+  it('defaults to 15 minutes a room', () => {
     expect(roomMinutesFor(null)).toBe(15);
     expect(roomMinutesFor({ room_refresh_minutes: 20 })).toBe(20);
-    expect(plannedMinutes(slate, null)).toBe(105);
+  });
+  it('does not count a room the office marked as not done', () => {
+    expect([...ticked(job({ room_refreshes: [{ room: 'Room 1', minutes: 15 }, { room: 'Room 2', minutes: 15, skipped: true }] }))]).toEqual(['Room 1']);
   });
 });
 
-describe('overdue rooms', () => {
-  it('lists rooms and communal areas not done for a fortnight', () => {
-    const jobs = [
-      job({ scheduled_at: '2026-11-26T14:00:00Z', room_refreshes: tick('Room 1', 'Room 2') }),
-      job({ scheduled_at: '2026-12-10T14:00:00Z', status: 'scheduled' }),
-    ];
-    const [house] = overdueRooms({ properties: [slate], jobs, today: '2026-12-10' });
+describe('tracker', () => {
+  const jobs = [
+    job({ id: 'a', scheduled_at: '2026-11-26T14:00:00Z', room_refreshes: plan('Room 1', 'Room 2') }),
+    job({ id: 'b', scheduled_at: '2026-12-10T14:00:00Z', status: 'scheduled', room_refreshes: plan('Room 3') }),
+  ];
+  const byLabel = (today) => Object.fromEntries(trackerRows({ property: slate, jobs, today }).rows.map((r) => [r.label, r]));
+
+  it('shows when each was last done and next booked', () => {
+    const r = byLabel('2026-12-01');
+    expect(r['Communal areas']).toMatchObject({ last: '2026-11-26', next: '2026-12-10', status: 'booked' });
+    expect(r['Room 1']).toMatchObject({ last: '2026-11-26', lastJobId: 'a', next: null, status: 'ok' });
+    // Never done: due 14 days after tracking began (4 Dec), so 10 Dec is late.
+    expect(r['Room 3']).toMatchObject({ last: null, next: '2026-12-10', nextJobId: 'b', dueDay: '2026-12-04', status: 'due' });
+  });
+
+  it('turns amber when due soon with nothing booked, red once past due', () => {
+    expect(byLabel('2026-12-07')['Room 1'].status).toBe('due');
+    expect(byLabel('2026-12-11')['Room 1'].status).toBe('overdue');
+  });
+
+  it('says when a planned room was marked not done', () => {
+    const missed = [job({ id: 'c', scheduled_at: '2026-11-26T14:00:00Z', room_refreshes: [{ room: 'Room 2', minutes: 15, skipped: true }] })];
+    const row = trackerRows({ property: slate, jobs: missed, today: '2026-12-01' }).rows.find((x) => x.label === 'Room 2');
+    expect(row).toMatchObject({ last: null, missedOn: '2026-11-26', lastPlannedJobId: 'c' });
+  });
+
+  it('lists only what is overdue for the dashboard', () => {
+    const [house] = overdueRooms({ properties: [slate], jobs, today: '2026-12-11' });
+    // The 10 Dec visit was never closed, so nothing counts as booked.
     expect(house.items.map((i) => i.label)).toEqual(['Communal areas', 'Room 1', 'Room 2', 'Room 3']);
-    expect(house.items.find((i) => i.label === 'Room 3')).toMatchObject({ last: null, days: 20 });
-  });
-  it('is quiet while everything is in date', () => {
-    const jobs = [job({ scheduled_at: '2026-11-26T14:00:00Z', room_refreshes: tick('Room 1', 'Room 2', 'Room 3') })];
-    expect(overdueRooms({ properties: [slate], jobs, today: '2026-12-09' })).toEqual([]);
-  });
-  it('ignores properties without a list', () => {
     expect(overdueRooms({ properties: [{ id: 'x', rooms: [] }], jobs: [], today: '2027-01-01' })).toEqual([]);
   });
 });
 
-describe('invoicing tracked rooms', () => {
-  const build = (jobs) => buildInvoiceBreakdown({ properties: [slate], jobs, rate: 24, roomMinutes: 15 });
+describe('invoicing planned rooms', () => {
+  const build = (jobs) => buildInvoiceBreakdown({ properties: [slate], jobs, rate: 24 });
 
-  it('charges the communal clean and each ticked room', () => {
-    const b = build([job({ scheduled_at: '2026-11-26T14:00:00Z', room_refreshes: tick('Room 1', 'Room 2', 'Room 3') })]);
+  it('shows the communal clean and each room on its own line', () => {
+    const b = build([job({ scheduled_at: '2026-11-26T14:00:00Z', duration_minutes: 90, room_refreshes: plan('Room 1', 'Room 2') })]);
+    expect(propertyLineText(b.lines[0])).toBe('23 Slate Street - communal areas, 1 visit: 26 November 2026');
     expect(b.lines[0].minutes).toBe(60);
-    expect(b.refreshes.map((r) => r.room)).toEqual(['Room 1', 'Room 2', 'Room 3']);
-    expect(b.total).toBe(42);
-    expect(b.warnings).toEqual([]);
+    expect(b.refreshes.map(refreshLineText)).toEqual([
+      'Room refresh - Room 1, 23 Slate Street - 26 November 2026',
+      'Room refresh - Room 2, 23 Slate Street - 26 November 2026',
+    ]);
+    expect(b.total).toBe(36);
   });
 
-  it("doesn't charge a room that wasn't ticked, and says so", () => {
-    const b = build([job({ scheduled_at: '2026-11-26T14:00:00Z', room_refreshes: tick('Room 1') })]);
+  it("doesn't charge a room marked not done, as a refresh or as communal time", () => {
+    const b = build([job({ scheduled_at: '2026-11-26T14:00:00Z', duration_minutes: 90, room_refreshes: [{ room: 'Room 1', minutes: 15 }, { room: 'Room 2', minutes: 15, skipped: true }] })]);
     expect(b.lines[0].minutes).toBe(60);
-    expect(b.refreshes).toHaveLength(1);
+    expect(b.refreshes.map((r) => r.room)).toEqual(['Room 1']);
     expect(b.total).toBe(30);
-    expect(b.warnings.join(' ')).toMatch(/Room 2, Room 3 weren't ticked/);
-  });
-
-  it('charges the client minutes, not whatever is stored on the tick', () => {
-    const b = build([job({ scheduled_at: '2026-11-26T14:00:00Z', room_refreshes: [{ room: 'Room 1', minutes: 90 }] })]);
-    expect(b.refreshes[0].minutes).toBe(15);
-  });
-
-  it('leaves visits before tracking started as they were', () => {
-    const b = build([job({ scheduled_at: '2026-10-23T12:00:00Z', duration_minutes: 60 })]);
-    expect(b.lines[0].minutes).toBe(60);
-    expect(b.refreshes).toEqual([]);
-    expect(b.warnings).toEqual([]);
-  });
-
-  it('warns when the booking barely covers the rooms', () => {
-    const b = build([job({ scheduled_at: '2026-11-26T14:00:00Z', duration_minutes: 45, room_refreshes: tick('Room 1', 'Room 2', 'Room 3') })]);
-    expect(b.lines).toEqual([]);
-    expect(b.warnings.join(' ')).toMatch(/barely covers 3 rooms/);
+    expect(b.warnings.join(' ')).toMatch(/Room 2 wasn't refreshed/);
   });
 });

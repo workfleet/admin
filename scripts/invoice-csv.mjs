@@ -15,7 +15,6 @@ import fs from 'fs';
 import path from 'path';
 import { buildInvoiceBreakdown, invoicePeriod, quickbooksRows, QUICKBOOKS_COLUMNS } from '../lib/invoiceBreakdown.js';
 import { toCSV } from '../lib/csv.js';
-import { roomMinutesFor } from '../lib/roomRefresh.js';
 
 const args = process.argv.slice(2);
 const flag = (name) => { const i = args.indexOf(name); return i === -1 ? null : args[i + 1]; };
@@ -44,17 +43,7 @@ const get = async (p) => {
 const [client] = await get(`clients?select=id,name,hourly_rate&name=eq.${encodeURIComponent(clientName)}`);
 if (!client) { console.error(`No client called ${clientName}`); process.exit(1); }
 if (client.hourly_rate == null) { console.error(`${clientName} has no hourly rate`); process.exit(1); }
-const baseProperties = await get(`properties?select=id,address&client_id=eq.${client.id}`);
-// Room lists (0150), asked for separately so the invoice still runs before
-// 0150 is in the database.
-let properties = baseProperties;
-let roomMinutes = null;
-try {
-  const rooms = new Map((await get(`properties?select=id,rooms,rooms_tracked_since&client_id=eq.${client.id}`)).map((p) => [p.id, p]));
-  const [minutes] = await get(`clients?select=room_refresh_minutes&id=eq.${client.id}`);
-  properties = baseProperties.map((p) => ({ ...p, ...rooms.get(p.id) }));
-  roomMinutes = roomMinutesFor(minutes);
-} catch { /* before 0150: invoice the old way */ }
+const properties = await get(`properties?select=id,address&client_id=eq.${client.id}`);
 const sel = 'id,property_id,scheduled_at,status,duration_minutes,room_refreshes,hours_review_needed,job_assignments(cleaner_id)';
 const rate = Number(client.hourly_rate);
 const daysSince = (isoDay) => (Date.parse(`${todayUK}T00:00:00Z`) - Date.parse(`${isoDay}T00:00:00Z`)) / 86400000;
@@ -72,7 +61,7 @@ for (const month of months) {
   }
 
   const jobs = properties.length === 0 ? [] : await get(`jobs?select=${encodeURIComponent(sel)}&property_id=in.(${properties.map((p) => p.id).join(',')})&scheduled_at=gte.${period.start}&scheduled_at=lt.${period.end}`);
-  const breakdown = buildInvoiceBreakdown({ properties, jobs, rate, roomMinutes });
+  const breakdown = buildInvoiceBreakdown({ properties, jobs, rate });
   const rows = quickbooksRows(breakdown, { invoiceNo, customer: client.name, invoiceDate: period.invoiceDay, item: product, rate, memo: `HMO Cleaning - ${monthName}` });
 
   fs.mkdirSync(outDir, { recursive: true });

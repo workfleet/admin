@@ -312,13 +312,17 @@ export default function AdminDashboard() {
       .select('id, address, client_id, rooms, rooms_tracked_since, clients(name)')
       .not('rooms_tracked_since', 'is', null);
     if (error || !houses || houses.length === 0) { setRoomsOverdue([]); return; }
+    // Back far enough for each room's last refresh, forward far enough to
+    // see what's already booked - a room booked in time isn't overdue.
     const since = new Date(Date.now() - 90 * 86400000).toISOString();
+    const until = new Date(Date.now() + 42 * 86400000).toISOString();
     const { data: visits, error: visitsError } = await supabase
       .from('jobs')
-      .select('property_id, scheduled_at, status, room_refreshes')
+      .select('id, property_id, scheduled_at, status, room_refreshes')
       .in('property_id', houses.map((h) => h.id))
-      .in('status', ['completed', 'in_progress'])
-      .gte('scheduled_at', since);
+      .in('status', ['scheduled', 'completed', 'in_progress'])
+      .gte('scheduled_at', since)
+      .lt('scheduled_at', until);
     if (visitsError) return;
     const byId = new Map(houses.map((h) => [h.id, h]));
     setRoomsOverdue(overdueRooms({ properties: houses, jobs: visits || [], today: localDateString(new Date()) })
@@ -796,7 +800,7 @@ export default function AdminDashboard() {
         <div className="dash-att-main">
           <div className="dash-att-title">Rooms not refreshed for {REFRESH_EVERY_DAYS} days at {roomsOverdue.length} site{roomsOverdue.length === 1 ? '' : 's'}</div>
           <div className="dash-att-sub">
-            {roomsOverdue.reduce((n, site) => n + site.items.length, 0)} rooms or communal areas overdue · book a visit or check the ticks
+            {roomsOverdue.reduce((n, site) => n + site.items.length, 0)} rooms or communal areas overdue with nothing booked · open Rooms to book them
           </div>
         </div>
         {showRoomsOverdue ? <ChevronDown size={16} className="dash-att-chevron" aria-hidden /> : <ChevronRight size={16} className="dash-att-chevron" aria-hidden />}
@@ -805,7 +809,7 @@ export default function AdminDashboard() {
         <ul className="dash-att-list">
           {roomsOverdue.map((site) => (
             <li key={site.propertyId}>
-              <Link href={`/admin/clients/${site.clientId}`} title="Open the client to see this property's rooms">
+              <Link href="/admin/rooms" title="Open the Rooms tracker to book these">
                 {shortAddress(site.address) || site.address}
               </Link>
               {' '}<span>

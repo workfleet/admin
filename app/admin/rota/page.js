@@ -24,6 +24,7 @@ import { buildCleanerRows, formatHours, ROW_ORDERS, shareMinutes, UNASSIGNED_ROW
 import { shortAddress, nameRepeatsStreet } from '../../../lib/shortAddress';
 import { certificationLine, isTraining, jobHeadline, jobSubtitle, trainerLine, trainingJobFields, TRAINING_JOB_COLUMNS } from '../../../lib/training';
 import { refreshesOf } from '../../../lib/invoiceBreakdown';
+import { roomMinutesFor } from '../../../lib/roomRefresh';
 import CleanerWeekGrid from './CleanerWeekGrid';
 import SeriesEditor from './SeriesEditor';
 
@@ -92,7 +93,7 @@ function latestStartLabel(date, hour, minute, mins) {
   return new Date(d.getTime() + mins * 60000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 
-const JOB_SELECT = `id, scheduled_at, status, duration_minutes, start_window_minutes, notes, room_refreshes, series_id, property_id, ${TRAINING_JOB_COLUMNS}, properties(address, lat, lng, client_id, clients(name)), job_assignments(cleaner_id, paid_minutes, profiles(full_name))`;
+const JOB_SELECT = `id, scheduled_at, status, duration_minutes, start_window_minutes, notes, room_refreshes, series_id, property_id, ${TRAINING_JOB_COLUMNS}, properties(address, lat, lng, client_id, rooms, clients(name, room_refresh_minutes)), job_assignments(cleaner_id, paid_minutes, profiles(full_name))`;
 
 function formatHour12(h) {
   const period = h < 12 ? 'AM' : 'PM';
@@ -591,7 +592,7 @@ export default function AdminRota() {
     // ahead took its check-in with it and blocked the cleaner from
     // clocking in. Only a job that is still 'scheduled' can be moved.
     const refreshes = editRefreshes
-      .map((r) => ({ room: r.room.trim(), minutes: Number(r.minutes) || 0 }))
+      .map((r) => ({ room: r.room.trim(), minutes: Number(r.minutes) || 0, ...(r.skipped ? { skipped: true } : {}) }))
       .filter((r) => r.room);
     if (refreshes.reduce((t, r) => t + r.minutes, 0) > editDuration) {
       setSavingJob(false);
@@ -2806,8 +2807,10 @@ export default function AdminRota() {
                       value={r.room}
                       onChange={(e) => setEditRefreshes((prev) => prev.map((x, j) => (j === i ? { ...x, room: e.target.value } : x)))}
                       placeholder="e.g. Room 1"
+                      list="rota-house-rooms"
                       style={{ flex: 1, marginBottom: 0 }}
                     />
+                    {r.skipped && <span style={{ fontSize: 12, color: 'var(--wf-overdue)', whiteSpace: 'nowrap' }} title="Marked as not done on the Rooms page - not charged">not done</span>}
                     <select
                       value={r.minutes}
                       onChange={(e) => setEditRefreshes((prev) => prev.map((x, j) => (j === i ? { ...x, minutes: Number(e.target.value) } : x)))}
@@ -2828,16 +2831,24 @@ export default function AdminRota() {
                     </button>
                   </div>
                 ))}
+                {/* The house's own rooms (0150), offered as you type. */}
+                <datalist id="rota-house-rooms">
+                  {(selectedJob.properties?.rooms || []).map((room) => <option key={room} value={room} />)}
+                </datalist>
                 <button
                   type="button"
                   className="btn-secondary"
-                  onClick={() => setEditRefreshes((prev) => [...prev, { room: '', minutes: 60 }])}
+                  onClick={() => setEditRefreshes((prev) => [...prev, {
+                    room: '',
+                    minutes: (selectedJob.properties?.rooms || []).length > 0 ? roomMinutesFor(selectedJob.properties?.clients) : 60,
+                  }])}
                 >
                   + Add a room refresh
                 </button>
                 <p style={{ fontSize: 12, color: 'var(--muted)', margin: '6px 0 0' }}>
                   The refresh time is part of this visit&apos;s length, so make the visit long enough to include it.
                   On the invoice breakdown it shows as its own line, with the room and the date.
+                  {(selectedJob.properties?.rooms || []).length > 0 && <> This property&apos;s rooms are tracked on the <a href="/admin/rooms">Rooms</a> page, which can book them for you.</>}
                 </p>
               </div>
             )}

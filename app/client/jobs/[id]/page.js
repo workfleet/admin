@@ -16,7 +16,7 @@ import VisitCleaners from '../../../components/VisitCleaners';
 import { downloadReportPdf } from '../../../../lib/downloadReportPdf';
 import { REPORT_TEMPLATES, DEFAULT_TEMPLATE } from '../../../../lib/reportTemplates';
 import { minutesOnSite, formatDuration } from '../../../../lib/detailedReport';
-import { roomListOf, roomsApply, ticked } from '../../../../lib/roomRefresh';
+import { ticked } from '../../../../lib/roomRefresh';
 
 // "Wednesday 11 November 2026, 12:00" - no seconds.
 const longWhen = (iso) => new Date(iso).toLocaleString('en-GB', {
@@ -84,12 +84,6 @@ export default function ClientJobDetail() {
       .maybeSingle();
     setReport(reportData || null);
 
-    // The house's room list (0150), for the "Rooms refreshed" card. Its own
-    // request so a property without one - or before 0150 - changes nothing.
-    if (jobData?.property_id) {
-      const { data: house } = await supabase.from('properties').select('rooms, rooms_tracked_since').eq('id', jobData.property_id).maybeSingle();
-      jobData.house_rooms = house && roomsApply(house, jobData.scheduled_at) ? roomListOf(house) : [];
-    }
 
     const photosWithUrls = await Promise.all(
       (photoData || []).map(async (p) => {
@@ -264,33 +258,19 @@ export default function ClientJobDetail() {
         );
       })()}
 
-      {job.house_rooms?.length > 0 && job.status === 'completed' && (() => {
-        const done = ticked(job);
-        return (
-          <div className="card" style={{ marginBottom: 16 }}>
-            <div className="dash-panel-header">
-              <h2>Rooms refreshed</h2>
-              <span style={{ fontSize: 13, color: 'var(--muted)' }}>{job.house_rooms.filter((r) => done.has(r)).length} of {job.house_rooms.length}</span>
+      {/* The rooms the office booked on this visit and didn't mark as not
+          done (0151) - what TKR are charged for as room refreshes. */}
+      {job.status === 'completed' && ticked(job).size > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h2>Rooms refreshed</h2>
+          {[...ticked(job)].map((room) => (
+            <div key={room} className="task-row">
+              <CheckCircle2 size={18} color="var(--wf-verified-ink)" style={{ flexShrink: 0 }} aria-label="Refreshed" />
+              <span style={{ flex: 1 }}>{room}</span>
             </div>
-            {job.house_rooms.map((room) => {
-              const photo = photos.find((ph) => ph.caption === room);
-              return (
-                <div key={room} className="task-row">
-                  {done.has(room) ? (
-                    <CheckCircle2 size={18} color="var(--wf-verified-ink)" style={{ flexShrink: 0 }} aria-label="Refreshed" />
-                  ) : (
-                    <Circle size={18} color="var(--muted)" style={{ flexShrink: 0 }} aria-label="Not refreshed" />
-                  )}
-                  <span style={{ flex: 1 }}>{room}</span>
-                  {photo?.signedUrl
-                    ? <a href={photo.signedUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13 }}>Photo</a>
-                    : !done.has(room) && <span style={{ fontSize: 12, color: 'var(--muted)' }}>not done, not charged</span>}
-                </div>
-              );
-            })}
-          </div>
-        );
-      })()}
+          ))}
+        </div>
+      )}
 
       {photos.length > 0 && (
         <div className="card" style={{ marginBottom: 16 }}>

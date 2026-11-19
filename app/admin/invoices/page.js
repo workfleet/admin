@@ -12,7 +12,6 @@ import {
   quickbooksRows, QUICKBOOKS_COLUMNS, invoicePeriod, shiftPricingFor,
 } from '../../../lib/invoiceBreakdown';
 import { toCSV, downloadCSV } from '../../../lib/csv';
-import { roomMinutesFor } from '../../../lib/roomRefresh';
 import { localDateString } from '../../../lib/localDate';
 import { canSeeInvoices } from '../../../lib/invoiceAccess';
 import { useToast } from '../../components/ToastProvider';
@@ -80,17 +79,9 @@ export default function InvoiceBreakdown() {
       setLoadingMonth(true);
       setError('');
       const bounds = invoicePeriod(month);
-      // Room lists (0150) asked for separately: before 0150 is run those
-      // columns don't exist, and that mustn't stop the invoice loading.
-      const [{ data: baseProperties, error: propError }, { data: roomData }, { data: minutesRow }] = await Promise.all([
-        supabase.from('properties').select('id, address').eq('client_id', clientId),
-        supabase.from('properties').select('id, rooms, rooms_tracked_since').eq('client_id', clientId),
-        supabase.from('clients').select('room_refresh_minutes').eq('id', clientId).maybeSingle(),
-      ]);
-      const roomsById = new Map((roomData || []).map((p) => [p.id, p]));
-      const properties = (baseProperties || []).map((p) => ({ ...p, ...roomsById.get(p.id) }));
-      const roomMinutes = roomData ? roomMinutesFor(minutesRow) : null;
-      const ids = properties.map((p) => p.id);
+      const { data: properties, error: propError } = await supabase
+        .from('properties').select('id, address').eq('client_id', clientId);
+      const ids = (properties || []).map((p) => p.id);
       const { data: jobs, error: jobsError } = ids.length === 0
         ? { data: [] }
         : await supabase
@@ -101,7 +92,7 @@ export default function InvoiceBreakdown() {
           .lt('scheduled_at', bounds.end);
       setLoadingMonth(false);
       if (propError || jobsError) { setError('Couldn\'t load that month\'s visits.'); setBreakdown(null); return; }
-      setBreakdown(buildInvoiceBreakdown({ properties, jobs, rate: rate || 0, pricing, roomMinutes }));
+      setBreakdown(buildInvoiceBreakdown({ properties, jobs, rate: rate || 0, pricing }));
     })();
   }, [clientId, month, rate, pricing]);
 
