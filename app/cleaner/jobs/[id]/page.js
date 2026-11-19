@@ -36,6 +36,7 @@ import { loadJobSnapshot, saveJobSnapshot, warmPageShell } from '../../../../lib
 import { missingAreas } from '../../../../lib/photoCheck';
 import { isTraining, jobHeadline, jobSubtitle, trainerLine, TRAINING_JOB_COLUMNS } from '../../../../lib/training';
 import { refreshesOf, formatHours } from '../../../../lib/invoiceBreakdown';
+import { roomListOf, roomsApply, ticked } from '../../../../lib/roomRefresh';
 import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 
@@ -97,6 +98,10 @@ export default function JobDetailPage() {
   const [photos, setPhotos] = useState([]);
   const [checkin, setCheckin] = useState(null);
   const [uploading, setUploading] = useState(false);
+  // The room a photo is being taken for, while the camera is open (0150).
+  const roomPhotoFor = useRef(null);
+  const roomPhotoInput = useRef(null);
+  const [roomBusy, setRoomBusy] = useState(null);
   const [userId, setUserId] = useState(null);
   const [extensionRequests, setExtensionRequests] = useState([]);
   const [showExtensionForm, setShowExtensionForm] = useState(false);
@@ -326,6 +331,15 @@ export default function JobDetailPage() {
             .is('resolved_at', null)
             .order('created_at', { ascending: false })
         : Promise.resolve({ data: [] }),
+      // The rooms to refresh on every visit (0150). Its own request so that
+      // before 0150 is run - or with no list - the page is just as before.
+      jobData.property_id
+        ? supabase
+            .from('properties')
+            .select('rooms, rooms_tracked_since')
+            .eq('id', jobData.property_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
     ]);
 
     const [
@@ -338,9 +352,11 @@ export default function JobDetailPage() {
         { data: claimData },
         { data: nextData },
       ],
-      [{ data: checklistData }, { data: hazardData }],
+      [{ data: checklistData }, { data: hazardData }, { data: roomData }],
     ] = await Promise.all([sideQueries, siteQueries]);
     jobData.site_hazards = hazardData || [];
+    // Kept on the job so the copy saved for no signal has the rooms too.
+    jobData.house_rooms = roomData && roomsApply(roomData, jobData.scheduled_at) ? roomListOf(roomData) : [];
 
     // Photos still on the phone and links for the sent ones, side by side.
     const [waitingTiles, sentTiles] = await Promise.all([
@@ -381,6 +397,7 @@ export default function JobDetailPage() {
       id: `pending:${p.path}`,
       url: p.path,
       created_at: p.takenAt,
+      caption: p.caption || null,
       signedUrl: URL.createObjectURL(p.blob),
       pendingSync: true,
     })).reverse();
@@ -661,6 +678,23 @@ export default function JobDetailPage() {
     // record. Visits closed with "0 of 28" ticked read to a client as
     // nothing done, even when the clean was fine (TKR, Nov 2026). Asked
     // while the cleaner is still on site and can tick what they did.
+    const roomsLeft = houseRooms.filter((room) => !roomsDone.has(room));
+    if (roomsLeft.length > 0) {
+      const proceed = await confirm(
+        `${roomsLeft.join(', ')} ${roomsLeft.length === 1 ? "isn't" : "aren't"} ticked as refreshed. Every room is meant to be done on each visit, and rooms not ticked aren't charged to the client. If you couldn't get into a room, tell the office.`,
+        {
+          title: `${roomsLeft.length} room${roomsLeft.length === 1 ? '' : 's'} not refreshed`,
+          danger: true,
+          confirmLabel: 'Check out anyway',
+          cancelLabel: 'Go to the rooms',
+        }
+      );
+      if (!proceed) {
+        document.querySelector('.visit-rooms')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+    }
+
     const unticked = tasks.filter((t) => !t.completed).length;
     if (tasks.length > 0 && unticked > 0) {
       const ticked = tasks.length - unticked;
@@ -1013,6 +1047,51 @@ export default function JobDetailPage() {
   const handlePhotoUpload = async (e) => {
     const rawFile = e.target.files[0];
     if (!rawFile) return;
+    await uploadPhoto(rawFile, null);
+  };
+
+  // A room is ticked or unticked on the server (set_room_refresh, 0150),
+  // which also sets what it's charged. Ticked straight away on screen and
+  // put back if the save doesn't land, like the checklist.
+  const setRoomDone = async (room, done) => {
+    const before = job.room_refreshes || [];
+    const optimistic = done
+      ? [...before.filter((r) => r?.room !== room), { room }]
+      : before.filter((r) => r?.room !== room);
+    setJob((j) => ({ ...j, room_refreshes: optimistic }));
+    setRoomBusy(room);
+    const { data, error } = await withTimeout(supabase.rpc('set_room_refresh', { target_job_id: id, room_name: room, is_done: done }));
+    setRoomBusy(null);
+    if (error || !Array.isArray(data)) {
+      setJob((j) => ({ ...j, room_refreshes: before }));
+      toast.error(error?.message && !isTransientError(error) ? error.message : "Couldn't save that - check your signal and tap the room again.");
+      return false;
+    }
+    setJob((j) => ({ ...j, room_refreshes: data }));
+    return true;
+  };
+
+  // First tap on a room opens the camera for its photo; once it has one,
+  // the tap ticks it. A ticked room taps back to unticked.
+  const tapRoom = (room) => {
+    if (roomBusy) return;
+    if (roomsDone.has(room)) { setRoomDone(room, false); return; }
+    if (photos.some((ph) => ph.caption === room)) { setRoomDone(room, true); return; }
+    roomPhotoFor.current = room;
+    roomPhotoInput.current?.click();
+  };
+
+  const handleRoomPhoto = async (e) => {
+    const rawFile = e.target.files[0];
+    const room = roomPhotoFor.current;
+    e.target.value = '';
+    roomPhotoFor.current = null;
+    if (!rawFile || !room) return;
+    const saved = await uploadPhoto(rawFile, room);
+    if (saved) await setRoomDone(room, true);
+  };
+
+  const uploadPhoto = async (rawFile, caption) => {
     setUploading(true);
 
     const file = await compressImage(rawFile);
@@ -1036,7 +1115,7 @@ export default function JobDetailPage() {
       if (!uploadError) {
         const { data } = await withTimeout(supabase
           .from('photos')
-          .insert({ job_id: id, uploaded_by: userId, url: fileName })
+          .insert({ job_id: id, uploaded_by: userId, url: fileName, caption })
           .select()
           .single());
         photoRow = data || null;
@@ -1044,26 +1123,28 @@ export default function JobDetailPage() {
     }
 
     if (!photoRow) {
-      const queued = await queuePhoto({ jobId: id, blob: file, path: fileName, takenAt });
+      const queued = await queuePhoto({ jobId: id, blob: file, path: fileName, takenAt, caption });
       setUploading(false);
       if (!queued) {
         toast.error("Couldn't save that photo on your phone. Try again when you have signal.");
-        return;
+        return false;
       }
       setPhotos((prev) => [{
         id: `pending:${fileName}`,
         url: fileName,
         created_at: takenAt,
+        caption,
         signedUrl: URL.createObjectURL(file),
         pendingSync: true,
       }, ...prev]);
       toast.success('No signal — that photo is saved on your phone and will send itself.');
-      return;
+      return true;
     }
 
     const [withUrl] = await withSignedUrls([photoRow]);
     setPhotos((prev) => [withUrl, ...prev]);
     setUploading(false);
+    return true;
   };
 
   if (loadError) {
@@ -1136,6 +1217,9 @@ export default function JobDetailPage() {
     .reduce((sum, r) => sum + (r.requested_minutes || 0), 0);
 
   const doneTasks = tasks.filter((t) => t.completed).length;
+  // Rooms to refresh on this visit (0150), and which are ticked.
+  const houseRooms = job?.house_rooms || [];
+  const roomsDone = ticked(job);
   const mapsHref = job.properties?.lat != null && job.properties?.lng != null
     ? `https://www.google.com/maps/dir/?api=1&destination=${job.properties.lat},${job.properties.lng}`
     : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(job.properties?.address || '')}`;
@@ -1263,7 +1347,16 @@ export default function JobDetailPage() {
 
             {visitNotesCard}
 
-            {refreshesOf(job).length > 0 && (
+            {houseRooms.length > 0 && (
+              <div className="visit-card visit-access">
+                <div className="visit-card-label">Refresh every room on this visit</div>
+                <p className="visit-access-body">
+                  {houseRooms.join(', ')}, plus the communal areas. You'll take a photo of each room and tick it off once you've checked in.
+                </p>
+              </div>
+            )}
+
+            {houseRooms.length === 0 && refreshesOf(job).length > 0 && (
               <div className="visit-card visit-access">
                 <div className="visit-card-label">Room refresh on this visit</div>
                 {refreshesOf(job).map((r, i) => (
@@ -1445,6 +1538,37 @@ export default function JobDetailPage() {
                 </button>
               ))}
             </div>
+
+            {houseRooms.length > 0 && (
+              <div className="visit-card visit-card-flush visit-rooms">
+                <div className="visit-progress-head" style={{ padding: '12px 14px 4px' }}>
+                  <span className="visit-progress-count">Rooms refreshed: {houseRooms.filter((r) => roomsDone.has(r)).length} of {houseRooms.length}</span>
+                  <span className="visit-progress-hint">Tap for a photo, then it ticks</span>
+                </div>
+                <input ref={roomPhotoInput} type="file" accept="image/*" capture="environment" onChange={handleRoomPhoto} style={{ display: 'none' }} />
+                {houseRooms.map((room) => {
+                  const done = roomsDone.has(room);
+                  const hasPhoto = photos.some((ph) => ph.caption === room);
+                  return (
+                    <button
+                      type="button"
+                      key={room}
+                      className={`visit-task${done ? ' is-done' : ''}`}
+                      onClick={() => tapRoom(room)}
+                      disabled={!!roomBusy || uploading}
+                    >
+                      <span className="visit-task-check">{done ? <Check size={14} strokeWidth={3} /> : !hasPhoto && <Camera size={13} />}</span>
+                      <span className="visit-task-text">
+                        {room}
+                        <span style={{ display: 'block', fontSize: 12, opacity: 0.7 }}>
+                          {roomBusy === room ? 'Saving...' : done ? 'Refreshed' : hasPhoto ? 'Photo taken - tap to tick' : 'Tap to take a photo'}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {extensionRequests.length > 0 && (
               <div className="visit-card">

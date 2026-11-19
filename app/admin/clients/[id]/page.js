@@ -21,8 +21,16 @@ import { useConfirm } from '../../../components/ConfirmProvider';
 import { useToast } from '../../../components/ToastProvider';
 import { claimFor, describeClockRecord, indexClaims, lateMinutes } from '../../../../lib/clockIn';
 import BackButton from '../../../components/BackButton';
+import { parseRoomList, numberedRooms, roomMinutesFor, plannedMinutes, roomListOf, DEFAULT_ROOM_MINUTES } from '../../../../lib/roomRefresh';
+import { localDateString } from '../../../../lib/localDate';
 import ClientProjects from '../../../components/ClientProjects';
 import ClientPortalLogins from '../../../components/ClientPortalLogins';
+
+const formatMinutes = (m) => {
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  return `${h ? `${h} hr${h === 1 ? '' : 's'}` : ''}${h && r ? ' ' : ''}${r ? `${r} min` : ''}` || '0 min';
+};
 
 export default function ClientDetail() {
   const router = useRouter();
@@ -50,6 +58,12 @@ export default function ClientDetail() {
   const [accessEditId, setAccessEditId] = useState(null);
   const [accessDraft, setAccessDraft] = useState('');
   const [savingAccess, setSavingAccess] = useState(false);
+  // Fortnightly room refreshes (0150). null until loaded, and stays null
+  // before 0150 is run, which hides the Rooms button.
+  const [roomMinutes, setRoomMinutes] = useState(null);
+  const [roomsEditId, setRoomsEditId] = useState(null);
+  const [roomsDraft, setRoomsDraft] = useState(null);
+  const [savingRooms, setSavingRooms] = useState(false);
 
   // Correcting a property's pin and radius (0089). `start` is where the map
   // opens and stays put while dragging; `lat`/`lng` follow the marker.
@@ -108,8 +122,17 @@ export default function ClientDetail() {
       .eq('client_id', id)
       .order('address');
 
+    // Asked for on their own: before 0150 is run these columns don't exist,
+    // and that mustn't stop the client page loading.
+    const [{ data: roomData, error: roomError }, { data: minutesRow }] = await Promise.all([
+      supabase.from('properties').select('id, rooms, rooms_tracked_since').eq('client_id', id),
+      supabase.from('clients').select('room_refresh_minutes').eq('id', id).maybeSingle(),
+    ]);
+    const roomsById = new Map((roomData || []).map((p) => [p.id, p]));
+
     setClient(clientData);
-    setProperties(propertiesData || []);
+    setProperties((propertiesData || []).map((p) => ({ ...p, ...roomsById.get(p.id) })));
+    setRoomMinutes(roomError ? null : { value: minutesRow?.room_refresh_minutes ?? null });
     setLoading(false);
   };
 
@@ -496,6 +519,47 @@ export default function ClientDetail() {
     toast.success('Access details saved - cleaners see them on the job once assigned.');
   };
 
+  const startEditRooms = (p) => {
+    if (roomsEditId === p.id) { setRoomsEditId(null); setRoomsDraft(null); return; }
+    setRoomsEditId(p.id);
+    setRoomsDraft({
+      text: roomListOf(p).join('\n'),
+      since: p.rooms_tracked_since || localDateString(new Date()),
+      minutes: roomMinutes?.value != null ? String(roomMinutes.value) : '',
+    });
+  };
+
+  // The room list is per property; the minutes per room are the client's,
+  // shared by all their properties.
+  const saveRooms = async (propertyId) => {
+    const rooms = parseRoomList(roomsDraft.text);
+    const minutes = roomsDraft.minutes.trim() === '' ? null : Number(roomsDraft.minutes);
+    if (minutes != null && !(Number.isInteger(minutes) && minutes >= 5 && minutes <= 240)) {
+      toast.error('Minutes per room must be a whole number from 5 to 240, or blank for 15.');
+      return;
+    }
+    if (rooms.length > 0 && !roomsDraft.since) { toast.error('Pick the date to start tracking from.'); return; }
+    setSavingRooms(true);
+    const { data, error } = await supabase
+      .from('properties')
+      .update({ rooms, rooms_tracked_since: rooms.length > 0 ? roomsDraft.since : null })
+      .eq('id', propertyId)
+      .select('id, rooms, rooms_tracked_since')
+      .single();
+    let minutesError = null;
+    if (!error && minutes !== (roomMinutes?.value ?? null)) {
+      ({ error: minutesError } = await supabase.from('clients').update({ room_refresh_minutes: minutes }).eq('id', id));
+      if (!minutesError) setRoomMinutes({ value: minutes });
+    }
+    setSavingRooms(false);
+    if (error || !data) { toast.error("Couldn't save the room list."); return; }
+    if (minutesError) toast.error("The rooms saved, but the minutes per room didn't.");
+    setProperties((prev) => prev.map((p) => (p.id === propertyId ? { ...p, ...data } : p)));
+    setRoomsEditId(null);
+    setRoomsDraft(null);
+    if (!minutesError) toast.success(rooms.length > 0 ? `${rooms.length} room${rooms.length === 1 ? '' : 's'} saved - cleaners tick each one on every visit.` : 'Room tracking turned off for this property.');
+  };
+
   const startEditLocation = (p) => {
     if (locationEditId === p.id) { setLocationEditId(null); setLocationDraft(null); return; }
     setLocationEditId(p.id);
@@ -834,6 +898,12 @@ export default function ClientDetail() {
                       Client-provided access notes: {p.client_access_notes}
                     </div>
                   )}
+                  {roomMinutes && roomListOf(p).length > 0 && (
+                    <div style={{ fontSize: 12, color: 'var(--ink)', marginTop: 2 }}>
+                      {roomListOf(p).length} room{roomListOf(p).length === 1 ? '' : 's'} refreshed every visit ({roomListOf(p).join(', ')}).
+                      {' '}Book each visit for {formatMinutes(plannedMinutes(p, { room_refresh_minutes: roomMinutes.value }))}: 1 hr communal + {roomListOf(p).length} × {roomMinutesFor({ room_refresh_minutes: roomMinutes.value })} min.
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   <button
@@ -843,6 +913,15 @@ export default function ClientDetail() {
                   >
                     {accessEditId === p.id ? 'Close' : 'Access'}
                   </button>
+                  {roomMinutes && (
+                    <button
+                      className="btn-secondary"
+                      onClick={() => startEditRooms(p)}
+                      title="The rooms in this house - cleaners tick each one as refreshed on every visit, and only ticked rooms are invoiced"
+                    >
+                      {roomsEditId === p.id ? 'Close' : 'Rooms'}
+                    </button>
+                  )}
                   <button className="btn-secondary" onClick={() => toggleChecklist(p.id)} title="Show or hide the room-by-room checklist for this property">
                     {expandedPropertyId === p.id ? 'Close' : 'Checklist'}
                   </button>
@@ -892,6 +971,45 @@ export default function ClientDetail() {
                       title="Save the access details for this property"
                     >
                       {savingAccess ? 'Saving...' : 'Save access details'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {roomsEditId === p.id && roomsDraft && (
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--hairline)' }}>
+                  <label>Rooms in this house</label>
+                  <textarea
+                    value={roomsDraft.text}
+                    onChange={(e) => setRoomsDraft((d) => ({ ...d, text: e.target.value }))}
+                    rows={5}
+                    placeholder={'One per line, e.g.\nRoom 1\nRoom 2\nAttic room'}
+                    style={{ width: '100%' }}
+                  />
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '6px 0 10px' }}>
+                    {[3, 4, 5, 6, 7, 8].map((n) => (
+                      <button key={n} type="button" className="btn-secondary" onClick={() => setRoomsDraft((d) => ({ ...d, text: numberedRooms(n).join('\n') }))} title={`Fill in Room 1 to Room ${n}`}>
+                        {n} rooms
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                    <div>
+                      <label>Track from</label>
+                      <input type="date" value={roomsDraft.since} onChange={(e) => setRoomsDraft((d) => ({ ...d, since: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label>Minutes per room (all {client.name} properties)</label>
+                      <input type="number" min="5" max="240" value={roomsDraft.minutes} placeholder={String(DEFAULT_ROOM_MINUTES)} onChange={(e) => setRoomsDraft((d) => ({ ...d, minutes: e.target.value }))} />
+                    </div>
+                  </div>
+                  <p style={{ fontSize: 12, color: 'var(--muted)', margin: '6px 0 8px' }}>
+                    On every visit from the start date, the cleaner ticks each room as refreshed and takes a photo of it. The invoice charges the communal clean plus each ticked room at the minutes above; rooms not ticked aren't charged. Visits before the start date are invoiced as before. Leave the list empty to stop tracking.
+                  </p>
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button type="button" className="btn-secondary" onClick={() => { setRoomsEditId(null); setRoomsDraft(null); }}>Cancel</button>
+                    <button type="button" className="btn-primary" onClick={() => saveRooms(p.id)} disabled={savingRooms}>
+                      {savingRooms ? 'Saving...' : 'Save rooms'}
                     </button>
                   </div>
                 </div>

@@ -6,7 +6,7 @@ import { PageSkeleton } from '../components/Skeleton';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ChevronDown, ChevronRight, CircleAlert, Package, Wrench, CalendarClock, BadgeCheck, FileText, Boxes, Plus, Check, FileBarChart, KeyRound, RefreshCw, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, CircleAlert, Package, Wrench, CalendarClock, BadgeCheck, FileText, Boxes, Plus, Check, FileBarChart, KeyRound, RefreshCw, Search, DoorOpen } from 'lucide-react';
 import { openSearch } from '../components/SearchPalette';
 import { supabase } from '../../lib/supabaseClient';
 import { withoutTestAccounts } from '../../lib/testAccounts';
@@ -19,6 +19,7 @@ import { assignmentMinutes } from '../../lib/hoursWorked';
 import WorkAnniversaryPopup from '../components/WorkAnniversaryPopup';
 import { abbreviateName } from '../../lib/jobOverlap';
 import { shortAddress, nameRepeatsStreet } from '../../lib/shortAddress';
+import { overdueRooms, REFRESH_EVERY_DAYS } from '../../lib/roomRefresh';
 import { tintFor, tintsByOrder } from '../../lib/avatarTint';
 
 function initialsOf(fullName) {
@@ -182,6 +183,8 @@ export default function AdminDashboard() {
   const [teamTints, setTeamTints] = useState(new Map());
   const [noAccessSites, setNoAccessSites] = useState([]);
   const [showNoAccess, setShowNoAccess] = useState(false);
+  const [roomsOverdue, setRoomsOverdue] = useState([]);
+  const [showRoomsOverdue, setShowRoomsOverdue] = useState(false);
 
   const [payrollPeriod, setPayrollPeriod] = useState('this_week');
   const [payrollLoading, setPayrollLoading] = useState(true);
@@ -300,6 +303,29 @@ export default function AdminDashboard() {
   // sweeps below still run each time: they are idempotent, and pg_cron was
   // found not to be firing the clock-in nudge (2026-10-06), so a dashboard
   // left open is what keeps nudges going out on time.
+  // Rooms and communal areas at tracked properties (0150) not done for a
+  // fortnight. On its own, after the rest of the page: before 0150 is run
+  // the rooms column doesn't exist and this just shows nothing.
+  const loadRoomsOverdue = async () => {
+    const { data: houses, error } = await supabase
+      .from('properties')
+      .select('id, address, client_id, rooms, rooms_tracked_since, clients(name)')
+      .not('rooms_tracked_since', 'is', null);
+    if (error || !houses || houses.length === 0) { setRoomsOverdue([]); return; }
+    const since = new Date(Date.now() - 90 * 86400000).toISOString();
+    const { data: visits, error: visitsError } = await supabase
+      .from('jobs')
+      .select('property_id, scheduled_at, status, room_refreshes')
+      .in('property_id', houses.map((h) => h.id))
+      .in('status', ['completed', 'in_progress'])
+      .gte('scheduled_at', since);
+    if (visitsError) return;
+    const byId = new Map(houses.map((h) => [h.id, h]));
+    setRoomsOverdue(overdueRooms({ properties: houses, jobs: visits || [], today: localDateString(new Date()) })
+      .map((o) => ({ ...o, clientId: byId.get(o.propertyId)?.client_id, clientName: byId.get(o.propertyId)?.clients?.name }))
+      .sort((a, b) => b.items.length - a.items.length));
+  };
+
   const loadDashboard = async ({ refresh = false } = {}) => {
     const session = await getSessionWithRetry();
     if (!session) { if (!refresh) router.push('/'); return; }
@@ -439,6 +465,7 @@ export default function AdminDashboard() {
       noCodes[j.property_id].jobs += 1;
     });
     setNoAccessSites(Object.values(noCodes).sort((a, b) => b.jobs - a.jobs));
+    loadRoomsOverdue();
 
     const todaysCompleted = (todaysJobsData || []).filter((j) => j.status === 'completed').length;
     const todaysUnassigned = (todaysJobsData || []).filter((j) => (j.job_assignments || []).length === 0).length;
@@ -760,6 +787,37 @@ export default function AdminDashboard() {
     </div>
   );
 
+  // Tracked HMOs (0150) where a room or the communal areas haven't been done
+  // for a fortnight - what TKR are owed, caught before they notice.
+  const roomsItem = roomsOverdue.length > 0 && (
+    <div className="dash-att-group">
+      <button type="button" className="dash-att is-toggle" onClick={() => setShowRoomsOverdue((v) => !v)} aria-expanded={showRoomsOverdue}>
+        <span className="dash-att-icon is-warn"><DoorOpen size={17} /></span>
+        <div className="dash-att-main">
+          <div className="dash-att-title">Rooms not refreshed for {REFRESH_EVERY_DAYS} days at {roomsOverdue.length} site{roomsOverdue.length === 1 ? '' : 's'}</div>
+          <div className="dash-att-sub">
+            {roomsOverdue.reduce((n, site) => n + site.items.length, 0)} rooms or communal areas overdue · book a visit or check the ticks
+          </div>
+        </div>
+        {showRoomsOverdue ? <ChevronDown size={16} className="dash-att-chevron" aria-hidden /> : <ChevronRight size={16} className="dash-att-chevron" aria-hidden />}
+      </button>
+      {showRoomsOverdue && (
+        <ul className="dash-att-list">
+          {roomsOverdue.map((site) => (
+            <li key={site.propertyId}>
+              <Link href={`/admin/clients/${site.clientId}`} title="Open the client to see this property's rooms">
+                {shortAddress(site.address) || site.address}
+              </Link>
+              {' '}<span>
+                {site.items.map((i) => `${i.label} (${i.last ? `${i.days} days` : 'not done yet'})`).join(', ')}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+
   const renderTodayJob = (job, state) => {
     const { title, street } = jobWhere(job);
     const names = namesOf(job);
@@ -1016,10 +1074,11 @@ export default function AdminDashboard() {
           <section className="dash-card is-attention">
             <div className="dash-card-head">
               <h2>Needs attention</h2>
-              {(attention.length > 0 || noAccessSites.length > 0) && <span className="dash-card-note">Most urgent first</span>}
+              {(attention.length > 0 || noAccessSites.length > 0 || roomsOverdue.length > 0) && <span className="dash-card-note">Most urgent first</span>}
             </div>
-            {attention.length === 0 && noAccessSites.length === 0 && <EmptyState compact tone="good" icon={EmptyIconCheck} title="Nothing needs attention right now" />}
+            {attention.length === 0 && noAccessSites.length === 0 && roomsOverdue.length === 0 && <EmptyState compact tone="good" icon={EmptyIconCheck} title="Nothing needs attention right now" />}
             {redAttention.map(renderAttentionItem)}
+            {roomsItem}
             {accessItem}
             {otherAttention.map(renderAttentionItem)}
             {attention.length > 6 && (
