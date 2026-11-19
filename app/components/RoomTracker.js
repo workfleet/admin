@@ -47,6 +47,9 @@ export default function RoomTracker({ clientId, refreshKey }) {
   const [error, setError] = useState('');
   const [houses, setHouses] = useState([]);
   const [jobs, setJobs] = useState([]);
+  // Each house's communal areas, from its property checklist, shown under
+  // the Communal areas row.
+  const [areas, setAreas] = useState({});
   const [busy, setBusy] = useState(null);
   const today = localDateString(new Date());
 
@@ -81,6 +84,21 @@ export default function RoomTracker({ clientId, refreshKey }) {
         .order('scheduled_at');
       if (jobsError) { setError("Couldn't load the visits."); setLoading(false); return; }
       jobRows = data || [];
+      // Not essential: if the checklist can't be read the row just shows
+      // without its list of areas.
+      const { data: items } = await supabase
+        .from('property_checklist_items')
+        .select('property_id, room, sort_order')
+        .in('property_id', tracked.map((h) => h.id))
+        .order('sort_order');
+      const byHouse = {};
+      for (const item of items || []) {
+        const area = String(item.room || '').trim();
+        if (!area) continue;
+        const list = byHouse[item.property_id] || (byHouse[item.property_id] = []);
+        if (!list.includes(area)) list.push(area);
+      }
+      setAreas(byHouse);
     }
     setHouses(tracked.sort((a, b) => (shortAddress(a.address) || a.address).localeCompare(shortAddress(b.address) || b.address, 'en-GB', { numeric: true })));
     setJobs(jobRows);
@@ -166,7 +184,14 @@ export default function RoomTracker({ clientId, refreshKey }) {
                     const isBusy = (id) => busy === `${id}:${row.room}`;
                     return (
                       <tr key={row.label}>
-                        <td style={{ fontWeight: row.communal ? 600 : 400 }}>{row.label}</td>
+                        <td style={{ fontWeight: row.communal ? 600 : 400 }}>
+                          {row.label}
+                          {row.communal && (areas[house.id] || []).length > 0 && (
+                            <div style={{ fontSize: 12, fontWeight: 400, color: 'var(--muted)', maxWidth: 260 }}>
+                              {areas[house.id].join(', ')}
+                            </div>
+                          )}
+                        </td>
                         <td>
                           {dayLabel(row.last) || <span style={{ color: 'var(--muted)' }}>Not yet</span>}
                           {row.missedOn && <div style={{ fontSize: 12, color: 'var(--wf-overdue)' }}>Not done {dayLabel(row.missedOn)}</div>}
