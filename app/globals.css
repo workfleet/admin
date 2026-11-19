@@ -660,6 +660,8 @@ h3 { font-size: 15px; line-height: 1.35; letter-spacing: -0.01em; }
 .badge.in_progress { background: #E3EDFD; color: #1A4FA8; }
 .badge.completed { background: var(--wf-verified-bg); color: var(--wf-verified-text); }
 .badge.missed { background: var(--wf-overdue-bg); color: #A3152A; }
+/* A subcontractor invoice the office has a question about (0154). */
+.badge.queried { background: #FDF1DC; color: #8A5300; }
 
 /* ---- Admin shell / sidebar layout ---- */
 .admin-shell {

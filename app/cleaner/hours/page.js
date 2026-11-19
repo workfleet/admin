@@ -243,6 +243,19 @@ export default function CleanerHours() {
         </div>
       </div>
 
+      {subcontractor && (
+      <div className="card" style={{ background: 'var(--wf-ash)' }}>
+        <p style={{ fontSize: 13, margin: 0 }}>
+          As a subcontractor you invoice us for these hours once a pay period has gone to payroll.
+        </p>
+        <p style={{ fontSize: 12.5, margin: '6px 0 0' }}>
+          <Link href="/cleaner/invoices" style={{ color: 'var(--brand-link)', fontWeight: 600, textDecoration: 'none' }}>
+            Send or check an invoice →
+          </Link>
+        </p>
+      </div>
+      )}
+
       {!subcontractor && (
       <div className="card" style={{ background: 'var(--wf-ash)' }}>
         <p style={{ fontSize: 13, margin: 0 }}>

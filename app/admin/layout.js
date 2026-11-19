@@ -68,6 +68,8 @@ const NAV_ITEMS = [
   // Payroll figures have been admin-only since supervisors arrived (0035);
   // the page checks the role again itself.
   { href: '/admin/payroll', label: 'Payroll', icon: Banknote, adminOnly: true, group: 'People' },
+  // Jess's login only, like client Invoices; the table enforces it too (0154).
+  { href: '/admin/subcontractor-invoices', label: 'Subcontractor invoices', icon: Receipt, adminOnly: true, invoicesOnly: true, group: 'People' },
   { href: '/admin/training', label: 'Training', icon: Video, group: 'People' },
 
   { href: '/admin/templates', label: 'Templates', icon: ListChecks, group: 'Records' },

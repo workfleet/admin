@@ -4,7 +4,7 @@ import { PageSkeleton } from '../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { X, Clock, CalendarDays, TreePalm, ChevronRight, MapPin, MessageCircle, LifeBuoy, Star } from 'lucide-react';
+import { X, Clock, CalendarDays, TreePalm, ChevronRight, MapPin, MessageCircle, LifeBuoy, Star, Receipt } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../lib/authGate';
 import { purgeOldNotifications } from '../../lib/notifications';
@@ -436,7 +436,7 @@ export default function CleanerDashboard() {
       {/* Three figures they'd otherwise go to Hours and Rota for. Same tiled
           icon style as the hours page so the two read as one app. Hours and
           jobs link to the hours page; holiday to the rota, where it's booked. */}
-      <div className="stat-row" style={{ gridTemplateColumns: `repeat(${subcontractor ? 2 : 3}, minmax(0, 1fr))`, gap: 10 }}>
+      <div className="stat-row" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
         <Link href="/cleaner/hours" className="stat-card stat-hours" style={{ padding: '12px 12px' }} title="Hours from completed jobs this week, Monday to Sunday">
           <div className="stat-card-top" style={{ marginBottom: 6 }}>
             <div className="stat-card-icon" style={{ width: 30, height: 30 }}><Clock size={16} /></div>
@@ -453,6 +453,17 @@ export default function CleanerDashboard() {
           <div className="stat-number" style={{ fontSize: 22 }}>{formatHours(holidayRemaining)}</div>
           <div className="stat-label">Holiday left</div>
           <div className="stat-sublabel" style={{ fontSize: 12 }}>request on rota</div>
+        </Link>
+        )}
+        {/* A subcontractor has no holiday; in its place, where they bill us (0154). */}
+        {subcontractor && (
+        <Link href="/cleaner/invoices" className="stat-card" style={{ padding: '12px 12px' }} title="Invoice the office for a closed pay period">
+          <div className="stat-card-top" style={{ marginBottom: 6 }}>
+            <div className="stat-card-icon" style={{ width: 30, height: 30 }}><Receipt size={16} /></div>
+          </div>
+          <div className="stat-number" style={{ fontSize: 22 }}>£</div>
+          <div className="stat-label">Invoices</div>
+          <div className="stat-sublabel" style={{ fontSize: 12 }}>send and track</div>
         </Link>
         )}
         <Link href="/cleaner/hours" className="stat-card stat-jobs" style={{ padding: '12px 12px' }} title="Jobs you've completed this calendar month">

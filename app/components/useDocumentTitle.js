@@ -27,6 +27,8 @@ const SUBPAGES = [
   [/^\/admin\/clients\/[^/]+$/, 'Client'],
   [/^\/admin\/cleaners\/[^/]+$/, 'Cleaner'],
   ['/cleaner/hours', 'My hours'],
+  ['/cleaner/invoices', 'Invoices'],
+  ['/admin/subcontractor-invoices', 'Subcontractor invoices'],
   ['/cleaner/incidents', 'Accidents and incidents'],
   ['/cleaner/notifications', 'Notifications'],
   ['/cleaner/training', 'Training'],
