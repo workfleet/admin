@@ -230,7 +230,7 @@ export default function InvoiceBreakdown() {
                   }))}
                   onCopy={(text) => copy(text, 'Line')}
                 />
-                <TotalRow label="Cleaning" amount={breakdown.cleaningTotal} />
+                <TotalRow label={pricing ? 'Cleaning' : 'Communal areas'} amount={breakdown.cleaningTotal} />
               </div>
 
               {breakdown.refreshes.length > 0 && (

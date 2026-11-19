@@ -26,7 +26,7 @@ describe('buildInvoiceBreakdown', () => {
     expect(b.lines[0].amount).toBe(96);
     expect(b.lines[1].amount).toBe(24);
     expect(b.total).toBe(120);
-    expect(propertyLineText(b.lines[0])).toBe('20 Olive Street - 2 cleaning visits: 2 July 2026, 16 July 2026');
+    expect(propertyLineText(b.lines[0])).toBe('20 Olive Street - communal areas, 2 visits: 2 July 2026, 16 July 2026');
   });
 
   it('takes refresh time off the clean and lists the room on its own line', () => {
@@ -120,7 +120,7 @@ describe('quickbooksRows', () => {
     expect(rows).toHaveLength(3);
     expect(rows[0]).toMatchObject({
       invoiceNo: '1042', customer: 'TKR Management', invoiceDate: '01/11/2026', dueDate: '01/11/2026', terms: 'Due on receipt',
-      item: 'Cleaning', description: '20 Olive Street - 1 cleaning visit: 2 October 2026', quantity: '1.50', rate: '24.00', amount: '36.00',
+      item: 'Cleaning', description: '20 Olive Street - communal areas, 1 visit: 2 October 2026', quantity: '1.50', rate: '24.00', amount: '36.00',
     });
     // Like QuickBooks' sample: later lines of the same invoice leave the customer and dates blank.
     expect(rows[1].customer).toBeUndefined();
