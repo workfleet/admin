@@ -70,11 +70,10 @@ export default function RoomTracker({ clientId, refreshKey, readOnly = false }) 
     const tracked = (houseRows || []).filter((h) => (h.rooms || []).length > 0);
     let jobRows = [];
     if (tracked.length > 0) {
-      // From the earliest start (or 60 days back) to six weeks ahead: enough
-      // to know each room's last refresh and its next booking.
-      const earliest = tracked.map((h) => h.rooms_tracked_since).sort()[0];
-      const back = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10);
-      const from = earliest < back ? back : earliest;
+      // 90 days back to six weeks ahead: enough to know each room's last
+      // refresh - including ones done before tracking began - and its next
+      // booking.
+      const from = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
       const to = new Date(Date.now() + 42 * 86400000).toISOString();
       const { data, error: jobsError } = await supabase
         .from('jobs')

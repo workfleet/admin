@@ -53,6 +53,12 @@ describe('tracker', () => {
     expect(row).toMatchObject({ last: null, missedOn: '2026-11-26', lastPlannedJobId: 'c' });
   });
 
+  it('counts refreshes done before tracking started', () => {
+    const before = [job({ id: 'old', scheduled_at: '2026-11-12T14:00:00Z', room_refreshes: plan('Room 1') })];
+    const row = trackerRows({ property: slate, jobs: before, today: '2026-11-21' }).rows.find((x) => x.label === 'Room 1');
+    expect(row).toMatchObject({ last: '2026-11-12', lastJobId: 'old', dueDay: '2026-11-26', status: 'ok' });
+  });
+
   it('lists only what is overdue for the dashboard', () => {
     const [house] = overdueRooms({ properties: [slate], jobs, today: '2026-12-11' });
     // The 10 Dec visit was never closed, so nothing counts as booked.
