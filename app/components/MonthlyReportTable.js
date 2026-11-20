@@ -70,7 +70,11 @@ export default function MonthlyReportTable({ clientId, month, staffView = false,
   if (allRows.length === 0) return <p className="empty-state">No properties.</p>;
   const rows = propertyId ? allRows.filter((r) => r.id === propertyId) : allRows;
 
-  const withVisits = rows.filter((r) => r.visits > 0 || r.missed > 0);
+  // A client is only shown properties with at least one report the office
+  // has shared ("Add to client portal"). The monthly PDF holds shared
+  // reports only, so without one it was an empty PDF - TKR's whole Reports
+  // page was blank ones (Nov 2026). The office still sees every property.
+  const withVisits = rows.filter((r) => (staffView ? r.visits > 0 || r.missed > 0 : r.shared > 0));
   const quiet = rows.length - withVisits.length;
   const unsharedTotal = rows.reduce((t, r) => t + r.unshared, 0);
 
@@ -84,7 +88,9 @@ export default function MonthlyReportTable({ clientId, month, staffView = false,
       )}
       {error && <p style={{ color: 'var(--wf-overdue)', fontSize: 13, margin: '0 0 12px' }}>{error}</p>}
 
-      {withVisits.length === 0 && <p className="empty-state">No visits this month.</p>}
+      {withVisits.length === 0 && (
+        <p className="empty-state">{staffView ? 'No visits this month.' : 'No reports have been shared with you for this month yet.'}</p>
+      )}
 
       <div className="job-list">
         {withVisits.map((r) => (
@@ -112,7 +118,7 @@ export default function MonthlyReportTable({ clientId, month, staffView = false,
         ))}
       </div>
 
-      {quiet > 0 && withVisits.length > 0 && (
+      {staffView && quiet > 0 && withVisits.length > 0 && (
         <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 12 }}>
           {quiet} other propert{quiet === 1 ? 'y' : 'ies'} had no visits this month.
         </p>
