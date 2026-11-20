@@ -135,7 +135,7 @@ export default function RoomTracker({ clientId, refreshKey, readOnly = false }) 
     <div>
       <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
         {readOnly
-          ? <>The communal areas and every room are refreshed at least every {REFRESH_EVERY_DAYS} days. This shows when each was last done and the visit it&apos;s next booked on.</>
+          ? <>The communal areas and every room are refreshed at least every {REFRESH_EVERY_DAYS} days. This shows when each was last done and the visit it&apos;s next booked on. <a href="/client/service-record">See every visit in your service record &rarr;</a></>
           : <>Communal areas and every room, kept within {REFRESH_EVERY_DAYS} days. Book rooms onto a visit here; after the visit, mark any that weren&apos;t done.</>}
       </p>
 

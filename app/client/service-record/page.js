@@ -7,7 +7,8 @@ import { Download, Printer } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../../lib/authGate';
 import { currentMonth, recentMonths, monthLabel, monthBounds, formatDuration } from '../../../lib/detailedReport';
-import { serviceRecordRows, serviceRecordTotals, serviceRecordCsv } from '../../../lib/serviceRecord';
+import { serviceRecordRows, serviceRecordTotals, serviceRecordCsv, hasRoomRefreshes } from '../../../lib/serviceRecord';
+import Link from 'next/link';
 import BackButton from '../../components/BackButton';
 import ClientSitePicker, { useClientSite, ALL_SITES } from '../../components/ClientSitePicker';
 
@@ -22,6 +23,9 @@ export default function ServiceRecord() {
   const [month, setMonth] = useState(currentMonth());
   const [jobs, setJobs] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Whether any of their properties has its rooms tracked (0150), for the
+  // link to the Rooms page.
+  const [hasRooms, setHasRooms] = useState(false);
   const { sites, site, current, setSite } = useClientSite(clientId);
 
   useEffect(() => {
@@ -31,8 +35,12 @@ export default function ServiceRecord() {
       const { data: profile } = await supabase.from('profiles').select('client_id').eq('id', session.user.id).single();
       if (profile?.client_id) {
         setClientId(profile.client_id);
-        const { data: c } = await supabase.from('clients').select('name').eq('id', profile.client_id).single();
+        const [{ data: c }, { count: tracked }] = await Promise.all([
+          supabase.from('clients').select('name').eq('id', profile.client_id).single(),
+          supabase.from('properties').select('id', { count: 'exact', head: true }).eq('client_id', profile.client_id).not('rooms_tracked_since', 'is', null),
+        ]);
         setClientName(c?.name || '');
+        setHasRooms((tracked || 0) > 0);
       }
       setLoading(false);
     })();
@@ -48,7 +56,7 @@ export default function ServiceRecord() {
       const bounds = monthBounds(month);
       const { data } = await supabase
         .from('jobs')
-        .select('id, scheduled_at, status, properties(address), job_assignments(profiles(full_name)), checkins(checked_in_at, checked_out_at, profiles(full_name)), tasks(completed)')
+        .select('id, scheduled_at, status, room_refreshes, properties(address), job_assignments(profiles(full_name)), checkins(checked_in_at, checked_out_at, profiles(full_name)), tasks(completed)')
         .in('property_id', ids)
         .gte('scheduled_at', bounds.start)
         .lt('scheduled_at', bounds.end)
@@ -60,6 +68,7 @@ export default function ServiceRecord() {
 
   const rows = useMemo(() => serviceRecordRows(jobs || []), [jobs]);
   const totals = useMemo(() => serviceRecordTotals(rows), [rows]);
+  const showRooms = hasRoomRefreshes(rows);
   const where = current ? current.address : 'All sites';
 
   const downloadCsv = () => {
@@ -81,6 +90,11 @@ export default function ServiceRecord() {
         <div>
           <h1>Service record</h1>
           <p className="page-subtitle no-print">Proof of every visit - for your own records, auditors or landlord</p>
+          {hasRooms && (
+            <p className="no-print" style={{ fontSize: 13.5, margin: '4px 0 0' }}>
+              <Link href="/client/rooms">See when each room is next due &rarr;</Link>
+            </p>
+          )}
           <p className="print-only" style={{ margin: '4px 0 0' }}>
             {clientName} · {where} · {monthLabel(month)} · CrewConnect
           </p>
@@ -130,6 +144,7 @@ export default function ServiceRecord() {
                     <th>On site</th>
                     <th>Cleaner</th>
                     <th>Checklist</th>
+                    {showRooms && <th>Rooms refreshed</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -143,6 +158,7 @@ export default function ServiceRecord() {
                       <td className="nowrap">{r.onSite || '—'}</td>
                       <td>{r.cleaners || '—'}</td>
                       <td className="nowrap">{r.checklist || '—'}</td>
+                      {showRooms && <td>{r.rooms || '—'}</td>}
                     </tr>
                   ))}
                 </tbody>

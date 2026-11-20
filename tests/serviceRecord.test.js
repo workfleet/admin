@@ -69,6 +69,23 @@ describe('serviceRecordTotals', () => {
   });
 });
 
+describe('room refreshes', () => {
+  it('lists the rooms done on a visit, not ones marked not done', () => {
+    const [row] = serviceRecordRows([job({ room_refreshes: [{ room: 'Room 2', minutes: 15 }, { room: 'Room 5', minutes: 15, skipped: true }, { room: 'Room 3', minutes: 15 }] })]);
+    expect(row.rooms).toBe('Room 2, Room 3');
+  });
+  it('shows none on a missed visit', () => {
+    const [row] = serviceRecordRows([job({ status: 'missed', room_refreshes: [{ room: 'Room 2', minutes: 15 }] })]);
+    expect(row.rooms).toBe('');
+  });
+  it('adds the spreadsheet column only when there were refreshes', () => {
+    expect(serviceRecordCsv(serviceRecordRows([job()])).split('\r\n')[0]).not.toContain('Rooms refreshed');
+    const csv = serviceRecordCsv(serviceRecordRows([job({ room_refreshes: [{ room: 'Room 2', minutes: 15 }] })]));
+    expect(csv.split('\r\n')[0]).toContain('Rooms refreshed');
+    expect(csv.split('\r\n')[1]).toMatch(/Room 2$/);
+  });
+});
+
 describe('serviceRecordCsv', () => {
   it('quotes commas and defuses formulas', () => {
     const csv = serviceRecordCsv([{ date: 'Wed', address: '1 High St, Swansea', status: 'Done', arrived: '', left: '', onSite: '', cleaners: '=HYPERLINK("x")', checklist: '' }]);
