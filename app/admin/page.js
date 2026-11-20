@@ -798,9 +798,9 @@ export default function AdminDashboard() {
       <button type="button" className="dash-att is-toggle" onClick={() => setShowRoomsOverdue((v) => !v)} aria-expanded={showRoomsOverdue}>
         <span className="dash-att-icon is-warn"><DoorOpen size={17} /></span>
         <div className="dash-att-main">
-          <div className="dash-att-title">Rooms not refreshed for {REFRESH_EVERY_DAYS} days at {roomsOverdue.length} site{roomsOverdue.length === 1 ? '' : 's'}</div>
+          <div className="dash-att-title">Communal areas not cleaned for {REFRESH_EVERY_DAYS} days at {roomsOverdue.length} site{roomsOverdue.length === 1 ? '' : 's'}</div>
           <div className="dash-att-sub">
-            {roomsOverdue.reduce((n, site) => n + site.items.length, 0)} rooms or communal areas overdue with nothing booked · book them on the client's Rooms tab
+            Nothing booked in time · book a visit from the client's Rooms tab
           </div>
         </div>
         {showRoomsOverdue ? <ChevronDown size={16} className="dash-att-chevron" aria-hidden /> : <ChevronRight size={16} className="dash-att-chevron" aria-hidden />}

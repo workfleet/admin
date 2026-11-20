@@ -917,7 +917,7 @@ export default function ClientDetail() {
                   )}
                   {roomMinutes && roomListOf(p).length > 0 && (
                     <div style={{ fontSize: 12, color: 'var(--ink)', marginTop: 2 }}>
-                      Rooms tracked: {roomListOf(p).join(', ')} - each refreshed every {14} days, {formatMinutes(roomMinutesFor({ room_refresh_minutes: roomMinutes.value }))} a room.
+                      Rooms: {roomListOf(p).join(', ')} - refreshed on move-out, {formatMinutes(roomMinutesFor({ room_refresh_minutes: roomMinutes.value }))} a room.
                       {' '}<button type="button" className="link-button" onClick={() => setTab('rooms')} style={{ background: 'none', border: 0, padding: 0, color: 'var(--accent, inherit)', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}>Plan them on the Rooms tab</button>.
                     </div>
                   )}
@@ -934,7 +934,7 @@ export default function ClientDetail() {
                     <button
                       className="btn-secondary"
                       onClick={() => startEditRooms(p)}
-                      title="The rooms in this house - the office keeps each one refreshed every fortnight on the Rooms tab"
+                      title="The rooms in this house - book a room's refresh on the Rooms tab when its tenant moves out"
                     >
                       {roomsEditId === p.id ? 'Close' : 'Rooms'}
                     </button>
@@ -1021,7 +1021,7 @@ export default function ClientDetail() {
                     </div>
                   </div>
                   <p style={{ fontSize: 12, color: 'var(--muted)', margin: '6px 0 8px' }}>
-                    From the start date this property appears on the Rooms tab, which shows when each room was last refreshed and books rooms onto visits (each adds the minutes above to the visit). The cleaner sees the rooms on their job. Rooms you mark as not done aren't charged. Leave the list empty to stop tracking.
+                    From the start date this property appears on the Rooms tab, which shows when the communal areas and each room were last done and books a room's move-out refresh onto a visit (each adds the minutes above to the visit). The cleaner sees the rooms on their job. Rooms you mark as not done aren't charged. Leave the list empty to stop tracking.
                   </p>
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                     <button type="button" className="btn-secondary" onClick={() => { setRoomsEditId(null); setRoomsDraft(null); }}>Cancel</button>

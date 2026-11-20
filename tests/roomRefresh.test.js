@@ -37,14 +37,17 @@ describe('tracker', () => {
   it('shows when each was last done and next booked', () => {
     const r = byLabel('2026-12-01');
     expect(r['Communal areas']).toMatchObject({ last: '2026-11-26', next: '2026-12-10', status: 'booked' });
-    expect(r['Room 1']).toMatchObject({ last: '2026-11-26', lastJobId: 'a', next: null, status: 'ok' });
-    // Never done: due 14 days after tracking began (4 Dec), so 10 Dec is late.
-    expect(r['Room 3']).toMatchObject({ last: null, next: '2026-12-10', nextJobId: 'b', dueDay: '2026-12-04', status: 'due' });
+    // Rooms are done on move-out: no due date, booked or nothing.
+    expect(r['Room 1']).toMatchObject({ last: '2026-11-26', lastJobId: 'a', next: null, dueDay: null, status: 'none' });
+    expect(r['Room 3']).toMatchObject({ last: null, next: '2026-12-10', nextJobId: 'b', status: 'booked' });
   });
 
-  it('turns amber when due soon with nothing booked, red once past due', () => {
-    expect(byLabel('2026-12-07')['Room 1'].status).toBe('due');
-    expect(byLabel('2026-12-11')['Room 1'].status).toBe('overdue');
+  it('turns the communal row amber when due soon with nothing booked, red once past due', () => {
+    const noVisit = [jobs[0]];
+    const comm = (today) => trackerRows({ property: slate, jobs: noVisit, today }).rows[0];
+    expect(comm('2026-12-07').status).toBe('due');
+    expect(comm('2026-12-11').status).toBe('overdue');
+    expect(trackerRows({ property: slate, jobs: noVisit, today: '2027-03-01' }).rows.find((x) => x.label === 'Room 1').status).toBe('none');
   });
 
   it('says when a planned room was marked not done', () => {
@@ -56,13 +59,14 @@ describe('tracker', () => {
   it('counts refreshes done before tracking started', () => {
     const before = [job({ id: 'old', scheduled_at: '2026-11-12T14:00:00Z', room_refreshes: plan('Room 1') })];
     const row = trackerRows({ property: slate, jobs: before, today: '2026-11-21' }).rows.find((x) => x.label === 'Room 1');
-    expect(row).toMatchObject({ last: '2026-11-12', lastJobId: 'old', dueDay: '2026-11-26', status: 'ok' });
+    expect(row).toMatchObject({ last: '2026-11-12', lastJobId: 'old', status: 'none' });
   });
 
   it('lists only what is overdue for the dashboard', () => {
     const [house] = overdueRooms({ properties: [slate], jobs, today: '2026-12-11' });
-    // The 10 Dec visit was never closed, so nothing counts as booked.
-    expect(house.items.map((i) => i.label)).toEqual(['Communal areas', 'Room 1', 'Room 2', 'Room 3']);
+    // The 10 Dec visit was never closed, so the communal clean is late;
+    // rooms are never overdue.
+    expect(house.items.map((i) => i.label)).toEqual(['Communal areas']);
     expect(overdueRooms({ properties: [{ id: 'x', rooms: [] }], jobs: [], today: '2027-01-01' })).toEqual([]);
   });
 });

@@ -23,6 +23,8 @@ const STATUS = {
   ok: { label: 'In date', className: 'wf-pill wf-pill-verified' },
   due: { label: 'Due soon', className: 'wf-pill wf-pill-progress' },
   overdue: { label: 'Overdue', className: 'wf-pill wf-pill-overdue' },
+  // A room with no refresh booked - normal, as rooms are done on move-out.
+  none: { label: '-', className: '' },
 };
 
 const dayLabel = (day) => (day
@@ -134,8 +136,8 @@ export default function RoomTracker({ clientId, refreshKey, readOnly = false }) 
     <div>
       <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
         {readOnly
-          ? <>The communal areas and every room are refreshed at least every {REFRESH_EVERY_DAYS} days. This shows when each was last done and the visit it&apos;s next booked on. <a href="/client/service-record">See every visit in your service record &rarr;</a></>
-          : <>Communal areas and every room, kept within {REFRESH_EVERY_DAYS} days. Book rooms onto a visit here; after the visit, mark any that weren&apos;t done.</>}
+          ? <>The communal areas are cleaned every {REFRESH_EVERY_DAYS} days, and a room is refreshed when its tenant moves out. This shows when each was last done and the visit it&apos;s next booked on. <a href="/client/service-record">See every visit in your service record &rarr;</a></>
+          : <>Communal areas are due every {REFRESH_EVERY_DAYS} days. Rooms are refreshed when a tenant moves out - book the room onto a visit here, and after the visit mark it if it wasn&apos;t done.</>}
       </p>
 
       {error && <div className="card" style={{ color: 'var(--wf-overdue)' }}>{error}</div>}
@@ -150,7 +152,7 @@ export default function RoomTracker({ clientId, refreshKey, readOnly = false }) 
 
       {houses.length > 0 && !readOnly && (
         <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
-          {overdueCount === 0 ? 'Nothing is overdue.' : `${overdueCount} overdue across ${houses.length} properties.`}
+          {overdueCount === 0 ? 'No communal clean is overdue.' : `${overdueCount} communal clean${overdueCount === 1 ? '' : 's'} overdue.`}
           {' '}Amber means due within {DUE_SOON_DAYS} days with nothing booked in time.
         </p>
       )}
@@ -217,8 +219,10 @@ export default function RoomTracker({ clientId, refreshKey, readOnly = false }) 
                         </td>
                         <td>{dayLabel(row.next) || <span style={{ color: 'var(--muted)' }}>-</span>}</td>
                         <td>
-                          <span className={STATUS[row.status].className}>{STATUS[row.status].label}</span>
-                          {row.status !== 'booked' && <div style={{ fontSize: 12, color: 'var(--muted)' }}>due {dayLabel(row.dueDay)}</div>}
+                          {row.status === 'none'
+                            ? <span style={{ color: 'var(--muted)' }}>On move-out</span>
+                            : <span className={STATUS[row.status].className}>{STATUS[row.status].label}</span>}
+                          {row.dueDay && row.status !== 'booked' && <div style={{ fontSize: 12, color: 'var(--muted)' }}>due {dayLabel(row.dueDay)}</div>}
                         </td>
                         {!readOnly && <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                           {!row.communal && nextVisit && !nextPlanned.has(row.room) && (

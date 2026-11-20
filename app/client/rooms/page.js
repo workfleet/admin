@@ -33,7 +33,7 @@ export default function ClientRooms() {
       <div className="page-header-row">
         <div>
           <h1>Rooms</h1>
-          <p className="page-subtitle">Room refreshes and communal cleans at your properties</p>
+          <p className="page-subtitle">Communal cleans every two weeks, and room refreshes when a tenant moves out</p>
         </div>
       </div>
       {failed && <div className="card">Couldn&apos;t find your account&apos;s properties. Please message us.</div>}
