@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, History, MessageCircle, FileText, HelpCircle, Settings, Phone, LogOut, Menu, X, ClipboardList, ClipboardCheck, Receipt } from 'lucide-react';
+import { LayoutDashboard, History, MessageCircle, FileText, HelpCircle, Settings, Phone, LogOut, Menu, X, ClipboardList, ClipboardCheck, Receipt, DoorOpen } from 'lucide-react';
 import EnablePush from '../components/EnablePush';
 import { getSessionAndProfile } from '../../lib/authGate';
 import { supabase } from '../../lib/supabaseClient';
@@ -18,6 +18,8 @@ const NAV_ITEMS = [
   { href: '/client/reports', label: 'Reports', icon: ClipboardList, detailedOnly: true },
   // Proof of service for every client, and quotes to accept (0148).
   { href: '/client/service-record', label: 'Service record', icon: ClipboardCheck },
+  // Only for clients with a property whose rooms are tracked (0150).
+  { href: '/client/rooms', label: 'Rooms', icon: DoorOpen, roomsOnly: true },
   { href: '/client/quotes', label: 'Quotes', icon: Receipt },
   { href: '/client/documents', label: 'Documents', icon: FileText },
   { href: '/client/messages', label: 'Messages', icon: MessageCircle },
@@ -35,6 +37,7 @@ export default function ClientLayout({ children }) {
   const [loadError, setLoadError] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [detailedReports, setDetailedReports] = useState(false);
+  const [hasRooms, setHasRooms] = useState(false);
   // Replies from the office the client hasn't opened yet, shown on the
   // Messages link and as a dot on the phone menu button.
   const [myClientId, setMyClientId] = useState(null);
@@ -71,8 +74,12 @@ export default function ClientLayout({ children }) {
     const { data: own } = await supabase.from('profiles').select('client_id').eq('id', session.user.id).single();
     if (own?.client_id) {
       setMyClientId(own.client_id);
-      const { data: client } = await supabase.from('clients').select('detailed_reports').eq('id', own.client_id).single();
+      const [{ data: client }, { count: tracked }] = await Promise.all([
+        supabase.from('clients').select('detailed_reports').eq('id', own.client_id).single(),
+        supabase.from('properties').select('id', { count: 'exact', head: true }).eq('client_id', own.client_id).not('rooms_tracked_since', 'is', null),
+      ]);
       setDetailedReports(!!client?.detailed_reports);
+      setHasRooms((tracked || 0) > 0);
     }
   };
 
@@ -172,7 +179,7 @@ export default function ClientLayout({ children }) {
         </div>
 
         <nav className="sidebar-nav">
-          {NAV_ITEMS.filter((item) => !item.detailedOnly || detailedReports).map((item) => {
+          {NAV_ITEMS.filter((item) => (!item.detailedOnly || detailedReports) && (!item.roomsOnly || hasRooms)).map((item) => {
             const active = pathname === item.href;
             const Icon = item.icon;
             return (

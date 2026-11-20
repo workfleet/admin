@@ -40,7 +40,9 @@ const lengthLabel = (m) => {
 };
 
 // refreshKey changes when the room lists are edited on the Properties tab.
-export default function RoomTracker({ clientId, refreshKey }) {
+// readOnly is the client portal's view (/client/rooms): when each room was
+// last done and when it's next booked, with none of the office's buttons.
+export default function RoomTracker({ clientId, refreshKey, readOnly = false }) {
   const confirm = useConfirm();
   const toast = useToast();
   const [loading, setLoading] = useState(true);
@@ -132,7 +134,9 @@ export default function RoomTracker({ clientId, refreshKey }) {
   return (
     <div>
       <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
-        Communal areas and every room, kept within {REFRESH_EVERY_DAYS} days. Book rooms onto a visit here; after the visit, mark any that weren&apos;t done.
+        {readOnly
+          ? <>The communal areas and every room are refreshed at least every {REFRESH_EVERY_DAYS} days. This shows when each was last done and the visit it&apos;s next booked on.</>
+          : <>Communal areas and every room, kept within {REFRESH_EVERY_DAYS} days. Book rooms onto a visit here; after the visit, mark any that weren&apos;t done.</>}
       </p>
 
       {error && <div className="card" style={{ color: 'var(--wf-overdue)' }}>{error}</div>}
@@ -141,11 +145,11 @@ export default function RoomTracker({ clientId, refreshKey }) {
         <EmptyState
           icon={EmptyIconDoor}
           title="No rooms set up yet"
-          body="On the Properties tab, press Rooms on a property and enter its rooms. It will appear here."
+          body={readOnly ? 'Room refreshes for your properties will show here once we have set them up.' : 'On the Properties tab, press Rooms on a property and enter its rooms. It will appear here.'}
         />
       )}
 
-      {houses.length > 0 && (
+      {houses.length > 0 && !readOnly && (
         <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
           {overdueCount === 0 ? 'Nothing is overdue.' : `${overdueCount} overdue across ${houses.length} properties.`}
           {' '}Amber means due within {DUE_SOON_DAYS} days with nothing booked in time.
@@ -164,19 +168,23 @@ export default function RoomTracker({ clientId, refreshKey }) {
           <div key={house.id} className="card" style={{ marginBottom: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
               <h2 style={{ margin: 0 }}>{shortAddress(house.address) || house.address}</h2>
-              <a
+              {!readOnly && <a
                 className="btn-secondary"
                 href={`/admin/rota?new=1&property=${house.id}&date=${bookOn}`}
                 title="Open the rota's New job form with this house filled in"
                 style={{ textDecoration: 'none' }}
               >
                 Book a visit on the rota
-              </a>
+              </a>}
             </div>
             <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 10px' }}>
               {nextVisit
-                ? <>Next visit {visitLabel(nextVisit)} · booked {lengthLabel(nextVisit.duration_minutes || 0)}{nextPlanned.size > 0 ? ` including ${nextPlanned.size} room${nextPlanned.size === 1 ? '' : 's'} (${[...nextPlanned].join(', ')})` : ', communal only'}</>
-                : <span style={{ color: 'var(--wf-overdue)' }}>No visit booked in the next six weeks - add one on the rota.</span>}
+                ? (readOnly
+                  ? <>Next visit {visitLabel(nextVisit)}{nextPlanned.size > 0 ? `: communal areas and ${[...nextPlanned].join(', ')}` : ': communal areas'}</>
+                  : <>Next visit {visitLabel(nextVisit)} · booked {lengthLabel(nextVisit.duration_minutes || 0)}{nextPlanned.size > 0 ? ` including ${nextPlanned.size} room${nextPlanned.size === 1 ? '' : 's'} (${[...nextPlanned].join(', ')})` : ', communal only'}</>)
+                : readOnly
+                  ? <>No visit booked in the next six weeks yet.</>
+                  : <span style={{ color: 'var(--wf-overdue)' }}>No visit booked in the next six weeks - add one on the rota.</span>}
             </p>
             <div style={{ overflowX: 'auto' }}>
               <table className="wf-table" style={{ width: '100%', fontSize: 13.5 }}>
@@ -186,7 +194,7 @@ export default function RoomTracker({ clientId, refreshKey }) {
                     <th style={{ textAlign: 'left' }}>Last done</th>
                     <th style={{ textAlign: 'left' }}>Next booked</th>
                     <th style={{ textAlign: 'left' }}>Status</th>
-                    <th />
+                    {!readOnly && <th />}
                   </tr>
                 </thead>
                 <tbody>
@@ -213,7 +221,7 @@ export default function RoomTracker({ clientId, refreshKey }) {
                           <span className={STATUS[row.status].className}>{STATUS[row.status].label}</span>
                           {row.status !== 'booked' && <div style={{ fontSize: 12, color: 'var(--muted)' }}>due {dayLabel(row.dueDay)}</div>}
                         </td>
-                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        {!readOnly && <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                           {!row.communal && nextVisit && !nextPlanned.has(row.room) && (
                             <button
                               type="button"
@@ -258,7 +266,7 @@ export default function RoomTracker({ clientId, refreshKey }) {
                               {isBusy(lastPlannedJob.id) ? 'Saving...' : 'It was done'}
                             </button>
                           )}
-                        </td>
+                        </td>}
                       </tr>
                     );
                   })}
