@@ -55,6 +55,12 @@ create or replace function auth.role() returns text as $$
   select coalesce(nullif(current_setting('request.jwt.claim.role', true), ''), 'anon');
 $$ language sql stable;
 
+-- The whole set of claims, as Supabase's auth.jwt() gives it (0154 reads the
+-- email from it). Empty with no request.
+create or replace function auth.jwt() returns jsonb as $$
+  select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb;
+$$ language sql stable;
+
 -- ---------------------------------------------------------------------------
 -- storage
 -- ---------------------------------------------------------------------------
@@ -64,6 +70,10 @@ create table if not exists storage.buckets (
   id text primary key,
   name text not null,
   public boolean not null default false,
+  -- Real Supabase has these too; 0152 sets them on the staff-certificates
+  -- bucket (15 MB, PDFs and photos only).
+  file_size_limit bigint,
+  allowed_mime_types text[],
   created_at timestamptz default now()
 );
 
