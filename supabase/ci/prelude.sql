@@ -55,6 +55,15 @@ create or replace function auth.role() returns text as $$
   select coalesce(nullif(current_setting('request.jwt.claim.role', true), ''), 'anon');
 $$ language sql stable;
 
+-- The whole set of claims, as Supabase defines it. 0154 reads the email from
+-- it; without it here every replay from 0154 on failed.
+create or replace function auth.jwt() returns jsonb as $$
+  select coalesce(
+    nullif(current_setting('request.jwt.claim', true), ''),
+    nullif(current_setting('request.jwt.claims', true), '')
+  )::jsonb;
+$$ language sql stable;
+
 -- ---------------------------------------------------------------------------
 -- storage
 -- ---------------------------------------------------------------------------
@@ -64,6 +73,11 @@ create table if not exists storage.buckets (
   id text primary key,
   name text not null,
   public boolean not null default false,
+  -- Real Supabase buckets carry an upload size cap and a MIME allow-list;
+  -- 0152 sets both on staff-certificates, and without them here every replay
+  -- from 0152 on failed.
+  file_size_limit bigint,
+  allowed_mime_types text[],
   created_at timestamptz default now()
 );
 

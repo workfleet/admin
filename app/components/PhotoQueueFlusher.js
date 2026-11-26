@@ -5,7 +5,10 @@ import { ImageUp } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { getSessionWithRetry } from '../../lib/authGate';
 import { useToast } from './ToastProvider';
-import { isAlreadyUploaded, pendingPhotos, removePhoto, withTimeout } from '../../lib/photoQueue';
+import {
+  PHOTO_QUEUED_EVENT, PHOTOS_SENT_EVENT, announce, isAlreadyUploaded, nextRetryDelay,
+  pendingPhotos, removePhoto, withTimeout,
+} from '../../lib/photoQueue';
 
 // Sends job photos taken while offline. See lib/photoQueue.js.
 //
@@ -15,87 +18,157 @@ import { isAlreadyUploaded, pendingPhotos, removePhoto, withTimeout } from '../.
 // can be defended later. Collapsing them into "3 things pending" would tell
 // them neither.
 
-const RETRY_INTERVAL_MS = 60 * 1000;
+// A session lookup that refreshes an expired token can hang on a phone that
+// has just woken up. Before this limit, one hang held the `running` lock for
+// good and every later flush returned straight away - the queue only moved
+// again once the app was killed, which is the one thing the banner says not
+// to do.
+const SESSION_TIMEOUT_MS = 15 * 1000;
+
+const isOffline = () => typeof navigator !== 'undefined' && navigator.onLine === false;
 
 export default function PhotoQueueFlusher() {
   const toast = useToast();
   const [pending, setPending] = useState(0);
+  const [sending, setSending] = useState(false);
+  const [offline, setOffline] = useState(false);
 
   // One flush at a time. Uploads on a weak signal can outlast the retry
   // timer, and two flushes walking the same queue both found no photos row
   // and both inserted one.
   const running = useRef(false);
+  // A flush asked for while one was running - a photo queued mid-flush, say.
+  // Run again as soon as the current one ends rather than waiting for the
+  // timer, or that photo sits until the next try.
+  const again = useRef(false);
+  const failures = useRef(0);
+  const timer = useRef(null);
+  const mounted = useRef(true);
 
+  // Returns the number of photos still waiting afterwards.
   const flushQueue = useCallback(async () => {
     const queue = await pendingPhotos();
     setPending(queue.length);
-    if (queue.length === 0) return;
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+    if (queue.length === 0) return 0;
+    if (isOffline()) return queue.length;
 
-    const session = await getSessionWithRetry();
-    if (!session || session.offline) return;
+    const session = await withTimeout(getSessionWithRetry(), SESSION_TIMEOUT_MS);
+    if (!session?.user || session.offline) return queue.length;
 
+    setSending(true);
     let sent = 0;
     let failedInARow = 0;
-    for (const photo of queue) {
-      const done = await flushPhoto(photo, session.user.id);
-      if (!done) {
-        // Two in a row is the connection, not the photo - keep the rest for
-        // later. One on its own may be just that photo (a job taken off
-        // them, say), and must not hold back the ones behind it.
-        failedInARow += 1;
-        if (failedInARow >= 2) break;
-        continue;
+    try {
+      for (const photo of queue) {
+        const done = await flushPhoto(photo, session.user.id);
+        if (!done) {
+          // Two in a row is the connection, not the photo - keep the rest for
+          // later. One on its own may be just that photo (a job taken off
+          // them, say), and must not hold back the ones behind it.
+          failedInARow += 1;
+          if (failedInARow >= 2) break;
+          continue;
+        }
+        failedInARow = 0;
+        await removePhoto(photo.id);
+        sent += 1;
+        setPending((n) => Math.max(0, n - 1));
       }
-      failedInARow = 0;
-      await removePhoto(photo.id);
-      sent += 1;
+    } finally {
+      setSending(false);
     }
 
     const left = (await pendingPhotos()).length;
     setPending(left);
+    if (sent > 0) announce(PHOTOS_SENT_EVENT);
     if (sent > 0 && left === 0) {
       toast.success(sent === 1 ? 'Your photo has been sent.' : `${sent} photos have been sent.`);
     }
+    return left;
   }, [toast]);
 
   const flush = useCallback(async () => {
-    if (running.current) return;
+    if (running.current) {
+      again.current = true;
+      return;
+    }
     running.current = true;
+    clearTimeout(timer.current);
+    let left = 0;
     try {
-      await flushQueue();
+      do {
+        again.current = false;
+        left = await flushQueue();
+      } while (again.current);
+    } catch {
+      left = 1;
     } finally {
       running.current = false;
     }
+
+    // Quick retries while anything is left, backing off to a minute. Nothing
+    // left means nothing scheduled; a newly queued photo wakes this up.
+    if (!mounted.current) return;
+    if (left > 0) {
+      timer.current = setTimeout(flush, nextRetryDelay(failures.current));
+      failures.current += 1;
+    } else {
+      failures.current = 0;
+    }
   }, [flushQueue]);
 
+  // A fresh reason to think it will work now starts the backoff over.
+  const flushNow = useCallback(() => {
+    failures.current = 0;
+    flush();
+  }, [flush]);
+
   useEffect(() => {
+    mounted.current = true;
+    setOffline(isOffline());
     flush();
 
-    const onOnline = () => flush();
-    const onVisible = () => { if (document.visibilityState === 'visible') flush(); };
+    const onOnline = () => { setOffline(false); flushNow(); };
+    const onOffline = () => setOffline(true);
+    const onVisible = () => { if (document.visibilityState === 'visible') flushNow(); };
     window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    window.addEventListener(PHOTO_QUEUED_EVENT, flushNow);
     document.addEventListener('visibilitychange', onVisible);
-    // A phone can report itself online while the connection is useless, so
-    // the event alone is not enough to rely on.
-    const timer = setInterval(flush, RETRY_INTERVAL_MS);
 
     return () => {
       window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+      window.removeEventListener(PHOTO_QUEUED_EVENT, flushNow);
       document.removeEventListener('visibilitychange', onVisible);
-      clearInterval(timer);
+      mounted.current = false;
+      clearTimeout(timer.current);
     };
-  }, [flush]);
+  }, [flush, flushNow]);
 
   if (pending === 0) return null;
+
+  const what = pending === 1 ? 'Your photo' : `${pending} photos`;
+  // "When you get signal" was shown to people with full bars, which reads as
+  // the app being broken. Only say it when the phone really is offline.
+  let message;
+  if (offline) {
+    message = `No signal — ${what.toLowerCase()} ${pending === 1 ? 'is' : 'are'} saved on your phone and will send when you’re back online. Don’t clear the app until ${pending === 1 ? 'it has' : 'they have'}.`;
+  } else if (sending) {
+    message = `Sending ${what.toLowerCase()}…`;
+  } else {
+    message = `${what} ${pending === 1 ? 'is' : 'are'} saved on your phone and will keep trying to send. Don’t clear the app until ${pending === 1 ? 'it has' : 'they have'}.`;
+  }
 
   return (
     <div role="status" className="queue-banner is-photos">
       <ImageUp size={16} aria-hidden />
-      <span>
-        {pending === 1 ? 'One photo is waiting to send' : `${pending} photos are waiting to send`}
-        {' '}— they’ll go when you get signal. Don’t clear the app until they do.
-      </span>
+      <span style={{ flex: 1 }}>{message}</span>
+      {!offline && !sending && (
+        <button type="button" className="queue-banner-action" onClick={flushNow}>
+          Send now
+        </button>
+      )}
     </div>
   );
 }
