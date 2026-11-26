@@ -31,7 +31,9 @@ import { tooEarlyMessage, tooEarlyToCheckIn } from '../../../../lib/clockIn';
 import { shiftShortfall } from '../../../../lib/shortShift';
 import { shareMinutes } from '../../../../lib/rotaGrid';
 import { enqueue, isCheckinPending, isTransientError, makeId, pendingCheckinFor, readQueue } from '../../../../lib/clockQueue';
-import { makePhotoPath, pendingPhotos, queuePhoto, withTimeout } from '../../../../lib/photoQueue';
+import {
+  PHOTO_QUEUED_EVENT, PHOTOS_SENT_EVENT, announce, makePhotoPath, pendingPhotos, queuePhoto, withTimeout,
+} from '../../../../lib/photoQueue';
 import { loadJobSnapshot, saveJobSnapshot, warmPageShell } from '../../../../lib/jobSnapshot';
 import { missingAreas } from '../../../../lib/photoCheck';
 import { isTraining, jobHeadline, jobSubtitle, trainerLine, TRAINING_JOB_COLUMNS } from '../../../../lib/training';
@@ -96,7 +98,6 @@ export default function JobDetailPage() {
   const [tasks, setTasks] = useState([]);
   const [photos, setPhotos] = useState([]);
   const [checkin, setCheckin] = useState(null);
-  const [uploading, setUploading] = useState(false);
   const [userId, setUserId] = useState(null);
   const [extensionRequests, setExtensionRequests] = useState([]);
   const [showExtensionForm, setShowExtensionForm] = useState(false);
@@ -146,6 +147,22 @@ export default function JobDetailPage() {
     if (!canSnapshot || !job || !userId) return;
     saveJobSnapshot(id, userId, { job, tasks, checklistItems, checkin });
   }, [canSnapshot, job, tasks, checklistItems, checkin, userId, id]);
+
+  // PhotoQueueFlusher sent some of the photos waiting on this phone. Any
+  // tile no longer in the queue has reached the office, so it stops being
+  // dimmed - and counts for the photo check at check-out - without a reload.
+  // One still mid-upload from this page is not in the queue either, and is
+  // left to its own upload to settle.
+  useEffect(() => {
+    const onSent = async () => {
+      const waiting = new Set((await pendingPhotos(id)).map((p) => p.path));
+      setPhotos((prev) => prev.map((p) => (
+        p.pendingSync && !p.sending && !waiting.has(p.url) ? { ...p, pendingSync: false } : p
+      )));
+    };
+    window.addEventListener(PHOTOS_SENT_EVENT, onSent);
+    return () => window.removeEventListener(PHOTOS_SENT_EVENT, onSent);
+  }, [id]);
 
   // Showing the saved copy: swap it for the real thing once signal is back,
   // so the cleaner is not left working from it after it stops being needed.
@@ -1010,16 +1027,38 @@ export default function JobDetailPage() {
     }
   };
 
+  // Every photo is handled on its own, and the camera button never locks.
+  // It used to stay on "Sending" until each upload finished - up to fifty
+  // seconds on a slow connection - so somebody photographing a house room by
+  // room stood waiting between every shot. Now the photo shows straight away
+  // (dimmed, "Sending") and they can take the next one while it goes.
   const handlePhotoUpload = async (e) => {
-    const rawFile = e.target.files[0];
+    const input = e.target;
+    const rawFile = input.files?.[0];
+    // Cleared so the input is ready for the next shot - and so picking the
+    // same file twice still fires a change.
+    input.value = '';
     if (!rawFile) return;
-    setUploading(true);
+    await uploadOnePhoto(rawFile);
+  };
 
+  const uploadOnePhoto = async (rawFile) => {
     const file = await compressImage(rawFile);
     // Path decided now, from when the photo was taken, so a queued upload and
     // a replay of it both write to the same place. See lib/photoQueue.js.
     const takenAt = new Date().toISOString();
     const fileName = makePhotoPath(id, takenAt, rawFile.name);
+    const tileId = `pending:${fileName}`;
+    const localUrl = URL.createObjectURL(file);
+
+    setPhotos((prev) => [{
+      id: tileId,
+      url: fileName,
+      created_at: takenAt,
+      signedUrl: localUrl,
+      pendingSync: true,
+      sending: true,
+    }, ...prev]);
 
     // "Check your signal and try again" was no use to somebody who has no
     // signal and is about to drive away: the photo could only be taken while
@@ -1043,27 +1082,26 @@ export default function JobDetailPage() {
       }
     }
 
-    if (!photoRow) {
-      const queued = await queuePhoto({ jobId: id, blob: file, path: fileName, takenAt });
-      setUploading(false);
-      if (!queued) {
-        toast.error("Couldn't save that photo on your phone. Try again when you have signal.");
-        return;
-      }
-      setPhotos((prev) => [{
-        id: `pending:${fileName}`,
-        url: fileName,
-        created_at: takenAt,
-        signedUrl: URL.createObjectURL(file),
-        pendingSync: true,
-      }, ...prev]);
-      toast.success('No signal — that photo is saved on your phone and will send itself.');
+    if (photoRow) {
+      // The photo on the phone is the one that was just sent, so it is shown
+      // from there rather than waiting on another round trip for a link.
+      setPhotos((prev) => prev.map((p) => (p.id === tileId ? { ...photoRow, signedUrl: localUrl } : p)));
       return;
     }
 
-    const [withUrl] = await withSignedUrls([photoRow]);
-    setPhotos((prev) => [withUrl, ...prev]);
-    setUploading(false);
+    const queued = await queuePhoto({ jobId: id, blob: file, path: fileName, takenAt });
+    if (!queued) {
+      setPhotos((prev) => prev.filter((p) => p.id !== tileId));
+      URL.revokeObjectURL(localUrl);
+      toast.error("Couldn't save that photo on your phone. Try taking it again.");
+      return;
+    }
+    setPhotos((prev) => prev.map((p) => (p.id === tileId ? { ...p, sending: false } : p)));
+    // Picked up by PhotoQueueFlusher straight away rather than on its timer.
+    announce(PHOTO_QUEUED_EVENT);
+    toast.success(offline
+      ? 'No signal — that photo is saved on your phone and will send itself.'
+      : 'That photo is slow to send — it’s saved on your phone and will keep trying.');
   };
 
   if (loadError) {
@@ -1500,8 +1538,8 @@ export default function JobDetailPage() {
               <div className="visit-photo-row">
                 <label className="visit-photo-add">
                   <Camera size={20} />
-                  <span>{uploading ? 'Sending' : 'Photo'}</span>
-                  <input type="file" accept="image/*" capture="environment" onChange={handlePhotoUpload} disabled={uploading} />
+                  <span>Photo</span>
+                  <input type="file" accept="image/*" capture="environment" onChange={handlePhotoUpload} />
                 </label>
                 {photos.map((p) => (
                   <img key={p.id} className="visit-photo-thumb" src={p.signedUrl} alt="job" />
@@ -1640,7 +1678,7 @@ export default function JobDetailPage() {
                           background: 'var(--wf-graphite)', color: 'var(--wf-white)',
                           borderRadius: 4, padding: '2px 5px',
                         }}>
-                          Waiting to send
+                          {p.sending ? 'Sending' : 'Waiting to send'}
                         </span>
                       )}
                     </span>

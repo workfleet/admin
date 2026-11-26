@@ -3636,6 +3636,23 @@ a.rota-figure:hover b { text-decoration: underline; text-underline-offset: 3px; 
 .queue-banner-dismiss:focus-visible {
   outline: 2px solid var(--wf-coral);
 }
+/* "Send now" on the photo banner: a retry they can tap instead of waiting. */
+.queue-banner-action {
+  flex-shrink: 0;
+  background: var(--wf-white);
+  color: var(--wf-graphite);
+  border: none;
+  border-radius: var(--wf-radius-sm);
+  padding: 0 12px;
+  min-height: 36px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.queue-banner-action:focus-visible {
+  outline: 2px solid var(--wf-coral);
+  outline-offset: 2px;
+}
 
 /* ---- Install to home screen (cleaner app) ---- */
 /* Sits above the bottom nav. --wf-install-bar-h is set on <body> by

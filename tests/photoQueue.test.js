@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isAlreadyUploaded, makePhotoPath, withTimeout } from '../lib/photoQueue';
+import { RETRY_DELAYS_MS, isAlreadyUploaded, makePhotoPath, nextRetryDelay, withTimeout } from '../lib/photoQueue';
 import { isTransientError } from '../lib/clockQueue';
 
 // The storage path is the load-bearing pure part of the photo queue. It is
@@ -79,5 +79,25 @@ describe('isAlreadyUploaded', () => {
     expect(isAlreadyUploaded(null)).toBe(false);
     expect(isAlreadyUploaded(new Error('Failed to fetch'))).toBe(false);
     expect(isAlreadyUploaded({ message: 'new row violates row-level security policy', status: 403 })).toBe(false);
+  });
+});
+
+describe('nextRetryDelay', () => {
+  it('tries again within seconds after the first miss', () => {
+    // With signal, the usual reason a photo is queued is one slow request.
+    // Waiting a full minute left the banner up in front of somebody with full
+    // bars, telling them to go and find signal.
+    expect(nextRetryDelay(0)).toBeLessThanOrEqual(5 * 1000);
+  });
+
+  it('backs off, and never waits longer than a minute', () => {
+    const delays = [0, 1, 2, 3, 4, 5, 20].map(nextRetryDelay);
+    for (let i = 1; i < delays.length; i++) expect(delays[i]).toBeGreaterThanOrEqual(delays[i - 1]);
+    expect(Math.max(...delays)).toBe(60 * 1000);
+    expect(nextRetryDelay(100)).toBe(RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1]);
+  });
+
+  it('treats a nonsense count as the first try', () => {
+    expect(nextRetryDelay(-3)).toBe(RETRY_DELAYS_MS[0]);
   });
 });
